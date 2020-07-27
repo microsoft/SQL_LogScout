@@ -9,7 +9,7 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 3. Stop the collection when you are ready
 
 
-## Sample output
+# Sample output
 
 ```bash
      ======================================================================================================
@@ -87,3 +87,11 @@ Enter the ID from list above>: 1
 2020-07-16 09:54:44.262 INFO    Waiting 5 seconds to ensure files are written to and closed by any program including anti-virus...
 2020-07-16 09:54:49.270 INFO    Ending data collection
 ```
+
+# Output folders
+
+All the log files are collected in the \output folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. The \internal folder stores error log files as well as the main activity log file for SQL LogScout (##SQLDIAG). If those files are not empty, they contain information about whether a particular data-collector failed or produced some unexpected result (not necessarily failure).
+
+# Targeted SQL instances
+
+Data is collected from SQL instances locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines currently. You are prompted to pick a SQL Server instance you want to target your data collection at. The SQL Server-specific data collection comes from a single instance only. 
