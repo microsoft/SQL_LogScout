@@ -40,7 +40,7 @@ SQL_LogScout.cmd accepts two optional parameters:
 1. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
-1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture and Change Tracking information
+1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
    - Basic Scenario
    - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
 
@@ -58,70 +58,78 @@ SQL_LogScout.cmd accepts two optional parameters:
               #####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #
      ======================================================================================================
 
-2020-07-16 09:51:40.363 INFO    The Present folder for this collection is C:\temp\pssdiag\Test 2
-2020-07-16 09:51:40.425 INFO    Output path: C:\temp\pssdiag\Test 2\output\
-2020-07-16 09:51:40.432 INFO    The Error files path is C:\temp\pssdiag\Test 2\output\internal\
-2020-07-16 09:51:40.447 INFO    Initializing log C:\temp\pssdiag\Test 2\output\internal\##SQLDIAG.LOG
-2020-07-16 09:51:40.748 INFO    Discovered the following SQL Server instance(s)
-
-2020-07-16 09:51:40.748 INFO
-2020-07-16 09:51:40.764 INFO    ID      SQL InstanceName
-2020-07-16 09:51:40.766 INFO    --      ----------------
-2020-07-16 09:51:40.769 INFO    0        DbServerMachine\SQL2014
-2020-07-16 09:51:40.773 INFO    1        DbServerMachine
-2020-07-16 09:51:40.775 INFO    2        DbServerMachine\SQL2017
-2020-07-16 09:51:40.777 INFO
-2020-07-16 09:51:40.780 WARN    Please, enter the ID from list above of the SQL instance for which you want to collect diagnostic data. Then press Enter
-Enter the ID from list above>: 1
-2020-07-16 09:51:47.502 INFO    Console input: 1
-2020-07-16 09:51:47.502 INFO    You selected instance 'DbServerMachine' to collect diagnostic data.
-2020-07-16 09:51:47.633 INFO    Confirmed that NADOMAIN\JOSEPH has VIEW SERVER STATE on SQL Server Instance DbServerMachine
-2020-07-16 09:51:47.633 INFO    The \Error folder for this collection is C:\temp\pssdiag\Test 2\output\internal\
-2020-07-16 09:51:47.656 INFO    LogmanConfig.txt copied to  C:\temp\pssdiag\Test 2\output\internal\LogmanConfig.txt
-2020-07-16 09:51:47.656 INFO    The \Error folder for this collection is C:\temp\pssdiag\Test 2\output\internal\
-2020-07-16 09:51:47.735 INFO
-2020-07-16 09:51:47.735 INFO    Initiating diagnostics collection...
-2020-07-16 09:51:47.755 INFO    Executing Collector: MSDiagProcs
-2020-07-16 09:51:47.790 INFO    Executing Collector: pssdiag_xevent
-2020-07-16 09:51:50.816 INFO    Executing Collector: pssdiag_xevent_target
-2020-07-16 09:51:50.831 INFO    Executing Collector: pssdiag_xevent_Start
-2020-07-16 09:51:50.862 INFO    Executing Collector: AlwaysOnDiagScript
-2020-07-16 09:51:51.900 INFO    Executing Collector: SystemInfo_Summary
-2020-07-16 09:51:51.922 INFO    Executing Collector: MiscPssdiagInfo
-2020-07-16 09:51:51.938 INFO    Executing Collector: collecterrorlog
-2020-07-16 09:51:53.958 INFO    Executing Collector: TaskListVerbose
-2020-07-16 09:51:53.974 INFO    Executing Collector: TaskListServices
-2020-07-16 09:51:55.994 INFO    Executing Collector: ExistingProfilerXeventTraces
-2020-07-16 09:51:59.025 INFO    Executing Collector: HighCPU_perfstats
-2020-07-16 09:52:00.045 INFO    Executing Collector: SQLServerPerfStats
-2020-07-16 09:52:00.056 INFO    Executing Collector: SQLServerPerfStatsSnapshotStartup
-2020-07-16 09:52:02.075 INFO    Executing Collector: Perfmon
-2020-07-16 09:52:03.115 INFO    Executing Collector: SSB_pssdiag
-2020-07-16 09:52:03.122 INFO    Executing Collector: TempDBAnalysis
-2020-07-16 09:52:03.137 INFO    Executing Collector: linked_server_config
-2020-07-16 09:52:05.170 INFO    Executing Collector: Query Store
-2020-07-16 09:52:05.185 INFO    Executing Collector: Repl_Metadata_Collector
-2020-07-16 09:52:05.201 INFO    Executing Collector: ChangeDataCapture
-2020-07-16 09:52:05.223 INFO    Executing Collector: Change_Tracking
-2020-07-16 09:52:07.269 INFO    Executing Collector: FLTMC_Filters
-2020-07-16 09:52:07.284 INFO    Executing Collector: FLTMC_Instances
-2020-07-16 09:52:07.300 INFO    Executing Collector: PowerPlan
-2020-07-16 09:52:07.416 INFO    Executing Collector: WindowsHotfixes
-2020-07-16 09:52:07.719 INFO    Executing Collector: GetEventLogs
-2020-07-16 09:52:14.387 INFO    Executing Collector: RunningDrivers
-2020-07-16 09:52:15.220 INFO    Diagnostic collection started.
-2020-07-16 09:52:15.220 INFO
-2020-07-16 09:52:15.236 WARN    Please type 'STOP' or 'stop' to terminate the diagnostics collection when you finished capturing the issue
->: stop
-2020-07-16 09:54:41.146 INFO    Console input: stop
-2020-07-16 09:54:41.146 WARN    Shutting down the collector
-2020-07-16 09:54:41.177 INFO    Stopping Collector: SQLServerPerfStatsSnapshotShutdown
-2020-07-16 09:54:41.183 INFO    Stopping Collector: xevents_stop
-2020-07-16 09:54:41.199 INFO    Stopping Collector: PerfmonStop
-2020-07-16 09:54:41.230 INFO    Stopping Collector: RestoreTraceFlagOrigValues
-2020-07-16 09:54:44.246 INFO    Running: killpssdiagSessions
-2020-07-16 09:54:44.262 INFO    Waiting 5 seconds to ensure files are written to and closed by any program including anti-virus...
-2020-07-16 09:54:49.270 INFO    Ending data collection
+2020-08-27 11:58:57.738	INFO	Initializing log C:\temp\pssdiag\Test 2\output\internal\##SQLDIAG.LOG 
+2020-08-27 11:58:54.930	INFO	SQL LogScout version: 1.1.0 
+2020-08-27 11:58:55.031	INFO	The Present folder for this collection is C:\temp\pssdiag\Test 2 
+2020-08-27 11:58:55.046	INFO	Output path: C:\temp\pssdiag\Test 2\output\ 
+2020-08-27 11:58:55.046	INFO	The Error files path is C:\temp\pssdiag\Test 2\output\internal\ 
+2020-08-27 11:58:55.046	INFO	 
+2020-08-27 11:58:55.062	WARN	It appears that output folder C:\temp\pssdiag\Test 2\output\ has been used before. 
+2020-08-27 11:58:55.062	WARN	DELETE the files it contains (Y/N)? 
+2020-08-27 11:58:57.607	INFO	Console input: y 
+2020-08-27 11:58:58.108	INFO	Discovered the following SQL Server instance(s)
+ 
+2020-08-27 11:58:58.108	INFO	 
+2020-08-27 11:58:58.108	INFO	ID	SQL Instance Name 
+2020-08-27 11:58:58.108	INFO	--	---------------- 
+2020-08-27 11:58:58.108	INFO	0 	 DbServerMachine\SQL2014 
+2020-08-27 11:58:58.124	INFO	1 	 DbServerMachine 
+2020-08-27 11:58:58.124	INFO	2 	 DbServerMachine\SQL2017 
+2020-08-27 11:58:58.124	INFO	 
+2020-08-27 11:58:58.124	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
+2020-08-27 11:59:01.549	INFO	Console input: 0 
+2020-08-27 11:59:01.565	INFO	You selected instance 'DbServerMachine\SQL2014' to collect diagnostic data.  
+2020-08-27 11:59:01.649	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance DbServerMachine\SQL2014 
+2020-08-27 11:59:01.665	INFO	LogmanConfig.txt copied to  C:\temp\pssdiag\Test 2\output\internal\LogmanConfig.txt 
+2020-08-27 11:59:01.734	INFO	 
+2020-08-27 11:59:01.734	INFO	Initiating diagnostics collection...  
+2020-08-27 11:59:01.734	INFO	Please select one of the following scenarios:
+ 
+2020-08-27 11:59:01.734	INFO	 
+2020-08-27 11:59:01.749	INFO	ID   Scenario 
+2020-08-27 11:59:01.749	INFO	--   --------------- 
+2020-08-27 11:59:01.749	INFO	0    Basic (no performance data) 
+2020-08-27 11:59:01.749	INFO	1    General Performance (recommended for most cases) 
+2020-08-27 11:59:01.749	INFO	2    Detailed Performance (statement level and query plans) 
+2020-08-27 11:59:01.749	INFO	3    Replication 
+2020-08-27 11:59:01.749	INFO	4    AlwaysON 
+2020-08-27 11:59:01.749	INFO	 
+2020-08-27 11:59:01.765	WARN	Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter 
+2020-08-27 11:59:11.613	INFO	Console input: 1 
+2020-08-27 11:59:11.629	INFO	Executing Collector: RunningDrivers 
+2020-08-27 11:59:12.742	INFO	Executing Collector: SystemInfo_Summary 
+2020-08-27 11:59:13.797	INFO	Executing Collector: MiscPssdiagInfo 
+2020-08-27 11:59:15.819	INFO	Executing Collector: TaskListVerbose 
+2020-08-27 11:59:15.850	INFO	Executing Collector: TaskListServices 
+2020-08-27 11:59:15.872	INFO	Executing Collector: collecterrorlog 
+2020-08-27 11:59:17.908	INFO	Executing Collector: PowerPlan 
+2020-08-27 11:59:18.008	INFO	Executing Collector: WindowsHotfixes 
+2020-08-27 11:59:18.309	INFO	Executing Collector: FLTMC_Filters 
+2020-08-27 11:59:18.325	INFO	Executing Collector: FLTMC_Instances 
+2020-08-27 11:59:20.347	INFO	Executing Collector: GetEventLogs 
+2020-08-27 11:59:27.783	INFO	Executing Collector: Perfmon 
+2020-08-27 11:59:28.824	INFO	Executing Collector: pssdiag_xevent 
+2020-08-27 11:59:30.877	INFO	Executing Collector: pssdiag_xevent_general_target 
+2020-08-27 11:59:30.893	INFO	Executing Collector: pssdiag_xevent_Start 
+2020-08-27 11:59:30.908	INFO	Executing Collector: ExistingProfilerXeventTraces 
+2020-08-27 11:59:32.937	INFO	Executing Collector: HighCPU_perfstats 
+2020-08-27 11:59:32.953	INFO	Executing Collector: SQLServerPerfStats 
+2020-08-27 11:59:34.990	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
+2020-08-27 11:59:35.022	INFO	Executing Collector: Query Store 
+2020-08-27 11:59:37.032	INFO	Executing Collector: TempDBAnalysis 
+2020-08-27 11:59:37.047	INFO	Executing Collector: linked_server_config 
+2020-08-27 11:59:37.085	INFO	Executing Collector: SSB_pssdiag 
+2020-08-27 11:59:37.116	INFO	Diagnostic collection started. 
+2020-08-27 11:59:37.116	INFO	 
+2020-08-27 11:59:37.116	WARN	Please type 'STOP' or 'stop' to terminate the diagnostics collection when you finished capturing the issue 
+2020-08-27 11:59:53.639	INFO	Console input: stop 
+2020-08-27 11:59:53.654	INFO	Shutting down the collector 
+2020-08-27 11:59:53.654	INFO	Stopping Collector: SQLServerPerfStatsSnapshotShutdown 
+2020-08-27 11:59:53.670	INFO	Stopping Collector: xevents_stop 
+2020-08-27 11:59:53.686	INFO	Stopping Collector: PerfmonStop 
+2020-08-27 11:59:56.714	INFO	Running: killpssdiagSessions 
+2020-08-27 11:59:56.720	INFO	Waiting 5 seconds to ensure files are written to and closed by any program including anti-virus... 
+2020-08-27 12:00:01.731	INFO	Ending data collection 
 ```
 
 # Output folders
