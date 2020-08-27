@@ -1,12 +1,48 @@
 
 # Introduction
-SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic.
+SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. 
 
 # Usage
 
 1. Start the tool via SQL_LogScout.cmd when the issue is happening
-2. Select which SQL instance you want to diagnose from a numbered list
-3. Stop the collection when you are ready
+1. Select which SQL instance you want to diagnose from a numbered list
+1. Pick the Scenario from a menu list (based on the issue under investigation)
+1. Stop the collection when you are ready (by typing "stop")
+
+## Parameters
+SQL_LogScout.cmd accepts two optional parameters:
+1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on what is executed on the system and is mostly for troubleshooting and debugging SQL LogScout
+1. **Scenario** - possible values are "Basic", "GeneralPerf", "DetailedPerf", "AlwaysOn","Replication" (no default). For more information on each scenario see [Scenarios](#scenarios)
+
+## Scenarios
+1. **Basic scenario** collects snapshot logs. It captures information:
+   - Running drivers on the system
+   - System information (systeminfo.exe)
+   - Miscelaneous sql configuration (sp_configure, databases, etc)
+   - Processes running on the system (Tasklist.exe)
+   - Current active PowerPlan
+   - Installed Windows Hotfixes
+   - Running filter drivers
+   - Event logs (system and application)
+1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuos logs (until SQL LogScout is stopped).
+   - Basic scenario
+   - Performance Monitor counters for SQL Server instance and general OS counters
+   - Extended Event trace captures batch-level starting/completed events, errors and warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout
+   - List of actively-running SQL traces and Xevents
+   - Snapshots of SQL DMVs that track waits/blocking and high CPU queries
+   - Query Data Store info (if that is active)
+   - Tempdb contention info from SQL DMVs/system views
+   - Linked Server metadata (SQL DMVs/system views)
+   - Service Broker configuration information (SQL DMVs/system views)
+1. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
+   - GeneralPerf scenario
+   - Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level starting/completed events and actual XML query plans (for completed queries)
+1. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
+   - Basic scenario
+   - Always On diagnostic info (SQL DMVs/system views)
+1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture and Change Tracking information
+   - Basic Scenario
+   - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
 
 
 # Sample output
@@ -90,8 +126,10 @@ Enter the ID from list above>: 1
 
 # Output folders
 
-All the log files are collected in the \output folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. The \internal folder stores error log files as well as the main activity log file for SQL LogScout (##SQLDIAG). If those files are not empty, they contain information about whether a particular data-collector failed or produced some unexpected result (not necessarily failure).
+**Output folder**: All the log files are collected in the \output folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. 
+
+**Internal folder**: The \internal folder stores error log files as well as the main activity log file for SQL LogScout (##SQLDIAG.LOG). If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG and the contents of that file is displayed in the console after the main script completes execution.
 
 # Targeted SQL instances
 
-Data is collected from SQL instances locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines currently. You are prompted to pick a SQL Server instance you want to target your data collection at. The SQL Server-specific data collection comes from a single instance only. 
+Data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only. 
