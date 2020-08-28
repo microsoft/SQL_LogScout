@@ -6,7 +6,7 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 
 1. Start the tool via SQL_LogScout.cmd when the issue is happening
 1. Select which SQL instance you want to diagnose from a numbered list
-1. Pick the Scenario from a menu list (based on the issue under investigation)
+1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Examples))
 1. Stop the collection when you are ready (by typing "stop")
 
 # Examples:
@@ -76,13 +76,13 @@ SQL_LogScout.cmd accepts two *optional* parameters:
               #####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #
      ======================================================================================================
 
-2020-08-27 11:58:57.738	INFO	Initializing log C:\temp\pssdiag\Test 2\output\internal\##SQLDIAG.LOG 
+2020-08-27 11:58:57.738	INFO	Initializing log C:\temp\Test 2\output\internal\##SQLDIAG.LOG 
 2020-08-27 11:58:54.930	INFO	SQL LogScout version: 1.1.0 
-2020-08-27 11:58:55.031	INFO	The Present folder for this collection is C:\temp\pssdiag\Test 2 
-2020-08-27 11:58:55.046	INFO	Output path: C:\temp\pssdiag\Test 2\output\ 
-2020-08-27 11:58:55.046	INFO	The Error files path is C:\temp\pssdiag\Test 2\output\internal\ 
+2020-08-27 11:58:55.031	INFO	The Present folder for this collection is C:\temp\Test 2 
+2020-08-27 11:58:55.046	INFO	Output path: C:\temp\Test 2\output\ 
+2020-08-27 11:58:55.046	INFO	The Error files path is C:\temp\Test 2\output\internal\ 
 2020-08-27 11:58:55.046	INFO	 
-2020-08-27 11:58:55.062	WARN	It appears that output folder C:\temp\pssdiag\Test 2\output\ has been used before. 
+2020-08-27 11:58:55.062	WARN	It appears that output folder C:\temp\Test 2\output\ has been used before. 
 2020-08-27 11:58:55.062	WARN	DELETE the files it contains (Y/N)? 
 2020-08-27 11:58:57.607	INFO	Console input: y 
 2020-08-27 11:58:58.108	INFO	Discovered the following SQL Server instance(s)
@@ -98,7 +98,7 @@ SQL_LogScout.cmd accepts two *optional* parameters:
 2020-08-27 11:59:01.549	INFO	Console input: 0 
 2020-08-27 11:59:01.565	INFO	You selected instance 'DbServerMachine\SQL2014' to collect diagnostic data.  
 2020-08-27 11:59:01.649	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance DbServerMachine\SQL2014 
-2020-08-27 11:59:01.665	INFO	LogmanConfig.txt copied to  C:\temp\pssdiag\Test 2\output\internal\LogmanConfig.txt 
+2020-08-27 11:59:01.665	INFO	LogmanConfig.txt copied to  C:\temp\Test 2\output\internal\LogmanConfig.txt 
 2020-08-27 11:59:01.734	INFO	 
 2020-08-27 11:59:01.734	INFO	Initiating diagnostics collection...  
 2020-08-27 11:59:01.734	INFO	Please select one of the following scenarios:
