@@ -1,6 +1,6 @@
 
 # Introduction
-SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. 
+SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)). 
 
 # Usage
 
@@ -13,6 +13,11 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 SQL_LogScout.cmd accepts two optional parameters:
 1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on what is executed on the system and is mostly for troubleshooting and debugging SQL LogScout
 1. **Scenario** - possible values are "Basic", "GeneralPerf", "DetailedPerf", "AlwaysOn","Replication" (no default). For more information on each scenario see [Scenarios](#scenarios)
+
+## Permissions
+
+Windows: Local Administrator permissions on the machine are required to collect most system-related logs
+SQL Server: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. 
 
 ## Scenarios
 1. **Basic scenario** collects snapshot logs. It captures information:
@@ -141,3 +146,7 @@ SQL_LogScout.cmd accepts two optional parameters:
 # Targeted SQL instances
 
 Data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only. 
+
+# Test Suite
+
+An test suite is intended for testing the outputs from SQL LogScout. The set of tests will grow over time.
