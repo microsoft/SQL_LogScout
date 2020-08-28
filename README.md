@@ -9,9 +9,22 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 1. Pick the Scenario from a menu list (based on the issue under investigation)
 1. Stop the collection when you are ready (by typing "stop")
 
+# Examples:
+
+## A. Execute SQL LogScout (most common execution)
+```bash
+SQL_LogScout.cmd
+```
+
+## A. Execute using the GeneralPerf scenario and default debug level 0
+```bash
+SQL_LogScout.cmd 0 GeneralPerf
+```
+
+
 ## Parameters
-SQL_LogScout.cmd accepts two optional parameters:
-1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on what is executed on the system and is mostly for troubleshooting and debugging SQL LogScout
+SQL_LogScout.cmd accepts two *optional* parameters:
+1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on sequence of execution and variable values and is mostly for troubleshooting and debugging of SQL LogScout. In large majority of the cases you don't need to use anything other than 0, which provides the information you need.
 1. **Scenario** - possible values are "Basic", "GeneralPerf", "DetailedPerf", "AlwaysOn","Replication" (no default). For more information on each scenario see [Scenarios](#scenarios)
 
 ## Permissions
