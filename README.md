@@ -16,8 +16,8 @@ SQL_LogScout.cmd accepts two optional parameters:
 
 ## Permissions
 
-Windows: Local Administrator permissions on the machine are required to collect most system-related logs
-SQL Server: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. 
+  - **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
+  - **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. 
 
 ## Scenarios
 1. **Basic scenario** collects snapshot logs. It captures information:
@@ -149,4 +149,4 @@ Data is collected from the SQL instance you selected locally on the machine wher
 
 # Test Suite
 
-An test suite is intended for testing the outputs from SQL LogScout. The set of tests will grow over time.
+An test suite is intended for testing the outputs from SQL LogScout. The set of tests will grow over time. 
