@@ -2751,7 +2751,7 @@ param (
 }
 function HandleCtrlC ()
 {
-    if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,NoEcho").Character))
+    if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,IncludeKeyDown,NoEcho").Character))
     {
        Write-LogWarning "*******************"
        Write-LogWarning "You pressed CTRL-C. Stopping diagnostic collection..."
@@ -2770,7 +2770,7 @@ function HandleCtrlCFinal ()
     while ($true)
     {
 
-        if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,NoEcho").Character))
+        if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,IncludeKeyDown,NoEcho").Character))
         {
             Write-LogWarning "f*******************f"
             Write-LogWarning "You pressed CTRL-C. Stopping diagnostic collection..."
