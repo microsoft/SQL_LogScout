@@ -154,7 +154,11 @@ SQL_LogScout.cmd accepts two *optional* parameters:
 
 **Output folder**: All the log files are collected in the \output folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. 
 
-**Internal folder**: The \internal folder stores error log files as well as the main activity log file for SQL LogScout (##SQLDIAG.LOG). If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG and the contents of that file is displayed in the console after the main script completes execution.
+**Internal folder**: The \internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLDIAG.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
+
+# Logging
+SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLDIAG.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
+
 
 # Targeted SQL instances
 
@@ -162,4 +166,4 @@ Data is collected from the SQL instance you selected locally on the machine wher
 
 # Test Suite
 
-An test suite is intended for testing the outputs from SQL LogScout. The set of tests will grow over time. 
+The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. 
