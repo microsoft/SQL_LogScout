@@ -947,6 +947,13 @@ function GetXeventsGeneralPerf()
         #there is no output file for this call - it creates the xevents. only errors if any
 
         #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
+        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
+        {
+            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector"
+            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
+            return $false
+        }
+
         $collector_name = $global:xevent_collector = "pssdiag_xevent"
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
@@ -1009,6 +1016,14 @@ function GetXeventsDetailedPerf()
         #there is no output file for this call - it creates the xevents. only errors if any
 
         #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
+
+        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
+        {
+            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector" 
+            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
+            return $false
+        }
+
         $collector_name = $global:xevent_collector = "pssdiag_xevent_detailed"
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
@@ -1087,6 +1102,78 @@ function GetAlwaysOnDiag()
     }
 
 }
+
+function GetXeventsAlwaysOnMovement() 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    $server = $global:sql_instance_conn_str
+
+    try {
+        
+    
+        ##create error output filenames using the path + servername + date and time
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+
+        #XEvents file: pssdiag_xevent_detailed.sql - Detailed Perf
+        #there is no output file for this call - it creates the xevents. only errors if any
+
+        #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
+
+        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
+        {
+            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector"     
+            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
+            return $false
+        }
+        
+        $collector_name = $global:xevent_collector = "AlwaysOn_Data_Movement"
+        $input_script = Build-InputScript $global:present_directory $collector_name
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hpssdiag -w4000 -o" + $error_file + " -i" + $input_script
+        Write-LogInformation "Executing Collector: $collector_name"
+        Write-LogDebug $executable $argument_list
+        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+        [void]$global:processes.Add($p)
+
+        Start-Sleep -Seconds 2
+
+        #add Xevent target
+        $collector_name = "AlwaysOn_Data_Movement_target"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $alter_event_session_add_target = "ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50));" 
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hpssdiag -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+        Write-LogInformation "Executing Collector: $collector_name"
+        Write-LogDebug $executable $argument_list
+        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+        [void]$global:processes.Add($p)
+
+        #start the XEvent session
+        $collector_name = "AlwaysOn_Data_Movement_Start"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $alter_event_session_start = "ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START;" 
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hpssdiag -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+        Write-LogInformation "Executing Collector: $collector_name"
+        Write-LogDebug $executable $argument_list
+        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+        [void]$global:processes.Add($p)
+
+    }
+    catch {
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "$MyInvocation.MyCommand Function failed with error:  $error_msg"
+        $ret = $false
+        return $ret      
+    }
+}
+
 
 function GetSysteminfoSummary() 
 {
@@ -1814,6 +1901,7 @@ function Invoke-AlwaysOnScenario()
     HandleCtrlC
     Invoke-CommonCollectors
     GetAlwaysOnDiag
+    GetXeventsAlwaysOnMovement
 }
 
 function Invoke-ReplicationScenario()
@@ -2772,9 +2860,9 @@ function HandleCtrlCFinal ()
 
         if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,IncludeKeyDown,NoEcho").Character))
         {
-            Write-LogWarning "f*******************f"
+            Write-LogWarning "<*******************>"
             Write-LogWarning "You pressed CTRL-C. Stopping diagnostic collection..."
-            Write-LogWarning "f*******************f"
+            Write-LogWarning "<*******************>"
             Invoke-DiagnosticCleanUp
         }
 		
