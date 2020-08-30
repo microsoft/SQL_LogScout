@@ -59,13 +59,19 @@ function Get-PresentDirectory()
     Write-LogInformation "The Present folder for this collection is" $global:present_directory 
 }
 
-function Get-OutputPath()
+function Get-OutputPath([string]$output_dirname = "")
 {
 	Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
     
-    #the output folder is subfolder of current folder where the tool is running
-	$global:output_folder =  ($global:present_directory + "\output\")
-
+    if (($output_dirname -eq "") -or ($output_dirname -eq $null))
+    {
+        #the output folder is subfolder of current folder where the tool is running
+        $global:output_folder =  ($global:present_directory + "\output\")
+    }
+    else 
+    {
+        $global:output_folder =  ($global:present_directory + $output_dirname)
+    }
     Write-LogInformation "Output path: $global:output_folder" #DO NOT CHANGE - Message is backward compatible
 }
 
@@ -113,45 +119,71 @@ function Create-PartialErrorOutputFilename ([string]$server)
     return $error_output_file_name
 }
 
-function Reuse-or-RecreateOutputFolder()
-{
+function Reuse-or-RecreateOutputFolder() {
     Write-LogDebug "inside" $MyInvocation.MyCommand
-    
-    $output_folder = $global:output_folder
-    $error_folder = $global:internal_output_folder
 
-	Write-LogDebug "Output folder is: $global:output_folder" -DebugLogLevel 3
-	Write-LogDebug "Error folder is: $error_folder" -DebugLogLevel 3
+    Write-LogDebug "Output folder is: $global:output_folder" -DebugLogLevel 3
+    Write-LogDebug "Error folder is: $global:internal_output_folder" -DebugLogLevel 3
     
-
-    #delete entire \output folder and files/subfolders before you create a new one, if user chooses that
-    if (Test-Path -Path $output_folder)
-    {
-        Write-LogInformation ""
-        
-        [string]$deleteYN = $null
-        while (-not(($deleteYN -eq "Y") -or ($deleteYN -eq "N")))
+    try {
+    
+        #delete entire \output folder and files/subfolders before you create a new one, if user chooses that
+        if (Test-Path -Path $global:output_folder) 
         {
-            Write-LogWarning "It appears that output folder $output_folder has been used before."
-            Write-LogWarning "DELETE the files it contains (Y/N)?"
-            $deleteYN = Read-Host "Enter 'Y' or 'N' >"
+            Write-LogInformation ""
+        
+            [string]$DeleteOrNew = ""
+            Write-LogWarning "It appears that output folder '$global:output_folder' has been used before."
+            Write-LogWarning "You can choose to:"
+            Write-LogWarning " - Delete (D) the \output folder contents and recreate it"
+            Write-LogWarning " - Create a new (N) folder using \Output_ddMMyyhhmmss format." 
+            Write-LogWarning "   You can delete the new folder manually in the future"
 
-            Write-LogInformation "Console input: $deleteYN"
-            $deleteYN = $deleteYN.ToString().ToUpper()
-            if (-not(($deleteYN -eq "Y") -or ($deleteYN -eq "N")))
+            while (-not(($DeleteOrNew -eq "D") -or ($DeleteOrNew -eq "N"))) 
             {
-                Write-LogError ""
-                Write-LogError "Please chose [Y] to DELETE the output folder $output_folder and all files inside of the folder."
-                Write-LogError "Please chose [N] to continue using the same folder - will overwrite existing files as needed."
-                Write-LogError ""
+                $DeleteOrNew = Read-Host "Delete ('D') or create New ('N') >"
+
+                Write-LogInformation "Console input: $DeleteOrNew"
+                $DeleteOrNew = $DeleteOrNew.ToString().ToUpper()
+                if (-not(($DeleteOrNew -eq "D") -or ($DeleteOrNew -eq "N"))) {
+                    Write-LogError ""
+                    Write-LogError "Please chose [D] to DELETE the output folder $global:output_folder and all files inside of the folder."
+                    Write-LogError "Please chose [N] to CREATE a new folder"
+                    Write-LogError ""
+                }
             }
-        }
-        #Get-Childitem -Path $output_folder -Recurse | Remove-Item -Confirm -Force -Recurse  | Out-Null
-        if ($deleteYN = "Y") {Remove-Item -Path $output_folder -Force -Recurse  | Out-Null}
-    }
+
+        
+            #Get-Childitem -Path $output_folder -Recurse | Remove-Item -Confirm -Force -Recurse  | Out-Null
+            if ($DeleteOrNew -eq "D") {
+                Remove-Item -Path $global:output_folder -Force -Recurse  | Out-Null
+                Write-LogWarning "Deleted $global:output_folder and its contents"
+            }
+            elseif ($DeleteOrNew -eq "N") {
+            
+                [string] $new_output_folder_name = "\output_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
+                Write-LogDebug "The new output folder name is: $new_output_folder_name" -DebugLogLevel 3
+
+                #these two calls updates the two globals for the new output and internal folders
+                Get-OutputPath -output_dirname $new_output_folder_name
+                Write-LogDebug "The new output path is: $global:output_folder" -DebugLogLevel 3
+            
+                Get-InternalPath
+                Write-LogDebug "The new error path is: $global:internal_output_folder" -DebugLogLevel 3
+            }
+
+        }#end of IF
+
 	
-    #create an output folder and error directory in one shot (creating the child folder \internal will create the parent \output also). -Force will not overwrite it, it will reuse the folder
-    New-Item -Path $error_folder -ItemType Directory -Force | out-null 
+        #create an output folder AND error directory in one shot (creating the child folder \internal will create the parent \output also). -Force will not overwrite it, it will reuse the folder
+        New-Item -Path $global:internal_output_folder -ItemType Directory -Force | out-null 
+        
+    }
+    catch {
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "$MyInvocation.MyCommand Function failed with error:  $error_msg"
+        return $false
+    }
 }
 
 function Build-FinalOutputFile([string]$output_file_name, [string]$collector_name, [bool]$needExtraQuotes)
@@ -2371,7 +2403,7 @@ function Get-InstanceNamesOnly()
     if ($SqlTaskList.Count -eq 0)
     {
         Write-LogInformation "There are curerntly no running instances of SQL Server. Exiting..." -ForegroundColor Green
-        break  #done with execution - nothing else to do
+        exit  #done with execution - nothing else to do
     }
 
     else 
@@ -2909,12 +2941,13 @@ function main ()
 
         #check for minimum PowerShell version of 5.x
         Test-MinPowerShellVersion
-
+        
         #check for administrator rights
 		Check-ElevatedAccess
         
         #initialize globals for present folder, output folder, internal\error folder
         InitCriticalDirectories
+
 
 		#check if output folder is already present and if so prompt for deletion. Then create new if deleted, or reuse
 		Reuse-or-RecreateOutputFolder
