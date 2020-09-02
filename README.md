@@ -16,11 +16,13 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 SQL_LogScout.cmd
 ```
 
-## A. Execute using the GeneralPerf scenario and default debug level 0
+## B. Execute using GeneralPerf scenario and debug level 0
 ```bash
 SQL_LogScout.cmd 0 GeneralPerf
 ```
+# Download
 
+Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout)
 
 ## Parameters
 SQL_LogScout.cmd accepts two *optional* parameters:
@@ -166,4 +168,14 @@ Data is collected from the SQL instance you selected locally on the machine wher
 
 # Test Suite
 
-The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. 
+The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. To run the test, simply execute the RunTests.bat under the \TestingInfrastructure folder in command prompt.
+
+## Example:
+
+## Execute SQL LogScout Tests
+```bash
+cd TestingInfrastructure 
+RunTests.bat
+```
+
+## Sample Output
