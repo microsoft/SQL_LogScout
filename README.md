@@ -60,6 +60,7 @@ SQL_LogScout.cmd accepts two *optional* parameters:
 1. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
+   - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
 1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
    - Basic Scenario
    - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
@@ -179,3 +180,20 @@ RunTests.bat
 ```
 
 ## Sample Output
+
+```
+TEST: ExecutingCollectors Validation
+Status: SUCCESS
+Summary: You executed "General Performance" Scenario. Expected Collector count of 23 matches current file count is : 23
+
+************************************************************************************************
+
+TEST: FileCount Validation
+Status: SUCCESS
+Summary: You executed "General Performance" Scenario. Expected File count of 25 matches current file count is : 25
+
+************************************************************************************************
+
+Testing has been completed , reports are at: C:\temp\Test 2\TestingInfrastructure\output\
+
+```
