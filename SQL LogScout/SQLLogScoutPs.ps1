@@ -1510,6 +1510,7 @@ function GetPerfmonCounters ()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     $server = $global:sql_instance_conn_str
+    $internal_folder = $global:internal_output_folder
 
     try {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
@@ -1523,7 +1524,7 @@ function GetPerfmonCounters ()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "cmd.exe"
-        $argument_list = "/C logman stop pssdiagperfmon & logman delete pssdiagperfmon & logman CREATE COUNTER -n pssdiagperfmon -cf LogmanConfig.txt -f bin -si 00:00:05 -max 250 -cnf 01:00:00  -o " + $output_file + "  & logman start pssdiagperfmon "
+        $argument_list = "/C logman stop pssdiagperfmon & logman delete pssdiagperfmon & logman CREATE COUNTER -n pssdiagperfmon -cf `"" + $internal_folder + "LogmanConfig.txt`" -f bin -si 00:00:05 -max 250 -cnf 01:00:00  -o " + $output_file + "  & logman start pssdiagperfmon "
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
@@ -2517,7 +2518,7 @@ function Pick-SQLServer-for-Diagnostics()
 
     $NetNamePlusinstanceArray = Get-NetNameMatchingInstance
 
-    if ($NetNamePlusinstanceArray -and ($NetNamePlusinstanceArray -ne $null))
+    if ($NetNamePlusinstanceArray -and ($null -ne $NetNamePlusinstanceArray))
     {
         Write-LogDebug "NetNamePlusinstanceArray contains: " $NetNamePlusinstanceArray -DebugLogLevel 2
 
@@ -2726,14 +2727,24 @@ function Copy-OriginalLogmanConfig()
 
 
 
-function PrepareCountersFile([string]$NetNamePlusInstance)
+function PrepareCountersFile()
 {
     Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    if (($global:sql_instance_conn_str -ne "") -and ($null -ne $global:sql_instance_conn_str) )
+    {
+        [string] $SQLServerName = $global:sql_instance_conn_str
+    }
+    else 
+    {
+        Write-LogError "SQL instance name is empty.Exiting..."    
+        exit
+    }
 
     if (Copy-OriginalLogmanConfig)
     {
         Write-LogDebug "Perfmon Counters file was copied. It is safe to update it in new location"
-        Update-PerfmonConfigFile($NetNamePlusInstance)
+        Update-PerfmonConfigFile($SQLServerName)
     }
     #restoration of original file is in the Stop-DiagCollectors
 }
@@ -2766,9 +2777,6 @@ function Confirm-SQLPermissions
 
     .DESCRIPTION
         Returns true if user has VIEW SERVER STATE permission in SQL Server, otherwise warns about lack of permissions and request confirmation, returns true if user confirms otherwise returns false.
-
-    .PARAMETER SQLInstance
-        SQL Server instance name. Either SERVERNAME or SERVERNAME\INSTANCENAME
     
     .PARAMETER SQLUser
         Optional. SQL Server User Name for SQL Authentication
@@ -2782,9 +2790,6 @@ function Confirm-SQLPermissions
 #>
 [CmdletBinding()]
 param ( 
-    [Parameter(Mandatory)] 
-    [ValidateNotNullorEmpty()]
-    [string]$SQLInstance,
     [Parameter()]
     [ValidateNotNullOrEmpty()]
     [string]$SQLUser,
@@ -2794,6 +2799,17 @@ param (
     )
 
     Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    if ($global:sql_instance_conn_str -ne "")
+    {
+        $SQLInstance = $global:sql_instance_conn_str
+    }
+    else {
+        Write-LogError "SQL Server instance name is empty. Exiting..."
+        exit
+    }
+    
+
     Write-LogDebug "Received parameter SQLInstance: `"$SQLInstance`"" -DebugLogLevel 2
     Write-LogDebug "Received parameter SQLUser: `"$SQLUser`"" -DebugLogLevel 2
     Write-LogDebug "Received parameter SQLPassword (true/false): " (-not ($null -eq $SQLPassword)) #we don't print the password, just inform if we received it or not
@@ -2925,46 +2941,18 @@ function Test-MinPowerShellVersion
     }
 }
 
-
-
-function main ()
+function GetPerformanceDataAndLogs 
 {
     
-    
-    Write-LogDebug "Scenario is $Scenario" -DebugLogLevel 3
-    
-    [string]$pickedSQLInstance =""
-    
-	try
-	{  
-        Init-AppVersion
-
-        #check for minimum PowerShell version of 5.x
-        Test-MinPowerShellVersion
-        
-        #check for administrator rights
-		Check-ElevatedAccess
-        
-        #initialize globals for present folder, output folder, internal\error folder
-        InitCriticalDirectories
-
-
-		#check if output folder is already present and if so prompt for deletion. Then create new if deleted, or reuse
-		Reuse-or-RecreateOutputFolder
-		
-		#create a log of events
-		Initialize-Log
-		
-		$pickedSQLInstance = Pick-SQLServer-for-Diagnostics
+		Pick-SQLServer-for-Diagnostics
 		
         #check SQL permission and continue only if user has permissions or user confirms to continue without permissions
-        $shouldContinue = Confirm-SQLPermissions -SQLInstance $pickedSQLInstance
+        $shouldContinue = Confirm-SQLPermissions 
         if ($shouldContinue)
         {
 
             #prepare a pefmon counters file with specific instance info
-            
-            PrepareCountersFile -NetNamePlusInstance $pickedSQLInstance
+            PrepareCountersFile 
             
             #start collecting the diagnostic data
             Start-DiagColllectors
@@ -2972,12 +2960,102 @@ function main ()
             #stop data collection
             Stop-DiagCollectors
         }
+    
+}
 
+function InvokePluginMenu () 
+{
+    $PluginArray = "Performance and Basic Logs", "Memory Dump(s)"
+    
+    Write-LogInformation "Please select what data you would like to collect:`n"
+    Write-LogInformation ""
+    Write-LogInformation "Choice   Scenario"
+    Write-LogInformation "------   ---------------------------------"
+
+    for ($i = 0; $i -lt $PluginArray.Count; $i++) {
+        Write-LogInformation $i "      " $PluginArray[$i]
+    }
+
+    $isInt = $false
+    $ScenarioIdInt = 777
+    $pluginIntList = 0..1  #as we add more scenarios above, we will increase the range to match them
+
+
+
+        
+    while (($isInt -eq $false) -or ($ValidId -eq $false)) {
+        Write-LogInformation ""
+        Write-LogWarning "Enter the Choice ID for which you want to collect diagnostic data. Then press Enter" 
+
+        $ScenIdStr = Read-Host "Enter the Choice ID from list above>"
+        Write-LogInformation "Console input: $ScenIdStr"
+            
+        try {
+            $ScenarioIdInt = [convert]::ToInt32($ScenIdStr)
+            $isInt = $true
+        }
+
+        catch [FormatException] {
+            Write-LogError "The value entered for Choice '", $ScenIdStr, "' is not an integer"
+            continue 
+        }
+
+        #validate this ID is in the list discovered 
+        if ($ScenarioIdInt -in ($pluginIntList)) {
+            $ValidId = $true
+            #$global:ScenarioChoice = $ScenarioIdInt
+
+            switch ($ScenarioIdInt) {
+                0 { 
+                    # Basic and Performance Logs
+                    GetPerformanceDataAndLogs
+                }
+                1 {
+                    # Memory Dumps
+                    Write-Host "Output folder is $global:output_folder"
+                    .\SQLDumpHelper.ps1 -DumpOutputFolder $global:output_folder # next make this use a parameter for dump location
+                }
+                Default { Write-LogError "No plugin was picked. Not sure why we are here" }
+            }
+                
+        }
+        else {
+            $ValidId = $false
+            Write-LogError "The ID entered '", $ScenIdStr, "' is not in the list "
+        }
+    } #end of while
+}
+function main () 
+{
+
+    Write-LogDebug "Scenario prameter passed is '$Scenario'" -DebugLogLevel 3
+
+    try {  
+        Init-AppVersion
+
+        #check for minimum PowerShell version of 5.x
+        Test-MinPowerShellVersion
+    
+        #check for administrator rights
+        Check-ElevatedAccess
+    
+        #initialize globals for present folder, output folder, internal\error folder
+        InitCriticalDirectories
+
+
+        #check if output folder is already present and if so prompt for deletion. Then create new if deleted, or reuse
+        Reuse-or-RecreateOutputFolder
+    
+        #create a log of events
+        Initialize-Log
+    
+        #Plugin Menu - perfmon and basic logs or memory dumps
+        InvokePluginMenu
+    
         Write-LogInformation "Ending data collection" #DO NOT CHANGE - Message is backward compatible
-	}   
-	
-	finally
-    {
+    }   
+
+    finally {
         HandleCtrlCFinal
         Write-LogInformation ""
     }

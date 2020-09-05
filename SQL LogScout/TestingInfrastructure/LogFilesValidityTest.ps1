@@ -3,18 +3,20 @@
     $present_directory = Convert-Path -Path ".\..\"   #this goes to the SQL LogScout source code directory
     return $present_directory
 }
-function Get-OutputPath() {
+function Get-OutputPathLatest() {
     Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
         
     $present_directory = Get-RootDirectory
-    $output_folder = ($present_directory + "\output\")
+    $filter="output*"
+    $latest = Get-ChildItem -Path $present_directory -Filter $filter | Sort-Object LastAccessTime -Descending | Select-Object -First 1
+    $output_folder = ($present_directory + "\"+ $latest + "\")
 
     return $output_folder
 }
 function Get-InternalPath() {
     Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
         
-    $output_folder = Get-OutputPath
+    $output_folder = Get-OutputPathLatest
     $internal_output_folder = ($output_folder + "internal\")
 
     return $internal_output_folder
@@ -84,7 +86,7 @@ function TestingInfrastructure-Dir() {
 function main() {
     $date = ( get-date ).ToString('yyyyMMdd');
     $currentDate = [DateTime]::Now.AddDays(-10)
-    $output_folder = Get-OutputPath
+    $output_folder = Get-OutputPathLatest
     $error_folder = Get-InternalPath
     $TestingInfrastructure_folder = TestingInfrastructure-Dir 
 
@@ -233,9 +235,9 @@ function main() {
                                 }
                                 If ($consolinut -eq "4") 
                                 { 
-                                    If  ($collecCount -eq 12)
+                                    If  ($collecCount -eq 15)
                                     {
-                                        $msg = "You executed ""Memory"" Scenario. Expected Collector count of 12 matches current Collector count is : " + $collecCount
+                                        $msg = "You executed ""AlwaysON"" Scenario. Expected Collector count of 15 matches current Collector count is : " + $collecCount
                                         $msg = $msg.replace("`n", " ")
                                         Write-Host 'Status: SUCCESS' -ForegroundColor Green
                                         Write-Host 'Summary:'  $msg
@@ -244,7 +246,7 @@ function main() {
                                     }
                                     Else
                                     {
-                                        $msg = "You executed ""Memory"" Scenario. so Total Collector count should be 12 but the executed Collector count is : " + $collecCount
+                                        $msg = "You executed ""AlwaysON"" Scenario. so Total Collector count should be 15 but the executed Collector count is : " + $collecCount
                                         $msg = $msg.replace("`n", " ")
                                         Write-Host 'Status: FAILED' -ForegroundColor Red
                                         Write-Host 'Summary:'  $msg
@@ -406,9 +408,9 @@ function main() {
             }
             If ($consolinut -eq "4") 
             { 
-                If  ($filecountouptput -eq 16)
+                If  ($filecountouptput -eq 17)
                 {
-                    $msg = "You executed ""Memory"" Scenario. Expected File count of 16 matches current file count is : " + $filecountouptput
+                    $msg = "You executed ""AlwaysON"" Scenario. Expected File count of 17 matches current file count is : " + $filecountouptput
                     $msg = $msg.replace("`n", " ")
                     Write-Host 'Status: SUCCESS' -ForegroundColor Green
                     Write-Host 'Summary:'  $msg
@@ -417,7 +419,7 @@ function main() {
                 }
                 Else
                 {
-                    $msg = "You executed ""Memory"" Scenario. so Total File count should be 16 but the generated file count is : " + $filecountouptput
+                    $msg = "You executed ""AlwaysON"" Scenario. so Total File count should be 17 but the generated file count is : " + $filecountouptput
                     $msg = $msg.replace("`n", " ")
                     Write-Host 'Status: FAILED' -ForegroundColor Red
                     Write-Host 'Summary:'  $msg
