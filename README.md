@@ -35,7 +35,7 @@ SQL_LogScout.cmd accepts two *optional* parameters:
   - **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. 
 
 ## Scenarios
-1. **Basic scenario** collects snapshot logs. It captures information:
+0. **Basic scenario** collects snapshot logs. It captures information:
    - Running drivers on the system
    - System information (systeminfo.exe)
    - Miscelaneous sql configuration (sp_configure, databases, etc)
@@ -54,16 +54,27 @@ SQL_LogScout.cmd accepts two *optional* parameters:
    - Tempdb contention info from SQL DMVs/system views
    - Linked Server metadata (SQL DMVs/system views)
    - Service Broker configuration information (SQL DMVs/system views)
-1. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
+2. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
    - GeneralPerf scenario
    - Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level starting/completed events and actual XML query plans (for completed queries)
-1. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
+3. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
+   - Basic Scenario
+   - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
+4. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
    - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
-1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
-   - Basic Scenario
-   - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
+5. **Network Trace** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
+6. **Memory** - collects
+   - Basic scenario
+   - Performance Monitor counters for SQL Server instance and general OS counters
+   - Memory diagnostic info from SQL DMVs/system views
+7. **Generate Memory Dumps** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are select, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
+8.  **Windows Performance Recorder (WPR)** Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
+    - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS 
+    - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS 
+    - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS 
+    - Filter drivers - collects performance data about filter driver activity on the system (OS)
 
 
 # Sample output
@@ -114,6 +125,10 @@ SQL_LogScout.cmd accepts two *optional* parameters:
 2020-08-27 11:59:01.749	INFO	2    Detailed Performance (statement level and query plans) 
 2020-08-27 11:59:01.749	INFO	3    Replication 
 2020-08-27 11:59:01.749	INFO	4    AlwaysON 
+2020-08-27 11:59:01.749	INFO	5    Network Trace 
+2020-08-27 11:59:01.749	INFO	6    Memory
+2020-08-27 11:59:01.749	INFO	7    Generate Memory dumps
+2020-08-27 11:59:01.749	INFO	8    Windows Performance Recorder (WPR)
 2020-08-27 11:59:01.749	INFO	 
 2020-08-27 11:59:01.765	WARN	Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter 
 2020-08-27 11:59:11.613	INFO	Console input: 1 
