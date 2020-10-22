@@ -38,13 +38,13 @@ SQL_LogScout.cmd accepts two *optional* parameters:
 0. **Basic scenario** collects snapshot logs. It captures information:
    - Running drivers on the system
    - System information (systeminfo.exe)
-   - Miscelaneous sql configuration (sp_configure, databases, etc)
+   - Miscellaneous sql configuration (sp_configure, databases, etc)
    - Processes running on the system (Tasklist.exe)
    - Current active PowerPlan
    - Installed Windows Hotfixes
    - Running filter drivers
    - Event logs (system and application)
-1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuos logs (until SQL LogScout is stopped).
+1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
    - Extended Event trace captures batch-level starting/completed events, errors and warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout
@@ -69,7 +69,7 @@ SQL_LogScout.cmd accepts two *optional* parameters:
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
    - Memory diagnostic info from SQL DMVs/system views
-7. **Generate Memory Dumps** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are select, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
+7. **Generate Memory Dumps** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
 8.  **Windows Performance Recorder (WPR)** Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
     - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS 
     - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS 
