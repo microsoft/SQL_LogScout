@@ -7,7 +7,7 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 1. Start the tool via SQL_LogScout.cmd when the issue is happening
 1. Select which SQL instance you want to diagnose from a numbered list
 1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Examples))
-1. Stop the collection when you are ready (by typing "stop")
+1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
 # Examples:
 
@@ -20,14 +20,26 @@ SQL_LogScout.cmd
 ```bash
 SQL_LogScout.cmd 0 GeneralPerf
 ```
+## C. Execute with Scenario, Debug level, Server, and Folder option parameters
+```bash
+SQL_LogScout.cmd 2 DetailedPerf "DbSrv\SQL2019" DeleteDefaultFolder
+```
+
+
 # Download
 
 Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout)
 
 ## Parameters
-SQL_LogScout.cmd accepts two *optional* parameters:
+SQL_LogScout.cmd accepts several *optional* parameters:
+
 1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on sequence of execution and variable values and is mostly for troubleshooting and debugging of SQL LogScout. In large majority of the cases you don't need to use anything other than 0, which provides the information you need.
+
 1. **Scenario** - possible values are "Basic", "GeneralPerf", "DetailedPerf", "AlwaysOn","Replication" (no default). For more information on each scenario see [Scenarios](#scenarios)
+
+1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
+
+1. **DeleteExistingOrCreateNew** - possible values are "DeleteDefaultFolder" and "NewCustomFolder".  DeleteDefaultFolder will cause the default \output folder to be deleted and recreated. NewCustomFolder value will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
 
 ## Permissions
 
