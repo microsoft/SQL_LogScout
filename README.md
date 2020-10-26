@@ -2,6 +2,10 @@
 # Introduction
 SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)). 
 
+# Download
+
+Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout)
+
 # Usage
 
 1. Start the tool via SQL_LogScout.cmd when the issue is happening
@@ -9,28 +13,28 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Examples))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
-# Examples:
+# Examples
 
 ## A. Execute SQL LogScout (most common execution)
+
 ```bash
 SQL_LogScout.cmd
 ```
 
 ## B. Execute using GeneralPerf scenario and debug level 0
+
 ```bash
 SQL_LogScout.cmd 0 GeneralPerf
 ```
+
 ## C. Execute with Scenario, Debug level, Server, and Folder option parameters
+
 ```bash
 SQL_LogScout.cmd 2 DetailedPerf "DbSrv\SQL2019" DeleteDefaultFolder
 ```
 
-
-# Download
-
-Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout)
-
 ## Parameters
+
 SQL_LogScout.cmd accepts several *optional* parameters:
 
 1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on sequence of execution and variable values and is mostly for troubleshooting and debugging of SQL LogScout. In large majority of the cases you don't need to use anything other than 0, which provides the information you need.
@@ -43,10 +47,12 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 
 ## Permissions
 
-  - **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
-  - **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. 
+- **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
+
+- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data.
 
 ## Scenarios
+
 0. **Basic scenario** collects snapshot logs. It captures information:
    - Running drivers on the system
    - System information (systeminfo.exe)
