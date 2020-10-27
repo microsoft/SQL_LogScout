@@ -39,7 +39,19 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 
 1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on sequence of execution and variable values and is mostly for troubleshooting and debugging of SQL LogScout. In large majority of the cases you don't need to use anything other than 0, which provides the information you need.
 
-1. **Scenario** - possible values are "Basic", "GeneralPerf", "DetailedPerf", "AlwaysOn","Replication" (no default). For more information on each scenario see [Scenarios](#scenarios)
+1. **Scenario** - possible values are:
+    - "Basic"
+    - "GeneralPerf"
+    - "DetailedPerf"
+    - "Replication"
+    - "AlwaysOn"
+    - "Network"
+    - "Memory"
+    - "DumpMemory"
+    - "WPR"
+    - "MenuChoice" - this will present an interactive menu with Scenario choices. This is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
+
+   For more information on each scenario see [Scenarios](#scenarios)
 
 1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
 
@@ -62,6 +74,7 @@ SQL_LogScout.cmd accepts several *optional* parameters:
    - Installed Windows Hotfixes
    - Running filter drivers
    - Event logs (system and application)
+
 1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
@@ -75,20 +88,26 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 2. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
    - GeneralPerf scenario
    - Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level starting/completed events and actual XML query plans (for completed queries)
+
 3. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
    - Basic Scenario
    - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
+
 4. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
    - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
+
 5. **Network Trace** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
+
 6. **Memory** - collects
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
    - Memory diagnostic info from SQL DMVs/system views
+
 7. **Generate Memory Dumps** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
-8.  **Windows Performance Recorder (WPR)** Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
+
+8. **Windows Performance Recorder (WPR)** Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
     - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS 
     - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS 
     - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS 
