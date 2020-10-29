@@ -17,21 +17,37 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 
 ## A. Execute SQL LogScout (most common execution)
 
+This is the most common method to execute SQL LogScout which allows you to pick your choices from a menu of options
+
 ```bash
 SQL_LogScout.cmd
 ```
 
-## B. Execute using GeneralPerf scenario and debug level 0
+## B. Execute SQL LogScout using a specific scenario and debug level
+
+This command starts the diagnostic collection with no debug logging and specifies the GeneralPerf scenario.
 
 ```bash
 SQL_LogScout.cmd 0 GeneralPerf
 ```
 
-## C. Execute with Scenario, Debug level, Server, and Folder option parameters
+## C. Execute SQL LogScout by specifying folder creation option
+
+Execute SQL LogScout using the DetailedPerf Scenario, DebugLevel 2, specifies the Server name, and folder option to delete the default \output folder if present
 
 ```bash
 SQL_LogScout.cmd 2 DetailedPerf "DbSrv\SQL2019" DeleteDefaultFolder
 ```
+
+## D. Execute SQL LogScout with start and stop times
+
+The following example uses debuglevel 5, collects the AlwaysOn scenario against the "DbSrv" default instance, creates a new custom folder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  
+
+```bash
+SQL_LogScout.cmd 5 AlwaysOn "DbSrv" NewCustomFolder "2000-01-01 19:26:00" "2020-10-29 13:55:00"
+```
+
+**Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
 
 ## Parameters
 
@@ -56,6 +72,10 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
 
 1. **DeleteExistingOrCreateNew** - possible values are "DeleteDefaultFolder" and "NewCustomFolder".  DeleteDefaultFolder will cause the default \output folder to be deleted and recreated. NewCustomFolder value will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
+
+1. **DiagStartTime** - specify the time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".  
+
+1. **DiagStopTime** - specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".
 
 ## Permissions
 
