@@ -94,6 +94,8 @@ SQL_LogScout.cmd accepts several *optional* parameters:
    - Installed Windows Hotfixes
    - Running filter drivers
    - Event logs (system and application)
+   - SQL Errorlogs
+   - SQL Agent logs
 
 1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
@@ -132,6 +134,9 @@ SQL_LogScout.cmd accepts several *optional* parameters:
     - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS 
     - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS 
     - Filter drivers - collects performance data about filter driver activity on the system (OS)
+
+9. **Setup** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system.
+
 
 
 # Sample output
