@@ -65,7 +65,8 @@ SQL_LogScout.cmd accepts several *optional* parameters:
     - "Memory"
     - "DumpMemory"
     - "WPR"
-    - "MenuChoice" - this will present an interactive menu with Scenario choices. This is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
+    - "Setup"
+    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
 
    For more information on each scenario see [Scenarios](#scenarios)
 
