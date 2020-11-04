@@ -72,7 +72,9 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 
 1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
 
-1. **DeleteExistingOrCreateNew** - possible values are "DeleteDefaultFolder" and "NewCustomFolder".  DeleteDefaultFolder will cause the default \output folder to be deleted and recreated. NewCustomFolder value will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
+1. **DeleteExistingOrCreateNew** - possible values are: 
+    - "DeleteDefaultFolder" - will cause the default \output folder to be deleted and recreated
+    - "NewCustomFolder"  - will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
 
 1. **DiagStartTime** - specify the time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".  
 
@@ -153,82 +155,96 @@ SQL_LogScout.cmd accepts several *optional* parameters:
               #####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #
      ======================================================================================================
 
-2020-08-27 11:58:57.738	INFO	Initializing log C:\temp\Test 2\output\internal\##SQLDIAG.LOG 
-2020-08-27 11:58:54.930	INFO	SQL LogScout version: 1.1.0 
-2020-08-27 11:58:55.031	INFO	The Present folder for this collection is C:\temp\Test 2 
-2020-08-27 11:58:55.046	INFO	Output path: C:\temp\Test 2\output\ 
-2020-08-27 11:58:55.046	INFO	The Error files path is C:\temp\Test 2\output\internal\ 
-2020-08-27 11:58:55.046	INFO	 
-2020-08-27 11:58:55.062	WARN	It appears that output folder C:\temp\Test 2\output\ has been used before. 
-2020-08-27 11:58:55.062	WARN	DELETE the files it contains (Y/N)? 
-2020-08-27 11:58:57.607	INFO	Console input: y 
-2020-08-27 11:58:58.108	INFO	Discovered the following SQL Server instance(s)
- 
-2020-08-27 11:58:58.108	INFO	 
-2020-08-27 11:58:58.108	INFO	ID	SQL Instance Name 
-2020-08-27 11:58:58.108	INFO	--	---------------- 
-2020-08-27 11:58:58.108	INFO	0 	 DbServerMachine\SQL2014 
-2020-08-27 11:58:58.124	INFO	1 	 DbServerMachine 
-2020-08-27 11:58:58.124	INFO	2 	 DbServerMachine\SQL2017 
-2020-08-27 11:58:58.124	INFO	 
-2020-08-27 11:58:58.124	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
-2020-08-27 11:59:01.549	INFO	Console input: 0 
-2020-08-27 11:59:01.565	INFO	You selected instance 'DbServerMachine\SQL2014' to collect diagnostic data.  
-2020-08-27 11:59:01.649	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance DbServerMachine\SQL2014 
-2020-08-27 11:59:01.665	INFO	LogmanConfig.txt copied to  C:\temp\Test 2\output\internal\LogmanConfig.txt 
-2020-08-27 11:59:01.734	INFO	 
-2020-08-27 11:59:01.734	INFO	Initiating diagnostics collection...  
-2020-08-27 11:59:01.734	INFO	Please select one of the following scenarios:
- 
-2020-08-27 11:59:01.734	INFO	 
-2020-08-27 11:59:01.749	INFO	ID   Scenario 
-2020-08-27 11:59:01.749	INFO	--   --------------- 
-2020-08-27 11:59:01.749	INFO	0    Basic (no performance data) 
-2020-08-27 11:59:01.749	INFO	1    General Performance (recommended for most cases) 
-2020-08-27 11:59:01.749	INFO	2    Detailed Performance (statement level and query plans) 
-2020-08-27 11:59:01.749	INFO	3    Replication 
-2020-08-27 11:59:01.749	INFO	4    AlwaysON 
-2020-08-27 11:59:01.749	INFO	5    Network Trace 
-2020-08-27 11:59:01.749	INFO	6    Memory
-2020-08-27 11:59:01.749	INFO	7    Generate Memory dumps
-2020-08-27 11:59:01.749	INFO	8    Windows Performance Recorder (WPR)
-2020-08-27 11:59:01.749	INFO	 
-2020-08-27 11:59:01.765	WARN	Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter 
-2020-08-27 11:59:11.613	INFO	Console input: 1 
-2020-08-27 11:59:11.629	INFO	Executing Collector: RunningDrivers 
-2020-08-27 11:59:12.742	INFO	Executing Collector: SystemInfo_Summary 
-2020-08-27 11:59:13.797	INFO	Executing Collector: MiscPssdiagInfo 
-2020-08-27 11:59:15.819	INFO	Executing Collector: TaskListVerbose 
-2020-08-27 11:59:15.850	INFO	Executing Collector: TaskListServices 
-2020-08-27 11:59:15.872	INFO	Executing Collector: collecterrorlog 
-2020-08-27 11:59:17.908	INFO	Executing Collector: PowerPlan 
-2020-08-27 11:59:18.008	INFO	Executing Collector: WindowsHotfixes 
-2020-08-27 11:59:18.309	INFO	Executing Collector: FLTMC_Filters 
-2020-08-27 11:59:18.325	INFO	Executing Collector: FLTMC_Instances 
-2020-08-27 11:59:20.347	INFO	Executing Collector: GetEventLogs 
-2020-08-27 11:59:27.783	INFO	Executing Collector: Perfmon 
-2020-08-27 11:59:28.824	INFO	Executing Collector: pssdiag_xevent 
-2020-08-27 11:59:30.877	INFO	Executing Collector: pssdiag_xevent_general_target 
-2020-08-27 11:59:30.893	INFO	Executing Collector: pssdiag_xevent_Start 
-2020-08-27 11:59:30.908	INFO	Executing Collector: ExistingProfilerXeventTraces 
-2020-08-27 11:59:32.937	INFO	Executing Collector: HighCPU_perfstats 
-2020-08-27 11:59:32.953	INFO	Executing Collector: SQLServerPerfStats 
-2020-08-27 11:59:34.990	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
-2020-08-27 11:59:35.022	INFO	Executing Collector: Query Store 
-2020-08-27 11:59:37.032	INFO	Executing Collector: TempDBAnalysis 
-2020-08-27 11:59:37.047	INFO	Executing Collector: linked_server_config 
-2020-08-27 11:59:37.085	INFO	Executing Collector: SSB_pssdiag 
-2020-08-27 11:59:37.116	INFO	Diagnostic collection started. 
-2020-08-27 11:59:37.116	INFO	 
-2020-08-27 11:59:37.116	WARN	Please type 'STOP' or 'stop' to terminate the diagnostics collection when you finished capturing the issue 
-2020-08-27 11:59:53.639	INFO	Console input: stop 
-2020-08-27 11:59:53.654	INFO	Shutting down the collector 
-2020-08-27 11:59:53.654	INFO	Stopping Collector: SQLServerPerfStatsSnapshotShutdown 
-2020-08-27 11:59:53.670	INFO	Stopping Collector: xevents_stop 
-2020-08-27 11:59:53.686	INFO	Stopping Collector: PerfmonStop 
-2020-08-27 11:59:56.714	INFO	Running: killpssdiagSessions 
-2020-08-27 11:59:56.720	INFO	Waiting 5 seconds to ensure files are written to and closed by any program including anti-virus... 
-2020-08-27 12:00:01.731	INFO	Ending data collection 
+2020-11-04 11:57:59.099 INFO    SQL LogScout version: 2.2.0
+2020-11-04 11:57:59.200 INFO    The Present folder for this collection is C:\temp\log scout\Test 2
+2020-11-04 11:57:59.207 INFO    Output path: C:\temp\log scout\Test 2\output\
+2020-11-04 11:57:59.210 INFO    The Error files path is C:\temp\log scout\Test 2\output\internal\
+2020-11-04 11:57:59.223 INFO
+2020-11-04 11:57:59.228 WARN    It appears that output folder 'C:\temp\log scout\Test 2\output\' has been used before.
+2020-11-04 11:57:59.233 WARN    You can choose to:
+2020-11-04 11:57:59.235 WARN     - Delete (D) the \output folder contents and recreate it
+2020-11-04 11:57:59.238 WARN     - Create a new (N) folder using \Output_ddMMyyhhmmss format.
+2020-11-04 11:57:59.240 WARN       You can delete the new folder manually in the future
+Delete ('D') or create New ('N') >: d
+2020-11-04 11:58:00.485 INFO    Output folder Console input: d
+2020-11-04 11:58:00.501 WARN    Deleted C:\temp\log scout\Test 2\output\ and its contents
+2020-11-04 11:58:00.550 INFO    Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG
+2020-11-04 11:58:00.578 INFO
+2020-11-04 11:58:00.582 INFO    Initiating diagnostics collection...
+2020-11-04 11:58:00.589 INFO    Please select one of the following scenarios:
+
+2020-11-04 11:58:00.592 INFO
+2020-11-04 11:58:00.595 INFO    ID   Scenario
+2020-11-04 11:58:00.598 INFO    --   ---------------
+2020-11-04 11:58:00.607 INFO    0    Basic (no performance data)
+2020-11-04 11:58:00.611 INFO    1    General Performance (recommended for most cases)
+2020-11-04 11:58:00.614 INFO    2    Detailed Performance (statement level and query plans)
+2020-11-04 11:58:00.617 INFO    3    Replication
+2020-11-04 11:58:00.619 INFO    4    AlwaysON
+2020-11-04 11:58:00.622 INFO    5    Network Trace
+2020-11-04 11:58:00.624 INFO    6    Memory
+2020-11-04 11:58:00.626 INFO    7    Generate Memory dumps
+2020-11-04 11:58:00.629 INFO    8    Windows Performance Recorder (WPR)
+2020-11-04 11:58:00.631 INFO    9    Setup
+2020-11-04 11:58:00.635 INFO
+2020-11-04 11:58:00.638 WARN    Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter
+Enter the Scenario ID from list above>: 1
+2020-11-04 11:58:03.610 INFO    Scenario Console input: 1
+2020-11-04 11:58:03.957 INFO    Discovered the following SQL Server instance(s)
+
+2020-11-04 11:58:03.961 INFO
+2020-11-04 11:58:03.963 INFO    ID      SQL Instance Name
+2020-11-04 11:58:03.965 INFO    --      ----------------
+2020-11-04 11:58:03.968 INFO    0        DbServerMachine
+2020-11-04 11:58:03.971 INFO    1        DbServerMachine\SQL2014
+2020-11-04 11:58:03.973 INFO    2        DbServerMachine\SQL2017
+2020-11-04 11:58:03.975 INFO
+2020-11-04 11:58:03.978 WARN    Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter
+Enter the ID from list above>: 2
+2020-11-04 11:58:12.451 INFO    SQL Instance Console input: 2
+2020-11-04 11:58:12.456 INFO    You selected instance 'DbServerMachine\SQL2017' to collect diagnostic data.
+2020-11-04 11:58:12.562 INFO    Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2017'
+2020-11-04 11:58:12.567 INFO    Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2017'
+2020-11-04 11:58:12.587 INFO    LogmanConfig.txt copied to  C:\temp\log scout\Test 2\output\internal\LogmanConfig.txt
+2020-11-04 11:58:12.665 INFO    Executing Collector: RunningDrivers
+2020-11-04 11:58:13.437 INFO    Executing Collector: SystemInfo_Summary
+2020-11-04 11:58:14.501 INFO    Executing Collector: MiscPssdiagInfo
+2020-11-04 11:58:14.525 INFO    Executing Collector: collecterrorlog
+2020-11-04 11:58:16.556 INFO    Executing Collector: TaskListVerbose
+2020-11-04 11:58:16.571 INFO    Executing Collector: TaskListServices
+2020-11-04 11:58:18.611 INFO    Executing Collector: PowerPlan
+2020-11-04 11:58:18.695 INFO    Executing Collector: WindowsHotfixes
+2020-11-04 11:58:18.984 INFO    Executing Collector: FLTMC_Filters
+2020-11-04 11:58:19.004 INFO    Executing Collector: FLTMC_Instances
+2020-11-04 11:58:21.042 INFO    Executing Collector: GetEventLogs
+2020-11-04 11:58:28.204 INFO    Executing Collector: Perfmon
+2020-11-04 11:58:29.247 INFO    Executing Collector: xevent_general
+2020-11-04 11:58:31.304 INFO    Executing Collector: xevent_general_target
+2020-11-04 11:58:31.319 INFO    Executing Collector: xevent_general_Start
+2020-11-04 11:58:31.344 INFO    Executing Collector: ExistingProfilerXeventTraces
+2020-11-04 11:58:33.380 INFO    Executing Collector: HighCPU_perfstats
+2020-11-04 11:58:33.404 INFO    Executing Collector: SQLServerPerfStats
+2020-11-04 11:58:35.430 INFO    Executing Collector: SQLServerPerfStatsSnapshotStartup
+2020-11-04 11:58:35.457 INFO    Executing Collector: Query Store
+2020-11-04 11:58:37.491 INFO    Executing Collector: TempDBAnalysis
+2020-11-04 11:58:37.513 INFO    Executing Collector: linked_server_config
+2020-11-04 11:58:37.545 INFO    Executing Collector: SSB_diag
+2020-11-04 11:58:37.569 INFO    Diagnostic collection started.
+2020-11-04 11:58:37.571 INFO
+2020-11-04 11:58:37.588 WARN    Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue
+>: stop
+2020-11-04 11:58:41.403 INFO    StopCollection Console input: stop
+2020-11-04 11:58:41.408 INFO    Shutting down the collector
+2020-11-04 11:58:41.416 INFO    Executing shutdown command: SQLServerPerfStatsSnapshotShutdown
+2020-11-04 11:58:41.431 INFO    Executing shutdown command: xevents_stop
+2020-11-04 11:58:41.457 INFO    Executing shutdown command: PerfmonStop
+2020-11-04 11:58:44.481 INFO    Executing shutdown command: KillActiveLogscoutSessions
+2020-11-04 11:58:44.496 INFO    Executing shutdown command: NettraceStop. Waiting - this may take a few of minutes...
+2020-11-04 11:58:44.756 INFO    Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus...
+2020-11-04 11:58:47.766 INFO    Ending data collection
+File size of .\##STDERR.LOG is 0 bytes
+Found and removed .\##STDERR.LOG which was empty
+
 ```
 
 # Output folders
