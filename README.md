@@ -125,6 +125,7 @@ SQL_LogScout.cmd accepts several *optional* parameters:
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
    - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
+   - Performance Monitor counters for SQL Server instance and general OS counters
 
 5. **Network Trace** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
 
