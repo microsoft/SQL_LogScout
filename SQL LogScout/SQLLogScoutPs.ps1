@@ -30,8 +30,13 @@ param
     #specify end time for diagnostic
     [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
     [Parameter(Position=5,HelpMessage='Format is: "2020-10-27 19:26:00"')]
-    [string] $DiagStopTime = "0000"
+    [string] $DiagStopTime = "0000",
 
+    #specify quiet mode for any Y/N prompts
+    [ValidateSet("Quiet","Noisy")]
+    [Parameter(Position=6,HelpMessage='Choose Queit|Noisy')]
+    [string] $InteractivePrompts = "Noisy"
+    
 )
 
 
@@ -52,6 +57,8 @@ param
 [string] $global:host_name = hostname
 [string] $global:wpr_collector_name = ""
 [bool] $global:instance_independent_collection = $false
+[int] $global:scenario_bitvalue  = 0
+
 #=======================================Start of \OUTPUT and \ERROR directories and files Section
 
 function Init-AppVersion()
@@ -306,6 +313,8 @@ function GetWindowsHotfixes ()
 {
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $collector_name = "WindowsHotfixes"
     $server = $global:sql_instance_conn_str
 
@@ -321,6 +330,9 @@ function GetWindowsHotfixes ()
 
         #collect Windows hotfixes on the system
         $hotfixes = Get-WmiObject -Class "win32_quickfixengineering"
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         [System.Text.StringBuilder]$rs_runningdrives = [System.Text.StringBuilder]::new()
 
@@ -340,6 +352,9 @@ function GetWindowsHotfixes ()
             $output += PadString $Description 30;
             $output += PadString $InstalledBy  30;
             [void]$rs_runningdrives.Append("$output`r`n") 
+
+            #in case CTRL+C is pressed
+            HandleCtrlC
         }
         Add-Content -Path ($output_file) -Value ($rs_runningdrives.ToString())
     }
@@ -377,6 +392,7 @@ function GetEventLogs($server)
         $sysevtfile = New-Item -type file ($partial_output_file_name + "_SysEventLog.txt") -Force;
         Get-EventLog -log Application -Computer $servers   -newest 3000  | Format-Table -Property *  -AutoSize | Out-String -Width 20000  | out-file $appevtfile
         
+        #in case CTRL+C is pressed
         HandleCtrlC
         
         Get-EventLog -log System -Computer $servers   -newest 3000  | Format-Table -Property *  -AutoSize | Out-String -Width 20000  | out-file $sysevtfile
@@ -448,11 +464,12 @@ function GetRunningDrivers()
 
     $server = $global:sql_instance_conn_str
 
-    try {
-        
-    
-        $partial_output_file_name = Create-PartialOutputFilename ($server)
+    [console]::TreatControlCAsInput = $true
 
+    try 
+    {
+        
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
 
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
 
@@ -502,6 +519,9 @@ function GetRunningDrivers()
             [void]$CSVoutput.Append($driver.LastWriteTime.ToString() + ",")
             [void]$CSVoutput.Append("`r`n")
         
+            #in case CTRL+C is pressed
+            HandleCtrlC
+
             $counter++
         }
 
@@ -555,7 +575,8 @@ function GetSQLSetupLogs(){
                 Write-LogWarning "Reason: Path is not valid."
 
             }
-
+            
+            #in case CTRL+C is pressed
             HandleCtrlC
         }
     } catch {
@@ -569,12 +590,19 @@ function MSDiagProcsCollector()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
+
 
     ##create error output filenames using the path + servername + date and time
     $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
 
     Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+
+    #in case CTRL+C is pressed
+    HandleCtrlC
+
     try {
 
         #msdiagprocs.sql
@@ -606,10 +634,10 @@ function GetXeventsGeneralPerf()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         
-    
-
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
@@ -640,6 +668,9 @@ function GetXeventsGeneralPerf()
 
         Start-Sleep -Seconds 2
 
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #add Xevent target
         $collector_name = "xevent_general_target"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
@@ -650,6 +681,9 @@ function GetXeventsGeneralPerf()
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
         [void]$global:processes.Add($p)
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #start the XEvent session
         $collector_name = "xevent_general_Start"
@@ -676,6 +710,8 @@ function GetXeventsDetailedPerf()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     $server = $global:sql_instance_conn_str
+
+    [console]::TreatControlCAsInput = $true
 
     try {
         
@@ -711,6 +747,9 @@ function GetXeventsDetailedPerf()
 
         Start-Sleep -Seconds 2
 
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #add Xevent target
         $collector_name = "xevent_detailed_target"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
@@ -721,6 +760,9 @@ function GetXeventsDetailedPerf()
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
         [void]$global:processes.Add($p)
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #start the XEvent session
         $collector_name = "xevent_detailed_Start"
@@ -749,6 +791,8 @@ function GetAlwaysOnDiag()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         
         $partial_output_file_name = Create-PartialOutputFilename ($server)
@@ -756,6 +800,9 @@ function GetAlwaysOnDiag()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #AlwaysOn Basic Info
         $collector_name = "AlwaysOnDiagScript"
@@ -786,6 +833,8 @@ function GetXeventsAlwaysOnMovement()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         
     
@@ -795,6 +844,9 @@ function GetXeventsAlwaysOnMovement()
     
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #XEvents file: AlwaysOn_Data_Movement.sql - Detailed Perf
 
@@ -819,6 +871,9 @@ function GetXeventsAlwaysOnMovement()
 
         Start-Sleep -Seconds 2
 
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #add Xevent target
         $collector_name = "AlwaysOn_Data_Movement_target"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
@@ -829,6 +884,9 @@ function GetXeventsAlwaysOnMovement()
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
         [void]$global:processes.Add($p)
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #start the XEvent session
         $collector_name = "AlwaysOn_Data_Movement_Start"
@@ -859,6 +917,8 @@ function GetSysteminfoSummary()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
@@ -866,6 +926,8 @@ function GetSysteminfoSummary()
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
 
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #Systeminfo (MSInfo)
         $collector_name = "SystemInfo_Summary"
@@ -890,6 +952,8 @@ function GetSysteminfoSummary()
 function GetMisciagInfo() 
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    
+    [console]::TreatControlCAsInput = $true
 
     $server = $global:sql_instance_conn_str
 
@@ -901,7 +965,10 @@ function GetMisciagInfo()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
-  
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #misc DMVs 
         $collector_name = "MiscPssdiagInfo"
         $input_script = Build-InputScript $global:present_directory $collector_name
@@ -914,7 +981,9 @@ function GetMisciagInfo()
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
         [void]$global:processes.Add($p)
     }
-    catch {
+
+    catch 
+    {
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
@@ -927,6 +996,9 @@ function GetErrorlogs()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
   
     try {
@@ -937,6 +1009,9 @@ function GetErrorlogs()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #errorlogs
         $collector_name = "collecterrorlog"
@@ -968,6 +1043,8 @@ function GetTaskList ()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
 
         $partial_output_file_name = Create-PartialOutputFilename ($server)
@@ -988,6 +1065,10 @@ function GetTaskList ()
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
         [void]$global:processes.Add($p)
+
+        #in case CTRL+C
+        HandleCtrlC
+
 
         #tasklist services
         $collector_name = "TaskListServices"
@@ -1017,12 +1098,17 @@ function GetRunningProfilerXeventTraces ()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #active profiler traces and xevents
         $collector_name = "ExistingProfilerXeventTraces"
@@ -1053,6 +1139,8 @@ function GetHighCPUPerfStats ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
 
     try {
@@ -1061,6 +1149,9 @@ function GetHighCPUPerfStats ()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #SQL Server High CPU Perf Stats
         $collector_name = "HighCPU_perfstats"
@@ -1092,12 +1183,17 @@ function GetPerfStats ()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #SQL Server Perf Stats
         $collector_name = "SQLServerPerfStats"
@@ -1126,6 +1222,8 @@ function GetPerfStatsSnapshot ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
 
     try {
@@ -1134,6 +1232,9 @@ function GetPerfStatsSnapshot ()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #SQL Server Perf Stats Snapshot
         $collector_name = "SQLServerPerfStatsSnapshotStartup"
@@ -1161,6 +1262,8 @@ function GetPerfStatsSnapshot ()
 function GetPerfmonCounters () 
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    
+    [console]::TreatControlCAsInput = $true
 
     $server = $global:sql_instance_conn_str
     $internal_folder = $global:internal_output_folder
@@ -1172,6 +1275,9 @@ function GetPerfmonCounters ()
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
     
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #Perfmon
         $collector_name = "Perfmon"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
@@ -1201,12 +1307,17 @@ function GetServiceBrokerInfo ()
 
     $server = $global:sql_instance_conn_str
 
+    [console]::TreatControlCAsInput = $true
+
     try {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #Service Broker collection
         $collector_name = "SSB_diag"
@@ -1456,6 +1567,8 @@ function GetFilterDrivers ()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
 
     try {
@@ -1464,6 +1577,9 @@ function GetFilterDrivers ()
     
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
 
         #filter drivers
         $collector_name = "FLTMC_Filters"
@@ -1503,6 +1619,8 @@ function GetNetworkTrace ()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
     $internal_folder = $global:internal_output_folder
 
@@ -1513,6 +1631,9 @@ function GetNetworkTrace ()
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
     
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
         #Perfmon
         $collector_name = "NetworkTrace"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
@@ -1997,6 +2118,8 @@ function GetSQLErrorLogs(){
     
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $collector_name = "SQLErrorLogs"
     Write-LogInformation "Executing Collector: $collector_name"
 
@@ -2014,6 +2137,9 @@ function GetSQLErrorLogs(){
             }
             [string]$DestinationFolder = $global:output_folder 
 
+            #in case CTRL+C is pressed
+            HandleCtrlC
+
             $vRegInst = (Get-ItemProperty -Path HKLM:"SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL").$vInstance
             $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
             $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
@@ -2027,11 +2153,83 @@ function GetSQLErrorLogs(){
         }
 }
 
+function validateUserInput([string[]]$AllInput)
+{
+    $ExpectedValidInput =  $AllInput[0]
+    $userinput =  $AllInput[1]
+    $HelpMessage = $AllInput[2]
+
+    $ValidId = $false
+
+    while(($ValidId -eq $false) )
+    {
+        try
+        {    
+            $userinput = $userinput.ToUpper()
+            if ($ExpectedValidInput.Contains($userinput))
+            {
+                $userinput = [convert]::ToInt32($userinput)
+                $ValidId = $true
+                $ret = $userinput
+                return $ret 
+            }
+            else
+            {
+                $userinput = Read-Host "$HelpMessage"
+                $userinput = $userinput.ToUpper()
+            }
+        }
+
+        catch [FormatException]
+        {
+            try
+            {    
+                $userinput = [convert]::ToString(($userinput))
+                $userinput = $userinput.ToUpper()
+
+                try
+                {
+                    $userinput =  $userinput.Trim()
+                    $ExpectedValidInput =  $AllInput[0] # re-initalyze the vairable as in second attempt it becomes empty
+                    If ($userinput.Length -gt 0 -and $userinput -match '[a-zA-Z]' -and $ExpectedValidInput.Contains($userinput))
+                    {
+                        $userinput = $userinput.ToUpper()
+                        $ValidId = $true
+                        $ret = $userinput
+                        return $ret 
+                    }
+                    else
+                    {
+                        $userinput = Read-Host "$HelpMessage"
+                        $ValidId = $false
+                        continue
+                    }
+                }
+                catch
+                {
+                    $ValidId = $false
+                    continue 
+                }
+            }
+
+            catch [FormatException]
+                {
+                    $ValidId = $false
+                    continue 
+                }
+            continue 
+        }
+    }    
+}
+
 
 function Invoke-CommonCollectors()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:basicBit
 
     GetRunningDrivers
     GetSysteminfoSummary
@@ -2047,7 +2245,6 @@ function Invoke-CommonCollectors()
     {
         GetMisciagInfo
         HandleCtrlC
-        GetErrorlogs    
     }
     
 
@@ -2078,6 +2275,8 @@ function Invoke-GeneralPerfScenario()
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:generalperfBit
     
     Invoke-CommonCollectors
     GetPerfmonCounters
@@ -2117,6 +2316,9 @@ function Invoke-DetailedPerfScenario()
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:detailedperfBit
+
     Invoke-CommonCollectors
     GetPerfmonCounters
     
@@ -2154,7 +2356,9 @@ function Invoke-AlwaysOnScenario()
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-  
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:alwaysonBit
+
     Invoke-CommonCollectors
 
     if ($global:sql_instance_conn_str -eq "no_instance_found")
@@ -2166,6 +2370,7 @@ function Invoke-AlwaysOnScenario()
         HandleCtrlC
         GetAlwaysOnDiag
         GetXeventsAlwaysOnMovement
+        GetPerfmonCounters
     }
 }
 
@@ -2173,6 +2378,9 @@ function Invoke-ReplicationScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:replBit
 
     Invoke-CommonCollectors
     
@@ -2195,6 +2403,9 @@ function Invoke-DumpMemoryScenario
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:dumpMemoryBit
+
     #invoke memory dump facility
     GetMemoryDumps
 
@@ -2206,77 +2417,13 @@ function Invoke-NetworkScenario()
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:networktraceBit
+
     GetNetworkTrace 
 
 }
 
-function validateUserInput([string[]]$AllInput)
-{
-    $ExpectedValidInput =  $AllInput[0]
-    $userinput =  $AllInput[1]
-    $HelpMessage = $AllInput[2]
-
-    $ValidId = $false
-
-    while(($ValidId -eq $false) )
-    {
-        try{    
-                $userinput = $userinput.ToUpper()
-                if ($ExpectedValidInput.Contains($userinput))
-                {
-                    $userinput = [convert]::ToInt32($userinput)
-                    $ValidId = $true
-                    $ret = $userinput
-                    return $ret 
-                }
-                else
-                {
-                    $userinput = Read-Host "$HelpMessage"
-                    $userinput = $userinput.ToUpper()
-                }
-            }
-
-        catch [FormatException]
-            {
-                try{    
-                        $userinput = [convert]::ToString(($userinput))
-                        $userinput = $userinput.ToUpper()
-                        Try
-                        {
-                            $userinput =  $userinput.Trim()
-                            $ExpectedValidInput =  $AllInput[0] # re-initalyze the vairable as in second attempt it becomes empty
-                            If ($userinput.Length -gt 0 -and $userinput -match '[a-zA-Z]' -and $ExpectedValidInput.Contains($userinput))
-                            {
-                                $userinput = $userinput.ToUpper()
-                                $ValidId = $true
-                                $ret = $userinput
-                                return $ret 
-                            }
-                            else
-                            {
-                                $userinput = Read-Host "$HelpMessage"
-                                $ValidId = $false
-                                continue
-                            }
-                        }
-                        Catch
-                        {
-                            $ValidId = $false
-                            continue 
-                        }
-                  }
-
-                catch [FormatException]
-                    {
-                        $ValidId = $false
-                        continue 
-                    }
-                continue 
-            }
-
-    }    
-
-}
 
 
 
@@ -2285,6 +2432,10 @@ function Invoke-WPRScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:wprBit
+
 
     Write-LogWarning "Windows Performance Recorder (WPR) is a resource-intensive data collection process! Use only under Microsoft guidance."
     
@@ -2314,6 +2465,9 @@ function Invoke-MemoryScenario
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:memoryBit
+
     Invoke-CommonCollectors
 
     if ($global:sql_instance_conn_str -eq "no_instance_found")
@@ -2332,6 +2486,9 @@ function Invoke-MemoryScenario
 function Invoke-SetupScenario 
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #turn the bit on for this scenario
+    EnableScenario -scenarioBit $global:setupBit
 
     Invoke-CommonCollectors
     HandleCtrlC
@@ -2655,20 +2812,30 @@ function Stop-DiagCollectors()
         $partial_output_file_name = Create-PartialOutputFilename -server $server
         $partial_error_output_file_name = Create-PartialErrorOutputFilename -server $server
 
+        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
+        )
+        {
+            #SQL Server Perf Stats Snapshot
+            $collector_name = "SQLServerPerfStatsSnapshotShutdown"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w4000 -o" + $output_file + " -i" + $input_script
+            Write-LogDebug $argument_list
+            Write-LogInformation "Executing shutdown command: $collector_name"
+            $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+            [void]$global:processes.Add($p)
+        }
 
-        #SQL Server Perf Stats Snapshot
-        $collector_name = "SQLServerPerfStatsSnapshotShutdown"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w4000 -o" + $output_file + " -i" + $input_script
-        Write-LogDebug $argument_list
-        Write-LogInformation "Executing shutdown command: $collector_name"
-        $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
-
-        if ("" -ne $global:xevent_collector) { #avoid errors if there was not Xevent collector started
-            #STOP the XEvent session
+        #STOP the XEvent session
+        if (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit -scenarioName "AlwaysOn")) `
+            -and ("" -ne $global:xevent_collector)
+            ) 
+        { 
+            #avoid errors if there was not Xevent collector started
             $collector_name = "xevents_stop"
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
             $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER;" 
@@ -2679,14 +2846,23 @@ function Stop-DiagCollectors()
             $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
             [void]$global:processes.Add($p)
         }
+
         #STOP Perfmon
-        $collector_name = "PerfmonStop"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
-        $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon"
-        Write-LogInformation "Executing shutdown command: $collector_name"
-        Write-LogDebug $argument_list
-        $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:memoryBit -scenarioName "Memory")) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit -scenarioName "AlwaysOn")) `
+            )
+        {
+
+            $collector_name = "PerfmonStop"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
+            $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon"
+            Write-LogInformation "Executing shutdown command: $collector_name"
+            Write-LogDebug $argument_list
+            $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden -PassThru
+            [void]$global:processes.Add($p)
+        }
 
 
         
@@ -2724,16 +2900,21 @@ function Stop-DiagCollectors()
         $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
         [void]$global:processes.Add($p)
 
-        #STOP Network trace
-        $collector_name = "NettraceStop"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
-        $argument_list = "/C title 'stopping network trace...' & netsh trace stop sessionname='sqllogscout_nettrace'"
-        Write-LogInformation "Executing shutdown command: $collector_name. Waiting - this may take a few of minutes..."
-        Write-LogDebug $argument_list
-        $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
-        [void]$global:processes.Add($p)
+        Start-Sleep -Seconds 1
 
-        [int]$cntr = 0
+        #STOP Network trace
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit -scenarioName "NetworkTrace"))
+        {
+
+            $collector_name = "NettraceStop"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
+            $argument_list = "/C title 'stopping network trace...' & netsh trace stop sessionname='sqllogscout_nettrace'"
+            Write-LogInformation "Executing shutdown command: $collector_name. Waiting - this may take a few of minutes..."
+            Write-LogDebug $argument_list
+            $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
+            [void]$global:processes.Add($p)
+
+            [int]$cntr = 0
 
             while ($false -eq $p.HasExited) 
             {
@@ -2743,33 +2924,37 @@ function Stop-DiagCollectors()
                 }
                 $cntr++
             } 
-        
-            #stop WPR trace
-            if ("" -ne $global:wpr_collector_name)
-            {
-                $collector_name = $global:wpr_collector_name
-                $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-                $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
-                $executable = "cmd.exe"
-                $argument_list = $argument_list = "/C wpr.exe -stop " + $output_file
-                Write-LogInformation "Executing shutdown command: $collector_name"
-                Write-LogDebug $argument_list
-                $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-                [void]$global:processes.Add($p)
 
-                $cntr = 0 #reset the counter
-                while ($false -eq $p.HasExited) 
-                {
-                    [void] $p.WaitForExit(5000)
-                
-                    if ($cntr -gt 0) {
-                        Write-LogWarning "Continuing to wait for WPR trace to stop..."
-                    }
-                    $cntr++
-                } 
-            }
-            Write-LogInformation "Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus..." -ForegroundColor Green
-            Start-Sleep -Seconds 3
+        }
+
+        
+        #stop WPR trace
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit -scenarioName "WPR"))
+        {
+            $collector_name = $global:wpr_collector_name
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
+            $executable = "cmd.exe"
+            $argument_list = $argument_list = "/C wpr.exe -stop " + $output_file
+            Write-LogInformation "Executing shutdown command: $collector_name"
+            Write-LogDebug $argument_list
+            $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
+            [void]$global:processes.Add($p)
+
+            $cntr = 0 #reset the counter
+            while ($false -eq $p.HasExited) 
+            {
+                [void] $p.WaitForExit(5000)
+            
+                if ($cntr -gt 0) {
+                    Write-LogWarning "Continuing to wait for WPR trace to stop..."
+                }
+                $cntr++
+            } 
+        }
+
+        Write-LogInformation "Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus..." -ForegroundColor Green
+        Start-Sleep -Seconds 3
 
 
     }
@@ -2807,11 +2992,15 @@ function Invoke-DiagnosticCleanUp()
     close curSession;
     deallocate curSession;
     "  
-  $executable = "sqlcmd.exe"
-  $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w4000 -Q`""+ $query + "`" "
-  Write-LogDebug $executable $argument_list
-  $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-  [void]$global:processes.Add($p)
+  if ($server -ne "no_instance_found")
+  {
+      $executable = "sqlcmd.exe"
+      $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w4000 -Q`""+ $query + "`" "
+      Write-LogDebug $executable $argument_list
+      $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+      [void]$global:processes.Add($p)
+  }
+  
   
   #STOP Perfmon
   $executable = "cmd.exe"
@@ -2820,41 +3009,55 @@ function Invoke-DiagnosticCleanUp()
   $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
   [void]$global:processes.Add($p)
   
-    
-  $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER; END" 
-  $executable = "sqlcmd.exe"
-  $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w4000 -Q`"" + $alter_event_session_stop + "`""
-  Write-LogDebug $executable $argument_list
-  $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-  [void]$global:processes.Add($p)
+  if ($server -ne "no_instance_found")
+  {  
+    $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER; END" 
+    $executable = "sqlcmd.exe"
+    $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w4000 -Q`"" + $alter_event_session_stop + "`""
+    Write-LogDebug $executable $argument_list
+    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+    [void]$global:processes.Add($p)
+  }
 
   #STOP network trace
-  $executable = "cmd.exe"
-  $argument_list ="/C title 'cleanup network trace...' & echo 'This process may take a few minutes...' & netsh trace stop sessionname='sqllogscout_nettrace'"
-  Write-LogDebug $executable $argument_list
-  $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru -Wait
-  [void]$global:processes.Add($p)
+  if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit -scenarioName "NetworkTrace"))
+  {
+    $executable = "cmd.exe"
+    $argument_list ="/C title 'cleanup network trace...' & echo 'This process may take a few minutes...' & netsh trace stop sessionname='sqllogscout_nettrace'"
+    Write-LogDebug $executable $argument_list
+    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru -Wait
+    [void]$global:processes.Add($p)
+  }
 
   #stop the WPR process if running any
-  $executable = "cmd.exe"
-  $argument_list = $argument_list = "/C wpr.exe -cancel " 
-  Write-LogDebug $executable $argument_list
-  $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-  [void]$global:processes.Add($p)
-
-  [int]$cntr = 0 
-  while ($false -eq $p.HasExited) 
+  if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit -scenarioName "WPR"))
   {
-      [void] $p.WaitForExit(5000)
+    $executable = "cmd.exe"
+    $argument_list = $argument_list = "/C wpr.exe -cancel " 
+    Write-LogDebug $executable $argument_list
+    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
+    [void]$global:processes.Add($p)
 
-      if ($cntr -gt 0)
-      {
-          Write-LogWarning "Continuing to wait for WPR trace to cancel..."
-      }
-      $cntr++
-  } 
+    [int]$cntr = 0 
+    while ($false -eq $p.HasExited) 
+    {
+        [void] $p.WaitForExit(5000)
 
-    Write-LogDebug "Checking that all processes terminated"
+        if ($cntr -gt 0)
+        {
+            Write-LogWarning "Continuing to wait for WPR trace to cancel..."
+        }
+        $cntr++
+    } 
+
+  }
+
+  
+    Write-LogDebug "Checking that all processes terminated..."
+
+    #allowing some time for above processes to clean-up
+    Start-Sleep 3
+
     foreach ($p in $global:processes) {
         if ($p.HasExited -eq $false) {
 
@@ -2878,6 +3081,76 @@ function Invoke-DiagnosticCleanUp()
 
 
 #======================================== END OF Diagnostics Collection SECTION
+
+#======================================== START OF Bitmask Enabling, Diabling and Checking of Scenarios
+
+# 00000000001 (1)   = Basic
+# 00000000010 (2)   = GeneralPerf
+# 00000000100 (4)   = DetailedPerf
+# 00000001000 (8)   = Replication
+# 00000010000 (16)  = alwayson
+# 00000100000 (32)  = networktrace
+# 00001000000 (64)  = memory
+# 00010000000 (128) = DumpMemory
+# 00100000000 (256) = WPR
+# 01000000000 (512) = Setup
+# 10000000000 (1024)= XXX
+
+[int] $global:basicBit         = 1
+[int] $global:generalperfBit   = 2 
+[int] $global:detailedperfBit  = 4
+[int] $global:replBit          = 8
+[int] $global:alwaysonBit      = 16
+[int] $global:networktraceBit  = 32
+[int] $global:memoryBit        = 64
+[int] $global:dumpMemoryBit    = 128
+[int] $global:wprBit           = 256
+[int] $global:setupBit         = 512
+[int] $global:futureScBit      = 1024
+
+
+function EnableScenario([int]$scenarioBit)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    Write-LogDebug "Enabling scenario bit $scenarioBit" -DebugLogLevel 3
+
+    $global:scenario_bitvalue = $global:scenario_bitvalue -bor $scenarioBit
+}
+
+function DisableScenario([int]$scenarioBit)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    Write-LogDebug "Disabling scenario bit $scenarioBit" -DebugLogLevel 3
+    
+    $global:scenario_bitvalue = $global:scenario_bitvalue -bxor $scenarioBit
+}
+
+
+function IsScenarioEnabled([int]$scenarioBit, [string]$scenarioName="No Scenario")
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand "($scenarioName)"
+
+    $bm_enabled = $global:scenario_bitvalue -band $scenarioBit
+
+    Write-LogDebug "The bitmask result for $scenarioName scenario = $bm_enabled" -DebugLogLevel 4
+
+    if (($global:scenario_bitvalue -band $scenarioBit) -gt 0)
+    {
+        Write-LogDebug "$scenarioName scenario is enabled" -DebugLogLevel 2
+        return $true
+    }
+    else
+    {
+        Write-LogDebug "$scenarioName scenario is disabled" -DebugLogLevel 2
+        return $false
+    }
+
+}
+
+
+#======================================== END OF Bitmask Enabling, Diabling and Checking of Scenarios
 
 
 #======================================== START OF NETNAME + INSTANCE SECTION
@@ -3044,19 +3317,27 @@ function Get-InstanceNamesOnly()
     
     if ($SqlTaskList.Count -eq 0)
     {
-        Write-LogInformation "There are curerntly no running instances of SQL Server. Would you like to proceed with OS-only data collection" -ForegroundColor Green
-        
-        $ValidInput = "Y","N"
-        $ynStr = Read-Host "Proceed with OS logs collection?>" -CustomLogMessage "No_SQL_instance_OS_Logs prompt: "
-        $HelpMessage = "Please enter a valid input ($ValidInput)"
 
-        #$AllInput = $ValidInput,$WPR_YesNo,$HelpMessage 
-        $AllInput = @()
-        $AllInput += , $ValidInput
-        $AllInput += , $ynStr
-        $AllInput += , $HelpMessage
-    
-        [string] $confirm = validateUserInput($AllInput)
+        Write-LogInformation "There are curerntly no running instances of SQL Server. Would you like to proceed with OS-only log collection" -ForegroundColor Green
+        
+        if ($InteractivePrompts -eq "Noisy")
+        {
+            $ValidInput = "Y","N"
+            $ynStr = Read-Host "Proceed with logs collection (Y/N)?>" -CustomLogMessage "no_sql_instance_logs input: "
+            $HelpMessage = "Please enter a valid input ($ValidInput)"
+
+            #$AllInput = $ValidInput,$WPR_YesNo,$HelpMessage 
+            $AllInput = @()
+            $AllInput += , $ValidInput
+            $AllInput += , $ynStr
+            $AllInput += , $HelpMessage
+        
+            [string] $confirm = validateUserInput($AllInput)
+        }
+        elseif ($InteractivePrompts -eq "Quiet") 
+        {
+            $confirm = "Y"
+        }
 
         Write-LogDebug "The choice made is '$confirm'"
 
@@ -3544,7 +3825,7 @@ param (
         $SqlAdapter.Fill($DataSet) | Out-Null #fill method returns rowcount, Out-Null prevents the number from being printed in console    
     }
     catch {
-        Write-LogError "Could not connect to SQL Server instance $SQLInstance to validate permissions."
+        Write-LogError "Could not connect to SQL Server instance '$SQLInstance' to validate permissions."
         
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.InnerException.Message 
