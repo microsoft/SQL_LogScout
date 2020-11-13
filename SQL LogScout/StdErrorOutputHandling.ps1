@@ -14,7 +14,9 @@ function stderror_main()
 
 
     If ($fileExists -eq $True) {
-        [int]$fsize = Get-ChildItem $file |  ForEach-Object { [int]($_.length ) / 1kb }
+        [int]$fsize = Get-ChildItem $file |  ForEach-Object { [int]($_.length ) }
+
+        Write-Host "File size of $file is $fsize bytes"
 
         if ($fsize -gt 0) {
             Write-Host "*** Standard ERROR contains the following output:"
