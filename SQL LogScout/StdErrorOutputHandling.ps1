@@ -16,10 +16,10 @@ function stderror_main()
     If ($fileExists -eq $True) {
         [int]$fsize = Get-ChildItem $file |  ForEach-Object { [int]($_.length ) }
 
-        Write-Host "File size of $file is $fsize bytes"
+        Write-Host "Checking for console execution errors logged into $file..."
 
         if ($fsize -gt 0) {
-            Write-Host "*** Standard ERROR contains the following output:"
+            Write-Host "*** Standard ERROR file $file is $fsize bytes and contains the following output:"
 
             $stderr_string = Get-Content -Path $file 
             Write-Host $stderr_string -ForegroundColor Red
@@ -27,7 +27,7 @@ function stderror_main()
 
         else {
             Remove-Item -Path $file -Force
-            Write-Host "Found and removed $file which was empty"
+            Write-Host "Removed $file which was $fsize bytes"
         }
     }
     Else {

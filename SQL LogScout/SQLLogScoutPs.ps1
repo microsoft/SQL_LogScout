@@ -65,7 +65,7 @@ function Init-AppVersion()
 {
     $major_version = "2"
     $minor_version = "2"
-    $build = "0"
+    $build = "2"
     $global:app_version = $major_version + "." + $minor_version + "." + $build
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
@@ -611,7 +611,7 @@ function MSDiagProcsCollector()
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -660,7 +660,7 @@ function GetXeventsGeneralPerf()
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -676,7 +676,7 @@ function GetXeventsGeneralPerf()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel' " + ", max_file_size=(500), max_rollover_files=(50)); END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -690,7 +690,7 @@ function GetXeventsGeneralPerf()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END"
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -739,7 +739,7 @@ function GetXeventsDetailedPerf()
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -755,7 +755,7 @@ function GetXeventsDetailedPerf()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -769,7 +769,7 @@ function GetXeventsDetailedPerf()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -810,7 +810,7 @@ function GetAlwaysOnDiag()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -863,7 +863,7 @@ function GetXeventsAlwaysOnMovement()
         $input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -879,7 +879,7 @@ function GetXeventsAlwaysOnMovement()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -893,7 +893,7 @@ function GetXeventsAlwaysOnMovement()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -975,7 +975,7 @@ function GetMisciagInfo()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1019,7 +1019,7 @@ function GetErrorlogs()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -W -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -W -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1116,7 +1116,7 @@ function GetRunningProfilerXeventTraces ()
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $input_script = Build-InputScript $global:present_directory "Profiler Traces"
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i " + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i " + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1159,7 +1159,7 @@ function GetHighCPUPerfStats ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1201,7 +1201,7 @@ function GetPerfStats ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1242,7 +1242,7 @@ function GetPerfStatsSnapshot ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1325,7 +1325,7 @@ function GetServiceBrokerInfo ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1363,7 +1363,7 @@ function GetTempdbSpaceLatchingStats ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1400,7 +1400,7 @@ function GetLinkedServerInfo ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath  $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1438,7 +1438,7 @@ function GetQDSInfo ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1474,7 +1474,7 @@ function GetReplMetadata ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1510,7 +1510,7 @@ function GetChangeDataCaptureInfo () {
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1546,7 +1546,7 @@ function GetChangeTracking ()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -1867,7 +1867,7 @@ function GetMemoryLogs()
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w4000 -o" + $output_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
         Write-LogDebug $executable $argument_list
         $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
@@ -2821,7 +2821,7 @@ function Stop-DiagCollectors()
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
             $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
             $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w4000 -o" + $output_file + " -i" + $input_script
+            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $output_file + " -i" + $input_script
             Write-LogDebug $argument_list
             Write-LogInformation "Executing shutdown command: $collector_name"
             $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -2839,7 +2839,7 @@ function Stop-DiagCollectors()
             $collector_name = "xevents_stop"
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
             $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER;" 
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w4000 -o" + $error_file + " -Q`"" + $alter_event_session_stop + "`""
+            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_stop + "`""
             Write-LogInformation "Executing shutdown command: $collector_name"
             Write-LogDebug $alter_event_session_stop
             Write-LogDebug $argument_list
@@ -2870,7 +2870,7 @@ function Stop-DiagCollectors()
         # $collector_name = "RestoreTraceFlagOrigValues"
         # $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         # $query = "EXEC tempdb.dbo.sp_diag_trace_flag_restore  'SQLDIAG'"  
-        # $argument_list ="-S" + $server +  " -E -Hsqllogscout_stop -w4000 -o"+$error_file + " -Q`""+ $query + "`" "
+        # $argument_list ="-S" + $server +  " -E -Hsqllogscout_stop -w8000 -o"+$error_file + " -Q`""+ $query + "`" "
         # Write-LogInformation "Stopping Collector: $collector_name"
         # Write-LogDebug $argument_list
         # $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -2894,7 +2894,7 @@ function Stop-DiagCollectors()
                 end
                 close curSession;
                 deallocate curSession;"  
-        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w4000 -o" + $error_file + " -Q`"" + $query + "`" "
+        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $query + "`" "
         Write-LogInformation "Executing shutdown command: $collector_name"
         Write-LogDebug $argument_list
         $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
@@ -2995,7 +2995,7 @@ function Invoke-DiagnosticCleanUp()
   if ($server -ne "no_instance_found")
   {
       $executable = "sqlcmd.exe"
-      $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w4000 -Q`""+ $query + "`" "
+      $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w8000 -Q`""+ $query + "`" "
       Write-LogDebug $executable $argument_list
       $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
       [void]$global:processes.Add($p)
@@ -3013,7 +3013,7 @@ function Invoke-DiagnosticCleanUp()
   {  
     $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER; END" 
     $executable = "sqlcmd.exe"
-    $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w4000 -Q`"" + $alter_event_session_stop + "`""
+    $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w8000 -Q`"" + $alter_event_session_stop + "`""
     Write-LogDebug $executable $argument_list
     $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
     [void]$global:processes.Add($p)
@@ -3929,23 +3929,6 @@ function HandleCtrlCFinal ()
 }
 
 
-function Test-MinPowerShellVersion
-{
-    
-    Write-LogDebug "inside " $MyInvocation.MyCommand
-
-    
-    #check for minimum version 5 
-    $psversion_maj = (Get-Host).Version.Major
-    $psversion_min = (Get-Host).Version.Minor
-
-    if ($psversion_maj -lt 5)
-    {
-        Write-LogWarning "Minimum required version of PowerShell is 5.x. Your current verion is $psversion_maj.$psversion_min. Exiting..."
-        break
-
-    }
-}
 
 function GetPerformanceDataAndLogs 
 {
@@ -4049,8 +4032,6 @@ function main ()
     try {  
         Init-AppVersion
 
-        #check for minimum PowerShell version of 5.x
-        Test-MinPowerShellVersion
     
         #check for administrator rights
         Check-ElevatedAccess
