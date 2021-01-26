@@ -7,11 +7,13 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 
 # Download
 
-Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout)
+Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout). 
 
 # Usage
 
-1. Start the tool via SQL_LogScout.cmd when the issue is happening
+1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
+1. Open a Command Prompt and change to the folder where SQL LogScout files reside
+1. Start the tool via **SQL_LogScout.cmd** when the issue is happening
 1. Select which SQL instance you want to diagnose from a numbered list
 1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Examples))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
@@ -253,12 +255,12 @@ Found and removed .\##STDERR.LOG which was empty
 
 # Output folders
 
-**Output folder**: All the log files are collected in the \output folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. 
+**Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. 
 
-**Internal folder**: The \internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLDIAG.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
+**Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
 
 # Logging
-SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLDIAG.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
+SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
 
 
 # Targeted SQL instances
