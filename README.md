@@ -104,6 +104,7 @@ SQL_LogScout.cmd accepts several *optional* parameters:
    - Event logs (system and application)
    - SQL Errorlogs
    - SQL Agent logs
+   - Polybase logs
 
 1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
@@ -271,9 +272,10 @@ Data is collected from the SQL instance you selected locally on the machine wher
 
 The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. To run the test, simply execute the RunTests.bat under the \TestingInfrastructure folder in command prompt.
 
-## Example:
+# Examples:
 
 ## Execute SQL LogScout Tests
+
 ```bash
 cd TestingInfrastructure 
 RunTests.bat
