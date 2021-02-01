@@ -56,7 +56,7 @@ SQL_LogScout.cmd 5 AlwaysOn "DbSrv" NewCustomFolder "2000-01-01 19:26:00" "2020-
 
 ## Parameters
 
-SQL_LogScout.cmd accepts several *optional* parameters:
+SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
 
 1. **DebugLevel** - values are between 0 and 5 (default 0). Debug level provides detail on sequence of execution and variable values and is mostly for troubleshooting and debugging of SQL LogScout. In large majority of the cases you don't need to use anything other than 0, which provides the information you need.
 
@@ -84,6 +84,10 @@ SQL_LogScout.cmd accepts several *optional* parameters:
 1. **DiagStartTime** - specify the time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".  
 
 1. **DiagStopTime** - specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".
+
+1. **InteractivePrompts** - possible values are:
+     - Quiet - suppresses possible prompts for data input
+     - Noisy - (default) shows prompts requesting user input where necessary
 
 ## Permissions
 
