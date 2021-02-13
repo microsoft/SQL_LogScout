@@ -3,7 +3,8 @@
 
 
 # Introduction
-SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)). 
+
+SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)).
 
 # Download
 
@@ -15,7 +16,7 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 1. Open a Command Prompt and change to the folder where SQL LogScout files reside
 1. Start the tool via **SQL_LogScout.cmd** when the issue is happening
 1. Select which SQL instance you want to diagnose from a numbered list
-1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Examples))
+1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
 # Examples
@@ -54,7 +55,7 @@ SQL_LogScout.cmd 5 AlwaysOn "DbSrv" NewCustomFolder "2000-01-01 19:26:00" "2020-
 
 **Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
 
-## Parameters
+# Parameters
 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
 
@@ -66,14 +67,14 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "DetailedPerf"
     - "Replication"
     - "AlwaysOn"
-    - "Network"
+    - "NetworkTrace"
     - "Memory"
     - "DumpMemory"
     - "WPR"
     - "Setup"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
 
-   For more information on each scenario see [Scenarios](#scenarios)
+   For more information on each scenario see [Scenarios](#Scenarios)
 
 1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
 
@@ -89,13 +90,13 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
      - Quiet - suppresses possible prompts for data input
      - Noisy - (default) shows prompts requesting user input where necessary
 
-## Permissions
+# Permissions
 
 - **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
 
 - **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data.
 
-## Scenarios
+# Scenarios
 
 0. **Basic scenario** collects snapshot logs. It captures information:
    - Running drivers on the system
@@ -134,24 +135,24 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
    - Performance Monitor counters for SQL Server instance and general OS counters
 
-5. **Network Trace** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
+5. **Network Trace scenario** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
 
 6. **Memory** - collects
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
    - Memory diagnostic info from SQL DMVs/system views
 
-7. **Generate Memory Dumps** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
+7. **Generate Memory Dumps scenario** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
 
-8. **Windows Performance Recorder (WPR)** Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
-    - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS 
-    - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS 
-    - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS 
+8. **Windows Performance Recorder (WPR) scenario** allows to collect a [Windows Performance Recorder](https://docs.microsoft.com/windows-hardware/test/wpt/introduction-to-wpr) trace. Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
+    - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS
+    - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS
+    - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS
     - Filter drivers - collects performance data about filter driver activity on the system (OS)
 
+   **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 15 seconds of data collection.
+
 9. **Setup** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system.
-
-
 
 # Sample output
 
@@ -265,18 +266,18 @@ Found and removed .\##STDERR.LOG which was empty
 **Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
 
 # Logging
-SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
 
+SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
 
 # Targeted SQL instances
 
-Data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only. 
+Diagnostic data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only.
 
 # Test Suite
 
 The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. To run the test, simply execute the RunTests.bat under the \TestingInfrastructure folder in command prompt.
 
-# Examples:
+## Examples:
 
 ## Execute SQL LogScout Tests
 
