@@ -14,9 +14,9 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 1. Open a Command Prompt and change to the folder where SQL LogScout files reside
-1. Start the tool via **SQL_LogScout.cmd** when the issue is happening
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring
 1. Select which SQL instance you want to diagnose from a numbered list
-1. Pick the [Scenario](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
+1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
 # Examples
@@ -55,6 +55,18 @@ SQL_LogScout.cmd 5 AlwaysOn "DbSrv" NewCustomFolder "2000-01-01 19:26:00" "2020-
 
 **Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
 
+## E. Execute SQL LogScout with multiple scenarios and in Quiet mode
+
+The example uses debuglevel 5, collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the "DbSrv" default instance, re-uses the default output folder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  It also automatically accepts the prompts by using Quiet mode and helps a full automation with no interaction.
+
+```bash
+SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv DeleteDefaultFolder "01-01-2000" "04-01-2021 17:00" Quiet
+```
+
+**Note:**  Selecting Quiet mode implicitly selects "Y" to all the screens that requires your agreement to proceed. 
+
+
+
 # Parameters
 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
@@ -72,6 +84,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "DumpMemory"
     - "WPR"
     - "Setup"
+    - "BackupRestore"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
 
    For more information on each scenario see [Scenarios](#Scenarios)
@@ -87,7 +100,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 1. **DiagStopTime** - specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00".
 
 1. **InteractivePrompts** - possible values are:
-     - Quiet - suppresses possible prompts for data input
+     - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
      - Noisy - (default) shows prompts requesting user input where necessary
 
 # Permissions
@@ -152,8 +165,16 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 
    **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 15 seconds of data collection.
 
-9. **Setup** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system.
+9. **Setup scenario** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system. This allows analysis of setup or installation issues of SQL Server components.
 
+10. **Backup and Restore scenario** - collects the Basic scenario logs and various logs related to backup and restore activities in SQL Server. These logs include:
+
+    - Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
+    - Enables backup and restore related TraceFlags to produce information in the Errorlog
+    - Performance Monitor counters for SQL Server instance and general OS counters
+    - SQL VSS Writer Log (on SQL Server 2019 and later)
+    - VSS Admin (OS) logs for VSS backup-related scenarios
+ 
 # Sample output
 
 ```bash
@@ -167,95 +188,123 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
               #####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #
      ======================================================================================================
 
-2020-11-04 11:57:59.099 INFO    SQL LogScout version: 2.2.0
-2020-11-04 11:57:59.200 INFO    The Present folder for this collection is C:\temp\log scout\Test 2
-2020-11-04 11:57:59.207 INFO    Output path: C:\temp\log scout\Test 2\output\
-2020-11-04 11:57:59.210 INFO    The Error files path is C:\temp\log scout\Test 2\output\internal\
-2020-11-04 11:57:59.223 INFO
-2020-11-04 11:57:59.228 WARN    It appears that output folder 'C:\temp\log scout\Test 2\output\' has been used before.
-2020-11-04 11:57:59.233 WARN    You can choose to:
-2020-11-04 11:57:59.235 WARN     - Delete (D) the \output folder contents and recreate it
-2020-11-04 11:57:59.238 WARN     - Create a new (N) folder using \Output_ddMMyyhhmmss format.
-2020-11-04 11:57:59.240 WARN       You can delete the new folder manually in the future
-Delete ('D') or create New ('N') >: d
-2020-11-04 11:58:00.485 INFO    Output folder Console input: d
-2020-11-04 11:58:00.501 WARN    Deleted C:\temp\log scout\Test 2\output\ and its contents
-2020-11-04 11:58:00.550 INFO    Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG
-2020-11-04 11:58:00.578 INFO
-2020-11-04 11:58:00.582 INFO    Initiating diagnostics collection...
-2020-11-04 11:58:00.589 INFO    Please select one of the following scenarios:
+Launching SQL LogScout...
+Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 
-2020-11-04 11:58:00.592 INFO
-2020-11-04 11:58:00.595 INFO    ID   Scenario
-2020-11-04 11:58:00.598 INFO    --   ---------------
-2020-11-04 11:58:00.607 INFO    0    Basic (no performance data)
-2020-11-04 11:58:00.611 INFO    1    General Performance (recommended for most cases)
-2020-11-04 11:58:00.614 INFO    2    Detailed Performance (statement level and query plans)
-2020-11-04 11:58:00.617 INFO    3    Replication
-2020-11-04 11:58:00.619 INFO    4    AlwaysON
-2020-11-04 11:58:00.622 INFO    5    Network Trace
-2020-11-04 11:58:00.624 INFO    6    Memory
-2020-11-04 11:58:00.626 INFO    7    Generate Memory dumps
-2020-11-04 11:58:00.629 INFO    8    Windows Performance Recorder (WPR)
-2020-11-04 11:58:00.631 INFO    9    Setup
-2020-11-04 11:58:00.635 INFO
-2020-11-04 11:58:00.638 WARN    Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter
-Enter the Scenario ID from list above>: 1
-2020-11-04 11:58:03.610 INFO    Scenario Console input: 1
-2020-11-04 11:58:03.957 INFO    Discovered the following SQL Server instance(s)
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
 
-2020-11-04 11:58:03.961 INFO
-2020-11-04 11:58:03.963 INFO    ID      SQL Instance Name
-2020-11-04 11:58:03.965 INFO    --      ----------------
-2020-11-04 11:58:03.968 INFO    0        DbServerMachine
-2020-11-04 11:58:03.971 INFO    1        DbServerMachine\SQL2014
-2020-11-04 11:58:03.973 INFO    2        DbServerMachine\SQL2017
-2020-11-04 11:58:03.975 INFO
-2020-11-04 11:58:03.978 WARN    Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter
-Enter the ID from list above>: 2
-2020-11-04 11:58:12.451 INFO    SQL Instance Console input: 2
-2020-11-04 11:58:12.456 INFO    You selected instance 'DbServerMachine\SQL2017' to collect diagnostic data.
-2020-11-04 11:58:12.562 INFO    Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2017'
-2020-11-04 11:58:12.567 INFO    Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2017'
-2020-11-04 11:58:12.587 INFO    LogmanConfig.txt copied to  C:\temp\log scout\Test 2\output\internal\LogmanConfig.txt
-2020-11-04 11:58:12.665 INFO    Executing Collector: RunningDrivers
-2020-11-04 11:58:13.437 INFO    Executing Collector: SystemInfo_Summary
-2020-11-04 11:58:14.501 INFO    Executing Collector: MiscPssdiagInfo
-2020-11-04 11:58:14.525 INFO    Executing Collector: collecterrorlog
-2020-11-04 11:58:16.556 INFO    Executing Collector: TaskListVerbose
-2020-11-04 11:58:16.571 INFO    Executing Collector: TaskListServices
-2020-11-04 11:58:18.611 INFO    Executing Collector: PowerPlan
-2020-11-04 11:58:18.695 INFO    Executing Collector: WindowsHotfixes
-2020-11-04 11:58:18.984 INFO    Executing Collector: FLTMC_Filters
-2020-11-04 11:58:19.004 INFO    Executing Collector: FLTMC_Instances
-2020-11-04 11:58:21.042 INFO    Executing Collector: GetEventLogs
-2020-11-04 11:58:28.204 INFO    Executing Collector: Perfmon
-2020-11-04 11:58:29.247 INFO    Executing Collector: xevent_general
-2020-11-04 11:58:31.304 INFO    Executing Collector: xevent_general_target
-2020-11-04 11:58:31.319 INFO    Executing Collector: xevent_general_Start
-2020-11-04 11:58:31.344 INFO    Executing Collector: ExistingProfilerXeventTraces
-2020-11-04 11:58:33.380 INFO    Executing Collector: HighCPU_perfstats
-2020-11-04 11:58:33.404 INFO    Executing Collector: SQLServerPerfStats
-2020-11-04 11:58:35.430 INFO    Executing Collector: SQLServerPerfStatsSnapshotStartup
-2020-11-04 11:58:35.457 INFO    Executing Collector: Query Store
-2020-11-04 11:58:37.491 INFO    Executing Collector: TempDBAnalysis
-2020-11-04 11:58:37.513 INFO    Executing Collector: linked_server_config
-2020-11-04 11:58:37.545 INFO    Executing Collector: SSB_diag
-2020-11-04 11:58:37.569 INFO    Diagnostic collection started.
-2020-11-04 11:58:37.571 INFO
-2020-11-04 11:58:37.588 WARN    Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue
->: stop
-2020-11-04 11:58:41.403 INFO    StopCollection Console input: stop
-2020-11-04 11:58:41.408 INFO    Shutting down the collector
-2020-11-04 11:58:41.416 INFO    Executing shutdown command: SQLServerPerfStatsSnapshotShutdown
-2020-11-04 11:58:41.431 INFO    Executing shutdown command: xevents_stop
-2020-11-04 11:58:41.457 INFO    Executing shutdown command: PerfmonStop
-2020-11-04 11:58:44.481 INFO    Executing shutdown command: KillActiveLogscoutSessions
-2020-11-04 11:58:44.496 INFO    Executing shutdown command: NettraceStop. Waiting - this may take a few of minutes...
-2020-11-04 11:58:44.756 INFO    Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus...
-2020-11-04 11:58:47.766 INFO    Ending data collection
-File size of .\##STDERR.LOG is 0 bytes
-Found and removed .\##STDERR.LOG which was empty
+2021-04-01 12:00:16.337	INFO	Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG 
+2021-04-01 12:00:10.970	INFO	SQL LogScout version: 3.3.3 
+2021-04-01 12:00:11.081	INFO	The Present folder for this collection is C:\temp\log scout\Test 2 
+2021-04-01 12:00:11.086	INFO	Output path: C:\temp\log scout\Test 2\output\ 
+2021-04-01 12:00:11.090	INFO	The Error files path is C:\temp\log scout\Test 2\output\internal\ 
+2021-04-01 12:00:11.109	INFO	 
+2021-04-01 12:00:11.113	WARN	It appears that output folder 'C:\temp\log scout\Test 2\output\' has been used before. 
+2021-04-01 12:00:11.118	WARN	You can choose to: 
+2021-04-01 12:00:11.122	WARN	 - Delete (D) the \output folder contents and recreate it 
+2021-04-01 12:00:11.124	WARN	 - Create a new (N) folder using \Output_ddMMyyhhmmss format. 
+2021-04-01 12:00:11.127	WARN	   You can delete the new folder manually in the future 
+2021-04-01 12:00:16.141	INFO	Output folder Console input: d 
+2021-04-01 12:00:16.311	WARN	Deleted C:\temp\log scout\Test 2\output\ and its contents 
+2021-04-01 12:00:16.415	INFO	 
+2021-04-01 12:00:16.419	INFO	Initiating diagnostics collection...  
+2021-04-01 12:00:16.427	INFO	Please select one of the following scenarios:
+ 
+2021-04-01 12:00:16.432	INFO	 
+2021-04-01 12:00:16.435	INFO	ID	 Scenario 
+2021-04-01 12:00:16.437	INFO	--	 --------------- 
+2021-04-01 12:00:16.443	INFO	0 	 Basic (no performance data) 
+2021-04-01 12:00:16.449	INFO	1 	 General Performance (recommended for most cases) 
+2021-04-01 12:00:16.452	INFO	2 	 Detailed Performance (statement level and query plans) 
+2021-04-01 12:00:16.454	INFO	3 	 Replication 
+2021-04-01 12:00:16.456	INFO	4 	 AlwaysON 
+2021-04-01 12:00:16.459	INFO	5 	 Network Trace 
+2021-04-01 12:00:16.463	INFO	6 	 Memory 
+2021-04-01 12:00:16.465	INFO	7 	 Generate Memory dumps 
+2021-04-01 12:00:16.467	INFO	8 	 Windows Performance Recorder (WPR) 
+2021-04-01 12:00:16.469	INFO	9 	 Setup 
+2021-04-01 12:00:16.472	INFO	10 	 Backup and Restore 
+2021-04-01 12:00:16.477	INFO	 
+2021-04-01 12:00:16.481	WARN	Type one or more Scenario IDs (separated by '+') for which you want to collect diagnostic data. Then press Enter 
+2021-04-01 12:00:35.449	INFO	Scenario Console input: 1+4+10 
+2021-04-01 12:00:35.527	INFO	The scenarios selected are: 'GeneralPerf Basic AlwaysOn BackupRestore' 
+2021-04-01 12:00:35.950	INFO	Discovered the following SQL Server instance(s)
+ 
+2021-04-01 12:00:35.953	INFO	 
+2021-04-01 12:00:35.957	INFO	ID	SQL Instance Name 
+2021-04-01 12:00:35.959	INFO	--	---------------- 
+2021-04-01 12:00:35.964	INFO	0 	 DbServerMachine 
+2021-04-01 12:00:35.966	INFO	1 	 DbServerMachine\SQL2014 
+2021-04-01 12:00:35.969	INFO	2 	 DbServerMachine\SQL2017 
+2021-04-01 12:00:35.972	INFO	 
+2021-04-01 12:00:35.977	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
+2021-04-01 12:00:40.456	INFO	SQL Instance Console input: 1 
+2021-04-01 12:00:40.466	INFO	You selected instance 'rabotenlaptop\SQL2014' to collect diagnostic data.  
+2021-04-01 12:00:40.585	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2014' 
+2021-04-01 12:00:40.589	INFO	Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2014' 
+2021-04-01 12:00:41.120	WARN	At least one of the selected 'GeneralPerf Basic AlwaysOn BackupRestore' scenarios collects Xevent traces 
+2021-04-01 12:00:41.123	WARN	The service account 'NT Service\MSSQL$SQL2014' for SQL Server instance 'DbServerMachine\SQL2014' must have write/modify permissions on the 'C:\temp\log scout\Test 2\output\' folder 
+2021-04-01 12:00:41.127	WARN	The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an *.XEL file exists that you can open and read in SSMS 
+2021-04-01 12:00:43.812	INFO	Access verification Console input: y 
+2021-04-01 12:00:43.854	INFO	LogmanConfig.txt copied to  C:\temp\log scout\Test 2\output\internal\LogmanConfig.txt 
+2021-04-01 12:00:43.921	INFO	Basic collectors will execute on shutdown 
+2021-04-01 12:00:43.929	INFO	Collecting logs for 'GeneralPerf' scenario 
+2021-04-01 12:00:43.957	INFO	Executing Collector: Perfmon 
+2021-04-01 12:00:45.046	INFO	Executing Collector: xevent_general 
+2021-04-01 12:00:47.110	INFO	Executing Collector: xevent_general_target 
+2021-04-01 12:00:47.132	INFO	Executing Collector: xevent_general_Start 
+2021-04-01 12:00:47.179	INFO	Executing Collector: ExistingProfilerXeventTraces 
+2021-04-01 12:00:49.225	INFO	Executing Collector: HighCPU_perfstats 
+2021-04-01 12:00:49.259	INFO	Executing Collector: SQLServerPerfStats 
+2021-04-01 12:00:51.313	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
+2021-04-01 12:00:51.348	INFO	Executing Collector: Query Store 
+2021-04-01 12:00:53.397	INFO	Executing Collector: TempDBAnalysis 
+2021-04-01 12:00:53.433	INFO	Executing Collector: linked_server_config 
+2021-04-01 12:00:53.475	INFO	Executing Collector: SSB_diag 
+2021-04-01 12:00:53.522	INFO	Collecting logs for 'AlwaysOn' scenario 
+2021-04-01 12:00:53.534	INFO	Executing Collector: AlwaysOnDiagScript 
+2021-04-01 12:00:53.591	INFO	Executing Collector: xevent_AlwaysOn_Data_Movement 
+2021-04-01 12:00:55.631	INFO	Executing Collector: AlwaysOn_Data_Movement_target 
+2021-04-01 12:00:55.655	INFO	Executing Collector: AlwaysOn_Data_Movement_Start 
+2021-04-01 12:00:55.699	INFO	Executing Collector: AlwaysOnHealthXevent 
+2021-04-01 12:00:55.738	INFO	Collecting logs for 'BackupRestore' scenario 
+2021-04-01 12:00:55.756	INFO	Executing Collector: EnableTraceFlag 
+2021-04-01 12:00:55.800	INFO	Executing Collector: VSSAdmin_Providers 
+2021-04-01 12:00:55.836	INFO	Executing Collector: VSSAdmin_Shadows 
+2021-04-01 12:00:56.896	INFO	Executing Collector: VSSAdmin_Shadowstorage 
+2021-04-01 12:00:56.931	INFO	Executing Collector: VSSAdmin_Writers 
+2021-04-01 12:00:56.974	WARN	Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue 
+2021-04-01 12:01:06.448	INFO	StopCollection Console input: stop 
+2021-04-01 12:01:06.453	INFO	Shutting down the collector 
+2021-04-01 12:01:06.463	INFO	Executing shutdown command: SQLServerPerfStatsSnapshotShutdown 
+2021-04-01 12:01:06.484	INFO	Executing shutdown command: xevents_stop 
+2021-04-01 12:01:06.506	INFO	Executing shutdown command: xevents_alwayson_data_movement_stop 
+2021-04-01 12:01:06.535	INFO	Executing Disabling traceflag command: Disable Backup Restore Trace Flag 
+2021-04-01 12:01:06.565	INFO	Executing shutdown command: PerfmonStop 
+2021-04-01 12:01:09.622	INFO	Executing shutdown command: KillActiveLogscoutSessions 
+2021-04-01 12:01:10.664	INFO	Collecting logs for 'Basic' scenario 
+2021-04-01 12:01:10.681	INFO	Executing Collector: RunningDrivers 
+2021-04-01 12:01:11.651	INFO	Executing Collector: SystemInfo_Summary 
+2021-04-01 12:01:12.700	INFO	Executing Collector: MiscPssdiagInfo 
+2021-04-01 12:01:14.751	INFO	Executing Collector: TaskListVerbose 
+2021-04-01 12:01:14.790	INFO	Executing Collector: TaskListServices 
+2021-04-01 12:01:14.831	INFO	Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel 
+2021-04-01 12:01:15.253	INFO	Executing Collector: PolybaseLogs 
+2021-04-01 12:01:17.279	INFO	Executing Collector: PowerPlan 
+2021-04-01 12:01:17.383	INFO	Executing Collector: WindowsHotfixes 
+2021-04-01 12:01:17.808	INFO	Executing Collector: FLTMC_Filters 
+2021-04-01 12:01:17.841	INFO	Executing Collector: FLTMC_Instances 
+2021-04-01 12:01:19.899	INFO	Executing Collector: GetEventLogs 
+2021-04-01 12:01:32.991	INFO	Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... 
+2021-04-01 12:01:36.602	INFO	Ending data collection 
+Checking for console execution errors logged into .\##STDERR.LOG...
+Removed .\##STDERR.LOG which was 0 bytes
 
 ```
 
