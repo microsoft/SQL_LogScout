@@ -19,6 +19,17 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
+## Automating data collection
+
+SQL LogScout can be executed with multiple switches allowing for full automation and no interaction with menus. You can:
+
+- Provide the SQL Server instance name
+- Schedule start and stop time of data collection
+- Use Quiet mode to accept all prompts automatically
+- Choose the destination folder (delete default or create a new one)
+
+See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) for detailed information.
+
 # Examples
 
 ## A. Execute SQL LogScout (most common execution)
