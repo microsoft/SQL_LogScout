@@ -9,7 +9,7 @@ param (
 $isInt = $false
 $isIntValDcnt = $false
 $isIntValDelay = $false
-$SqlPidInt = 0
+$SSISIdInt = 0
 $NumFoler =""
 $OneThruFour = "" 
 $SqlDumpTypeSelection = ""
@@ -19,11 +19,12 @@ $SQLNumfolder=0
 $SQLDumperDir=""
 $OutputFolder= $DumpOutputFolder
 $DumpType ="0x0120"
-$ValidPid
+$ValidId
 $SharedFolderFound=$false
 $YesNo =""
 $ProductNumber=""
 $ProductStr = ""
+$PIDInt = 0
 
 #check for administrator rights
 #debugging tools like SQLDumper.exe require Admin privileges to generate a memory dump
@@ -62,107 +63,198 @@ while(($ProductNumber -ne "1") -and ($ProductNumber -ne "2") -and ($ProductNumbe
 
 if ($ProductNumber -eq "1")
 {
-    $SqlTaskList = Tasklist /SVC /FI "imagename eq sqlservr*" /FO CSV | ConvertFrom-Csv
+    # $SqlTaskList has to be an array, so wrapped with @() guarantees an array regardless of number of elemets returned
+    $SqlTaskList = @(Tasklist /SVC /FI "imagename eq sqlservr*" /FO CSV | ConvertFrom-Csv)
     $ProductStr = "SQL Server"
+    
+    # Nothing to do here as SQLLogScout already passes service name correct for SQL Server MSSQLSERVER / MSSQL$INSTANCENAME
 }
 elseif ($ProductNumber -eq "2")
 {
-    $SqlTaskList = Tasklist /SVC /FI "imagename eq msmdsrv*" /FO CSV | ConvertFrom-Csv
+    $SqlTaskList = @(Tasklist /SVC /FI "imagename eq msmdsrv*" /FO CSV | ConvertFrom-Csv)
     $ProductStr = "SSAS (Analysis Services)"
+
+    if (-1 -eq $InstanceOnlyName.IndexOf("`$")){ # default SSAS instance
+        $InstanceOnlyName = "MSSQLServerOLAPService"
+    } else { # named SSAS instance
+        $InstanceOnlyName = "MSOLAP`$" + $InstanceOnlyName.Split("`$")[1]
+    }
 }
 elseif ($ProductNumber -eq "3")
 {
-    $SqlTaskList = Tasklist /SVC /FI "imagename eq msdtssrvr*" /FO CSV | ConvertFrom-Csv
+    $SqlTaskList = @(Tasklist /SVC /FI "imagename eq msdtssrvr*" /FO CSV | ConvertFrom-Csv)
     $ProductStr = "SSIS (Integration Services)"
+    
+    $InstanceOnlyName = "MsDtsServer<VERSION>"
 }
 elseif ($ProductNumber -eq "4")
 {
-    $SqlTaskList = Tasklist /SVC /FI "imagename eq reportingservicesservice*" /FO CSV | ConvertFrom-Csv
+    $SqlTaskList = @(Tasklist /SVC /FI "imagename eq reportingservicesservice*" /FO CSV | ConvertFrom-Csv)
     $ProductStr = "SSRS (Reporting Services)"
+    
+    if (-1 -eq $InstanceOnlyName.IndexOf("`$")){ # default SSRS instance
+        $InstanceOnlyName = "ReportServer"
+    } else { # named SSRS instance
+        $InstanceOnlyName = "ReportServer`$" + $InstanceOnlyName.Split("`$")[1]
+    }
 }
 elseif ($ProductNumber -eq "5")
 {
-    $SqlTaskList = Tasklist /SVC /FI "imagename eq sqlagent*" /FO CSV | ConvertFrom-Csv
+    $SqlTaskList = @(Tasklist /SVC /FI "imagename eq sqlagent*" /FO CSV | ConvertFrom-Csv)
     $ProductStr = "SQL Server Agent"
+    
+    if (-1 -eq $InstanceOnlyName.IndexOf("`$")){ # default SQLAgent instance
+        $InstanceOnlyName = "SQLSERVERAGENT"
+    } else { # named SQLAgent instance
+        $InstanceOnlyName = "SQLAgent`$" + $InstanceOnlyName.Split("`$")[1]
+    }
 }
 
-if ($SqlTaskList.Count -eq 0)
+if (($SqlTaskList.Count -eq 0))
 {
     Write-Host "There are curerntly no running instances of $ProductStr. Exiting..." -ForegroundColor Green
     Start-Sleep -Seconds 2
     return
-}
+} elseif (("3" -ne $ProductNumber) -and (($SqlTaskList | Where-Object {$_.Services -like "*$InstanceOnlyName"} | Measure-Object).Count -eq 0)) {
 
-
-    #check if the process selected is sql by peeking into one of the entries in the array
-    #pick the one that matches the instance name
-if (($SqlTaskList[0].'Image Name' -eq "sqlservr.exe") -and $InstanceOnlyName -ne "")
-{
-    Write-Host "SQL Server service name = $InstanceOnlyName"
-    $SqlPid = $SqlTaskList | Where-Object {$_.Services -like "*$InstanceOnlyName"} | Select-Object PID
-    Write-Host "Service ProcessID =" $SqlPid.PID
-    $SqlPidInt = [convert]::ToInt32($SqlPid.PID)
- 
-    Write-Host "Using PID=", $SqlPidInt," for generating a $ProductStr memory dump" -ForegroundColor Green
-    Write-Host ""
-}
-
-#if multiple SQL Server instances, get the user to input PID for desired SQL Server
-elseif ($SqlTaskList.Count -gt 1) 
-{
-    Write-Host "More than one $ProductStr instance found." 
-
-    $SqlTaskList | Select-Object  PID, "Image name", Services |Out-Host 
-
-
-    #check input and make sure it is a valid integer
-    while(($isInt -eq $false) -or ($ValidPid -eq $false))
+    while (($YesNo -ne "y") -and ($YesNo -ne "n"))
     {
-        Write-Host "Please enter the PID for the desired SQL service from list above" -ForegroundColor Yellow
-        $SqlPidStr = Read-Host ">" -CustomLogMessage "PID choice Console input:"
+        Write-Host "Instance $InstanceOnlyName is not currently running. Would you like to generate a dump of another $ProductStr instance? (Y/N)" -ForegroundColor Yellow
+        $YesNo = Read-Host "(Y/N)> "
     
-        try{
-                $SqlPidInt = [convert]::ToInt32($SqlPidStr)
+        $YesNo = $YesNo.ToUpper()
+        if (($YesNo -eq "Y") -or ($YesNo -eq "N") )
+        {
+            break
+        }
+        else
+        {
+            Write-Host "Not a valid 'Y' or 'N' response"
+        }
+    }
+    
+    if ($YesNo -eq "Y")
+    {
+        
+        Write-LogInformation "Discovered the following $ProductStr Service(s)`n"
+        Write-LogInformation ""
+        Write-LogInformation "ID	Service Name"
+        Write-LogInformation "--	----------------"
+
+        for($i=0; $i -lt $SqlTaskList.Count;$i++)
+        {
+            Write-LogInformation $i "	" $SqlTaskList[$i].Services
+        }
+        
+        #check input and make sure it is a valid integer
+        $isInt = $false
+        $ValidId = $false
+        while(($isInt -eq $false) -or ($ValidId -eq $false))
+        {   
+            Write-LogInformation ""
+            Write-Host "Please enter the ID for the desired $ProductStr from list above" -ForegroundColor Yellow
+            $IdStr = Read-Host ">" -CustomLogMessage "ID choice Console input:"
+        
+            try{
+                $IdInt = [convert]::ToInt32($IdStr)
                 $isInt = $true
             }
-
-        catch [FormatException]
+            catch [FormatException]
             {
-                 Write-Host "The value entered for PID '",$SqlPidStr,"' is not an integer"
+                Write-Host "The value entered for ID '",$IdStr,"' is not an integer"
             }
-    
-        #validate this PID is in the list discovered 
-        for($i=0;$i -lt $SqlTaskList.Count;$i++)
-        {
-            if($SqlPidInt -eq [int]$SqlTaskList.PID[$i])
+            
+            if(($IdInt -ge 0) -and ($IdInt -le ($SqlTaskList.Count-1)))
             {
-                $ValidPid = $true
+                $ValidId = $true
+                $PIDInt = $SqlTaskList[$IdInt].PID
+                $InstanceOnlyName = $SqlTaskList[$IdInt].Services
                 break;
             }
-            else
-            {
-                $ValidPid = $false
-            }
+
         }
-     }   
-
- 
-    Write-Host "Using PID=$SqlPidInt for generating a $ProductStr memory dump" -ForegroundColor Green
-    Write-Host ""
-    
+    } 
 }
-else #if only one SQL Server/SSAS on the box, go here
+
+# if we still don't have a PID to dump
+if (0 -eq $PIDInt)
 {
-    $SqlTaskList | Select-Object PID, "Image name", Services |Out-Host
-    $SqlPidInt = [convert]::ToInt32($SqlTaskList.PID)
- 
-    Write-Host "Using PID=", $SqlPidInt, " for generating a $ProductStr memory dump" -ForegroundColor Green
-    Write-Host ""
-}
+    # for anything other than SSIS
+    if (-not ($InstanceOnlyName.StartsWith("MsDtsServer", [System.StringComparison]::CurrentCultureIgnoreCase)))
+    {
+        Write-Host "$ProductStr service name = $InstanceOnlyName"
+        $PIDStr = $SqlTaskList | Where-Object {$_.Services -like "*$InstanceOnlyName"} | Select-Object PID
+        Write-Host "Service ProcessID =" $PIDStr.PID
+        $PIDInt = [convert]::ToInt32($PIDStr.PID)
+    
+        Write-Host "Using PID=", $PIDInt," for generating a $ProductStr memory dump" -ForegroundColor Green
+        Write-Host ""
 
+    } else {
+
+        #if multiple SSIS processes, get the user to input PID for desired SQL Server
+        if ($SqlTaskList.Count -gt 1) 
+        {
+            Write-Host "More than one $ProductStr instance found." 
+
+            #$SqlTaskList | Select-Object  PID, "Image name", Services |Out-Host 
+            $SSISServices = Tasklist /SVC /FI "imagename eq msdtssrvr*" /FO CSV | ConvertFrom-Csv | Sort-Object -Property services
+            
+            Write-LogInformation "Discovered the following SSIS Service(s)`n"
+            Write-LogInformation ""
+            Write-LogInformation "ID	Service Name"
+            Write-LogInformation "--	----------------"
+
+            for($i=0; $i -lt $SSISServices.Count;$i++)
+            {
+                Write-LogInformation $i "	" $SSISServices[$i].Services
+            }
+            
+            #check input and make sure it is a valid integer
+            $isInt = $false
+            $ValidId = $false
+            while(($isInt -eq $false) -or ($ValidId -eq $false))
+            {   
+                Write-LogInformation ""
+                Write-Host "Please enter the ID for the desired SSIS from list above" -ForegroundColor Yellow
+                $SSISIdStr = Read-Host ">" -CustomLogMessage "ID choice Console input:"
+            
+                try{
+                        $SSISIdInt = [convert]::ToInt32($SSISIdStr)
+                        $isInt = $true
+                    }
+
+                catch [FormatException]
+                    {
+                        Write-Host "The value entered for ID '",$SSISIdStr,"' is not an integer"
+                    }
+                
+                if(($SSISIdInt -ge 0) -and ($SSISIdInt -le ($SSISServices.Count-1)))
+                {
+                    $ValidId = $true
+                    $PIDInt = $SSISServices[$SSISIdInt].PID
+                    break;
+                }
+
+            }   
+
+        
+            Write-Host "Using PID=$PIDInt for generating a $ProductStr memory dump" -ForegroundColor Green
+            Write-Host ""
+            
+        }
+        else #if only one SSSIS on the box, go here
+        {
+            $SqlTaskList | Select-Object PID, "Image name", Services |Out-Host
+            $PIDInt = [convert]::ToInt32($SqlTaskList.PID)
+        
+            Write-Host "Using PID=", $PIDInt, " for generating a $ProductStr memory dump" -ForegroundColor Green
+            Write-Host ""
+        }
+    }
+}
 
 #dump type
-
 if ($ProductNumber -eq "1")  #SQL Server memory dump
 {
     #ask what type of SQL Server memory dump 
@@ -305,7 +397,7 @@ for($j=0;($j -lt $NumFolder.Count); $j++)
 #build the SQLDumper.exe command e.g. (Sqldumper.exe 1096 0 0x0128 0 c:\temp\)
 
 $cmd = "$([char]34)"+$SQLDumperDir + "sqldumper.exe$([char]34)"
-$arglist = $SqlPidInt.ToString() + " 0 " +$DumpType +" 0 $([char]34)" + $OutputFolder + "$([char]34)"
+$arglist = $PIDInt.ToString() + " 0 " +$DumpType +" 0 $([char]34)" + $OutputFolder + "$([char]34)"
 Write-Host "Command for dump generation: ", $cmd, $arglist -ForegroundColor Green
 
 #do-we-want-multiple-dumps section
@@ -314,6 +406,7 @@ Write-Host "This utility can generate multiple memory dumps, at a certain interv
 Write-Host "Would you like to collect multiple memory dumps?" -ForegroundColor Yellow
 
 #validate Y/N input
+$YesNo = $null # reset the variable because it could be assigned at this point
 while (($YesNo -ne "y") -and ($YesNo -ne "n"))
 {
     $YesNo = Read-Host "Enter Y or N>" -CustomLogMessage "Multiple Dumps Choice Console input:"
@@ -332,37 +425,47 @@ while (($YesNo -ne "y") -and ($YesNo -ne "n"))
 #get input on how many dumps and at what interval
 if ($YesNo -eq "y")
 {
-    while(($isIntValDcnt -eq $false))
+    [int]$DumpCountInt=0
+    while(1 -ge $DumpCountInt)
+    {
+        Write-Host "How many dumps would you like to generate for this $ProductStr" -ForegroundColor Yellow
+        $DumpCountStr = Read-Host ">" -CustomLogMessage "Dump Count Console input:"
+
+        try
         {
-            Write-Host "How many dumps would you like to generate for this SQL Server?" -ForegroundColor Yellow
-            $DumpCountStr = Read-Host ">" -CustomLogMessage "Dump Count Console input:"
-    
-            try{
-                    $DumpCountInt = [convert]::ToInt32($DumpCountStr)
-                    $isIntValDcnt = $true
-                }
+            $DumpCountInt = [convert]::ToInt32($DumpCountStr)
 
-            catch [FormatException]
-                {
-                     Write-Host "The value entered for dump count '",$DumpCountStr,"' is not an integer"
-                }
+            if(1 -ge $DumpCountInt)
+            {
+                Write-Host "Please enter a number greater than one." -ForegroundColor Red
+            }
         }
-
-    while(($isIntValDelay -eq $false))
+        catch [FormatException]
         {
-            Write-Host "How frequently (in seconds) would you like to generate the memory dumps?" -ForegroundColor Yellow
-            $DelayIntervalStr = Read-Host ">" -CustomLogMessage "Dump Frequency Console input:"
-    
-            try{
-                    $DelayIntervalInt = [convert]::ToInt32($DelayIntervalStr)
-                    $isIntValDelay = $true
-                }
-
-            catch [FormatException]
-                {
-                     Write-Host "The value entered for frequency (in seconds) '",$DelayIntervalStr,"' is not an integer"
-                }
+                Write-Host "The value entered for dump count '",$DumpCountStr,"' is not an integer" -ForegroundColor Red
         }
+        
+    }
+
+    [int]$DelayIntervalInt=0
+    while(0 -ge $DelayIntervalInt)
+    {
+        Write-Host "How frequently (in seconds) would you like to generate the memory dumps?" -ForegroundColor Yellow
+        $DelayIntervalStr = Read-Host ">" -CustomLogMessage "Dump Frequency Console input:"
+
+        try
+        {
+            $DelayIntervalInt = [convert]::ToInt32($DelayIntervalStr)
+            if(0 -ge $DelayIntervalInt)
+            {
+                Write-Host "Please enter a number greater than zero." -ForegroundColor Red
+            }
+        }
+        catch [FormatException]
+        {
+            Write-Host "The value entered for frequency (in seconds) '",$DelayIntervalStr,"' is not an integer" -ForegroundColor Red
+        }
+    }
 
     Write-Host "The configuration is ready. Press <Enter> key to proceed..."
     Read-Host -Prompt "<Enter> to proceed"
@@ -412,7 +515,5 @@ else #produce just a single dump
     Write-Host ""
     Write-Host "Process complete"
 }
-
-
 
 Write-Host "For errors and completion status, review SQLDUMPER_ERRORLOG.log created by SQLDumper.exe in the output folder '$OutputFolder'. `Or if SQLDumper.exe failed look in the folder from which you are running this script"

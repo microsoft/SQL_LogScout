@@ -1,6 +1,8 @@
 ## Copyright (c) Microsoft Corporation.
 ## Licensed under the MIT license.
 
+#=======================================Script parameters =====================================
+
 param
 (
 
@@ -9,18 +11,37 @@ param
     [int32] $DebugLevel = 0,
 
     #scenario is an optional parameter since there is a menu that covers for it if not present
-    [ValidateSet("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","Network","Memory","DumpMemory","WPR", "Setup")]
-    [Parameter(Position=1,HelpMessage='Choose MenuChoice|Basic|GeneralPerf|DetailedPerf|Replication|AlwaysOn|Memory|DumpMemory|WPR|Setup')]
-    [string] $Scenario = "",
+    #[ValidateSet("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore")]
+    [ValidateScript({ 
+            $ScenarioArrayParam = $_.Split('+')
+            [string[]] $localScenArray = @(("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore"))
+            try 
+            {
+                foreach ($scenItem in $ScenarioArrayParam)
+                {
+                    if ($localScenArray -notcontains $scenItem)
+                    {
+                        return $false
+                    }
+                }
+            }
+            catch 
+            {
+            }
+
+            return $true
+     })]
+    [Parameter(Position=1,HelpMessage='Choose a plus-sign separated list of one or more of: Basic,GeneralPerf,DetailedPerf,Replication,AlwaysOn,Memory,DumpMemory,WPR,Setup. Or MenuChoice')]
+    [string[]] $Scenario=[String]::Empty,
 
     #servername\instnacename is an optional parameter since there is code that auto-discovers instances
     [Parameter(Position=2)]
-    [string] $ServerInstanceConStr = "",
+    [string] $ServerInstanceConStr = [String]::Empty,
 
     #scenario is an optional parameter since there is a menu that covers for it if not present
     [ValidateSet("DeleteDefaultFolder","NewCustomFolder")]
     [Parameter(Position=3,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder')]
-    [string] $DeleteExistingOrCreateNew = "",
+    [string] $DeleteExistingOrCreateNew = [String]::Empty,
 
     #specify start time for diagnostic
     [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
@@ -34,7 +55,7 @@ param
 
     #specify quiet mode for any Y/N prompts
     [ValidateSet("Quiet","Noisy")]
-    [Parameter(Position=6,HelpMessage='Choose Queit|Noisy')]
+    [Parameter(Position=6,HelpMessage='Choose Quiet|Noisy')]
     [string] $InteractivePrompts = "Noisy"
     
 )
@@ -47,25 +68,58 @@ param
 [string]$global:internal_output_folder = ""
 [string]$global:perfmon_active_counter_file = "LogmanConfig.txt"
 [bool]$global:perfmon_counters_restored = $false
-[string]$global:sql_instance_conn_str = "no_instance_found"
+[string]$NO_INSTANCE_NAME = "no_instance_name"
+[string]$global:sql_instance_conn_str = $NO_INSTANCE_NAME
 [System.Collections.ArrayList]$global:processes = [System.Collections.ArrayList]::new()
 [int]$global:DEBUG_LEVEL = $DebugLevel #zero to disable, 1 to 5 to enable different levels of debug logging
-[string] $global:ScenarioChoice = $Scenario
-[bool]$global:stop_automatically = $false
-[string] $global:xevent_collector = ""
+[System.Collections.ArrayList] $global:ScenarioChoice = @()
+[bool] $global:stop_automatically = $false
+[string] $global:xevent_target_file = "xevent_LogScout_target"
+[string] $global:xevent_session = "Xevent_SQLLogScout"
+[string] $global:xevent_alwayson_session = "SQLLogScout_AlwaysOn_Data_Movement"
+[bool] $global:xevent_on = $false
+[bool] $global:perfmon_is_on = $false
+[bool] $global:sqlvsswriter_has_run = $false
 [string] $global:app_version = ""
 [string] $global:host_name = hostname
 [string] $global:wpr_collector_name = ""
 [bool] $global:instance_independent_collection = $false
 [int] $global:scenario_bitvalue  = 0
+[int] $global:sql_major_version = -1
 
+
+#constants
+[string] $BASIC_NAME = "Basic"
+[string] $GENERALPERF_NAME = "GeneralPerf"
+[string] $DETAILEDPERF_NAME = "DetailedPerf"
+[string] $REPLICATION_NAME = "Replication"
+[string] $ALWAYSON_NAME = "AlwaysOn"
+[string] $NETWORKTRACE_NAME = "NetworkTrace"
+[string] $MEMORY_NAME = "Memory"
+[string] $DUMPMEMORY_NAME = "DumpMemory"
+[string] $WPR_NAME = "WPR"
+[string] $SETUP_NAME = "Setup"
+[string] $BACKUPRESTORE_NAME = "BackupRestore"
+[string[]] $global:ScenarioArray = @($BASIC_NAME,$GENERALPERF_NAME,$DETAILEDPERF_NAME,$REPLICATION_NAME,$ALWAYSON_NAME,$NETWORKTRACE_NAME,$MEMORY_NAME,$DUMPMEMORY_NAME,$WPR_NAME,$SETUP_NAME,$BACKUPRESTORE_NAME)
+
+[int] $BasicScenId = 0
+[int] $GeneralPerfScenId = 1
+[int] $DetailedPerfScenId = 2
+[int] $ReplicationScenId = 3
+[int] $AlwaysOnScenId = 4
+[int] $NetworkTraceScenId = 5
+[int] $MemoryScenId = 6
+[int] $DumpMemoryScenId = 7
+[int] $WprScenId = 8
+[int] $SetupScenId = 9
+[int] $BackupRestoreScenId = 10
 #=======================================Start of \OUTPUT and \ERROR directories and files Section
 
 function Init-AppVersion()
 {
-    $major_version = "2"
-    $minor_version = "2"
-    $build = "2"
+    $major_version = "3"
+    $minor_version = "3"
+    $build = "3"
     $global:app_version = $major_version + "." + $minor_version + "." + $build
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
@@ -271,6 +325,105 @@ function Build-FinalErrorFile([string]$partial_error_output_file_name, [string]$
 
 #=======================================End of \OUTPUT and \ERROR directories and files Section
 
+#======================================== START of Process management  SECTION
+
+
+
+function StartNewProcess()
+{
+    param
+    (
+        [Parameter(Mandatory=$true, Position=0)]
+        [String] $FilePath,
+
+        [Parameter(Mandatory=$false, Position=1)]
+        [String] $ArgumentList = [String]::Empty,
+
+        [Parameter(Mandatory=$false, Position=2)]
+        [System.Diagnostics.ProcessWindowStyle] $WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized,
+    
+        [Parameter(Mandatory=$false, Position=3)]
+        [String] $RedirectStandardError = [String]::Empty,    
+    
+        [Parameter(Mandatory=$false, Position=4)]
+        [String] $RedirectStandardOutput = [String]::Empty,
+
+        [Parameter(Mandatory=$false, Position=5)]
+        [bool] $Wait = $false
+    )
+
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    [console]::TreatControlCAsInput = $true
+
+    try 
+    {
+        #build a hash table of parameters
+            
+        $StartProcessParams = @{            
+            FilePath= $FilePath
+        }    
+
+        if ($ArgumentList -ne [String]::Empty)
+        {
+            [void]$StartProcessParams.Add("ArgumentList", $ArgumentList)     
+        }
+
+        if ($null -ne $WindowStyle)
+        {
+            [void]$StartProcessParams.Add("WindowStyle", $WindowStyle)     
+        }
+
+        if ($RedirectStandardOutput -ne [String]::Empty)
+        {
+            [void]$StartProcessParams.Add("RedirectStandardOutput", $RedirectStandardOutput)     
+        }
+
+        if ($RedirectStandardError -ne [String]::Empty)
+        {
+            [void]$StartProcessParams.Add("RedirectStandardError", $RedirectStandardError)     
+        }
+
+        # we will always use -PassThru because we want to keep track of processes launched
+        [void]$StartProcessParams.Add("PassThru", $null)     
+
+        if ($true -eq $Wait)
+        {
+            [void]$StartProcessParams.Add("Wait", $null)
+        }
+        #print the command executed
+        Write-LogDebug $FilePath $ArgumentList
+
+        # start the process
+        #equivalent to $p = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WindowStyle $WindowStyle -RedirectStandardOutput $RedirectStandardOutput -RedirectStandardError $RedirectStandardError -PassThru -Wait
+        $p = Start-Process @StartProcessParams
+
+        #touch a few properties to make sure the process object is populated with them - specifically name and start time
+        $pn = $p.ProcessName
+        $sh = $p.SafeHandle
+        $st = $p.StartTime
+
+        # add the process object to the array of started processes (if it has not exited already)
+        if($false -eq $p.HasExited)   
+        {
+            [void]$global:processes.Add($p)
+        }
+
+    }
+    catch 
+    {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+    
+
+}
+
+#======================================== START of Process management  LOG SECTION
+
+
 #======================================== START of Console LOG SECTION
 . ./LoggingFacility.ps1
 #======================================== END of Console LOG SECTION
@@ -387,15 +540,15 @@ function GetEventLogs($server)
     
         #gather system and application Event logs in text format
         $servers = "."
-        $date = ( get-date ).ToString('yyyyMMdd');
-        $appevtfile = New-Item -type file ($partial_output_file_name + "_AppEventLog.txt") -Force;
-        $sysevtfile = New-Item -type file ($partial_output_file_name + "_SysEventLog.txt") -Force;
-        Get-EventLog -log Application -Computer $servers   -newest 3000  | Format-Table -Property *  -AutoSize | Out-String -Width 20000  | out-file $appevtfile
         
+        $appevtfile = New-Item -type file ($partial_output_file_name + "_EventLog_Application.csv") -Force;
+        $sysevtfile = New-Item -type file ($partial_output_file_name + "_EventLog_System.csv") -Force;
+        Get-EventLog -LogName Application -Newest 7777 | Select-Object -Property EntryType,TimeGenerated,Source,EventID,Category,Message | Export-CSV -Path $appevtfile -NoTypeInformation
+
         #in case CTRL+C is pressed
         HandleCtrlC
         
-        Get-EventLog -log System -Computer $servers   -newest 3000  | Format-Table -Property *  -AutoSize | Out-String -Width 20000  | out-file $sysevtfile
+        Get-EventLog -LogName System -Newest 7777 | Select-Object -Property EntryType,TimeGenerated,Source,EventID,Category,Message | Export-CSV -Path $sysevtfile -NoTypeInformation
 
             
     }
@@ -414,6 +567,8 @@ function GetPowerPlan($server)
     #power plan
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
     $server = $global:sql_instance_conn_str
 
     try {
@@ -426,7 +581,7 @@ function GetPowerPlan($server)
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $power_plan_name = Get-WmiObject -Class win32_powerplan -Namespace root\cimv2\power | Where-Object IsActive -eq $true | Select-Object ElementName #|Out-File -FilePath $output_file
         Set-Content -Value $power_plan_name.ElementName -Path $output_file
-        
+        HandleCtrlC
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -613,17 +768,14 @@ function MSDiagProcsCollector()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
     }
     
     catch {
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
     
 }
@@ -646,62 +798,66 @@ function GetXeventsGeneralPerf()
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
 
         #XEvents file: xevent_general.sql - GENERAL Perf
-        #there is no output file for this call - it creates the xevents. only errors if any
+        
 
-        #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
-        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
-        {
-            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector"
-            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
-            return $false
-        }
-
-        $collector_name = $global:xevent_collector = "xevent_general"
-        $input_script = Build-InputScript $global:present_directory $collector_name
+        $collector_name = "xevent_general"
+        $xevent_core_script = Build-InputScript $global:present_directory "xevent_core"
+        $xevent_general_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        $inputScriptCombined = [String]::Empty
 
+        if ($true -eq $global:xevent_on)
+        {
+            $inputScriptCombined = $xevent_general_script
+        }
+        else 
+        {
+            $inputScriptCombined = $xevent_core_script + "," + $xevent_general_script
+        }
+        
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $inputScriptCombined
+        Write-LogInformation "Executing Collector: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
         Start-Sleep -Seconds 2
 
         #in case CTRL+C is pressed
         HandleCtrlC
 
-        #add Xevent target
-        $collector_name = "xevent_general_target"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel' " + ", max_file_size=(500), max_rollover_files=(50)); END" 
-        $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        if ($true -ne $global:xevent_on)
+        {
+            #add Xevent target
+            $collector_name = "xevent_general_target"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $global:xevent_target_file + ".xel' " + ", max_file_size=(500), max_rollover_files=(50)); END" 
+            $executable = "sqlcmd.exe"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+            Write-LogInformation "Executing Collector: $collector_name"
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
 
-        #in case CTRL+C is pressed
-        HandleCtrlC
+            #in case CTRL+C is pressed
+            HandleCtrlC
 
-        #start the XEvent session
-        $collector_name = "xevent_general_Start"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END"
-        $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+            #start the XEvent session
+            $collector_name = "xevent_general_Start"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session]  ON SERVER STATE = START; END"
+            $executable = "sqlcmd.exe"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+            Write-LogInformation "Executing Collector: $collector_name"
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+            
+            # set the Xevent has been started flag to be true
+            $global:xevent_on = $true
+        }
+
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
 }
 
@@ -713,9 +869,8 @@ function GetXeventsDetailedPerf()
 
     [console]::TreatControlCAsInput = $true
 
-    try {
-        
-    
+    try 
+    {
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
@@ -724,56 +879,58 @@ function GetXeventsDetailedPerf()
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
 
         #XEvents file: xevent_detailed.sql - Detailed Perf
-        #there is no output file for this call - it creates the xevents. only errors if any
-
-        #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
-
-        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
-        {
-            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector" 
-            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
-            return $false
-        }
-
-        $collector_name = $global:xevent_collector = "xevent_detailed"
-        $input_script = Build-InputScript $global:present_directory $collector_name
+       
+        $collector_name = "xevent_detailed"
+        $xevent_detail_script = Build-InputScript $global:present_directory $collector_name
+        $xevent_core_script = Build-InputScript $global:present_directory "xevent_core"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        $inputScriptCombined = [String]::Empty
 
+        if ($true -eq $global:xevent_on)
+        {
+            $inputScriptCombined = $xevent_detail_script
+        }
+        else 
+        {
+            $inputScriptCombined = $xevent_core_script + "," + $xevent_detail_script
+        }
+        
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $inputScriptCombined
+        Write-LogInformation "Executing Collector: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
         Start-Sleep -Seconds 2
 
         #in case CTRL+C is pressed
         HandleCtrlC
 
-        #add Xevent target
-        $collector_name = "xevent_detailed_target"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
-        $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        if ($true -ne $global:xevent_on)
+        {
+            #add Xevent target
+            $collector_name = "xevent_detailed_target"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $global:xevent_target_file + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
+            $executable = "sqlcmd.exe"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+            Write-LogInformation "Executing Collector: $collector_name"
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+            
+            #in case CTRL+C is pressed
+            HandleCtrlC
 
-        #in case CTRL+C is pressed
-        HandleCtrlC
-
-        #start the XEvent session
-        $collector_name = "xevent_detailed_Start"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END" 
-        $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
-        Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+            #start the XEvent session
+            $collector_name = "xevent_detailed_Start"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session]  ON SERVER STATE = START; END" 
+            $executable = "sqlcmd.exe"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+            Write-LogInformation "Executing Collector: $collector_name"
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+            
+            # set the Xevent has been started flag to be true
+            $global:xevent_on = $true
+        }
 
     }
     catch {
@@ -812,10 +969,9 @@ function GetAlwaysOnDiag()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -833,6 +989,7 @@ function GetXeventsAlwaysOnMovement()
 
     $server = $global:sql_instance_conn_str
 
+
     [console]::TreatControlCAsInput = $true
 
     try {
@@ -848,27 +1005,18 @@ function GetXeventsAlwaysOnMovement()
         #in case CTRL+C is pressed
         HandleCtrlC
 
-        #XEvents file: AlwaysOn_Data_Movement.sql - Detailed Perf
-
-        #using the global here assumes that only one Xevent collector will be running at a time from SQL LogScout. Running multiple Xevent sessions is not expected and not reasonable
-
-        if (($global:xevent_collector -ne "") -or ($global:xevent_collector.Length -gt 0)) 
-        {
-            Write-LogError "There is an Xevent collector started by SQL LogScout. It's name is '$global:xevent_collector'. There must be only one active collector"     
-            Write-LogDebug "Xevent collector name $global:xevent_collector. There must be only one active collector. This is likely a bug or somehow global variable scope is reused -Multiple SQL LogScouts with weird scope?" -DebugLogLevel 1
-            return $false
-        }
         
-        $collector_name = $global:xevent_collector = "AlwaysOn_Data_Movement"
-        $input_script = Build-InputScript $global:present_directory $collector_name
+        $collector_name = "xevent_AlwaysOn_Data_Movement"
+        $xevent_AlwaysOnDataMovement_script = Build-InputScript $global:present_directory $collector_name
+        $xevent_core_script = Build-InputScript $global:present_directory "xevent_core"
+        #$input_script = Build-InputScript $global:present_directory $collector_name
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $input_script
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $xevent_core_script + "," + $xevent_AlwaysOnDataMovement_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
         Start-Sleep -Seconds 2
 
         #in case CTRL+C is pressed
@@ -877,28 +1025,26 @@ function GetXeventsAlwaysOnMovement()
         #add Xevent target
         $collector_name = "AlwaysOn_Data_Movement_target"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
+        $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $collector_name + ".xel'" + ", max_file_size=(500), max_rollover_files=(50)); END" 
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
         #in case CTRL+C is pressed
         HandleCtrlC
 
         #start the XEvent session
         $collector_name = "AlwaysOn_Data_Movement_Start"
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector]  ON SERVER STATE = START; END" 
+        $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_alwayson_session]  ON SERVER STATE = START; END" 
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -909,7 +1055,356 @@ function GetXeventsAlwaysOnMovement()
     }
 }
 
+function GetAlwaysOnHealthXel
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    [console]::TreatControlCAsInput = $true
 
+    $collector_name = "AlwaysOnHealthXevent"
+    Write-LogInformation "Executing Collector: $collector_name"
+
+    try{
+            $installedInstances = $global:sql_instance_conn_str
+            if ($installedInstances -notlike '*\*')
+            {
+                $vInstance = "MSSQLSERVER"
+            } 
+            if ($installedInstances -like '*\*')
+            {
+                $selectInstanceName = $global:sql_instance_conn_str              
+                $installedInstances = Strip-InstanceName($selectInstanceName) 
+                $vInstance = $installedInstances
+            }
+            [string]$DestinationFolder = $global:output_folder 
+
+            #in case CTRL+C is pressed
+            HandleCtrlC
+            
+            $vRegInst = (Get-ItemProperty -Path HKLM:"SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL").$vInstance
+            $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
+            $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
+            $vLogPath = $vLogPath -replace 'ERRORLOG'
+            Get-ChildItem -Path $vLogPath -Filter AlwaysOn_health*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
+
+        } catch {
+            Write-LogError $_
+            $mycommand = $MyInvocation.MyCommand 
+            $error_msg = $PSItem.Exception.Message 
+            Write-LogError "Function $mycommand failed with error:  $error_msg"
+        }
+
+}
+
+
+function GetXeventBackupRestore 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    $server = $global:sql_instance_conn_str
+
+    [console]::TreatControlCAsInput = $true
+
+    try 
+    {
+        if ($global:sql_major_version -ge 13)
+        {
+            ##create error output filenames using the path + servername + date and time
+            $partial_output_file_name = Create-PartialOutputFilename ($server)
+            $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+
+            Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+            Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+
+            #XEvents file: xevent_backup_restore.sql - Backup Restore
+       
+
+            $collector_name  = "xevent_backup_restore"
+            $xevent_core_script = Build-InputScript $global:present_directory "xevent_core"
+            $xevent_backup_restore_script = Build-InputScript $global:present_directory $collector_name #"xevent_backup_restore"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+            $executable = "sqlcmd.exe"
+            $inputScriptCombined = [String]::Empty
+
+            if ($true -eq $global:xevent_on)
+            {
+                $inputScriptCombined = $xevent_backup_restore_script
+            }
+            else 
+            {
+                $inputScriptCombined = $xevent_core_script + "," + $xevent_backup_restore_script
+            }
+            
+            $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -i" + $inputScriptCombined
+            Write-LogInformation "Executing Collector: $collector_name"
+            
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+            
+
+            Start-Sleep -Seconds 2
+
+            #in case CTRL+C is pressed
+            HandleCtrlC
+
+            if ($true -ne $global:xevent_on)
+            {
+                
+
+
+                
+                #add Xevent target
+                $collector_name = "xevent_backuprestore_target"
+                $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+                $alter_event_session_add_target = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session] ON SERVER ADD TARGET package0.event_file(SET filename=N'" + $partial_output_file_name + "_" + $global:xevent_target_file + ".xel' " + ", max_file_size=(500), max_rollover_files=(50)); END" 
+                $executable = "sqlcmd.exe"
+                $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_add_target + "`""
+                Write-LogInformation "Executing Collector: $collector_name"
+                
+                StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+                
+                
+                #in case CTRL+C is pressed
+                HandleCtrlC
+
+                #start the XEvent session
+                $collector_name = "xevent_backuprestore_start"
+                $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+                $alter_event_session_start = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session]  ON SERVER STATE = START; END"
+                $executable = "sqlcmd.exe"
+                $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_start + "`""
+                Write-LogInformation "Executing Collector: $collector_name"
+                
+                StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+                
+                # set the Xevent has been started flag to be true
+                $global:xevent_on = $true
+
+            }
+
+        }
+        else
+        {
+            Write-LogDebug "Backup_restore_progress_trace XEvent exists in SQL Server 2016 and higher and cannot be collected for instance $server. "
+        }
+        
+
+
+    }
+    catch {
+        $mycommand = $MyInvocation.MyCommand 
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+}
+
+function GetBackupRestoreTraceFlags
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    $server = $global:sql_instance_conn_str
+
+    [console]::TreatControlCAsInput = $true
+
+    try {
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #SQL Server Slow SQL Server Backup and Restore
+        $collector_name = "EnableTraceFlag"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $trace_flag_enabled = "DBCC TRACEON(3004,3212,3605,-1)"
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $error_file + " -Q`"" + $trace_flag_enabled + "`""
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
+        
+    }
+    catch {
+        $mycommand = $MyInvocation.MyCommand 
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return     
+    }
+}
+
+function GetVSSAdminLogs()
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    $server = $global:sql_instance_conn_str
+
+    [console]::TreatControlCAsInput = $true
+
+
+    try 
+    {
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
+        #list VSS Admin providers
+        $collector_name = "VSSAdmin_Providers"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  
+        $argument_list = " list providers"
+        $executable = "VSSAdmin.exe"
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+        
+
+        $collector_name = "VSSAdmin_Shadows"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  
+        $argument_list = " list shadows"
+        $executable = "VSSAdmin.exe"
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+        
+
+        Start-Sleep -Seconds 1
+
+        $collector_name = "VSSAdmin_Shadowstorage"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  
+        $argument_list = " list shadowstorage"
+        $executable = "VSSAdmin.exe"
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+        
+
+        
+        $collector_name = "VSSAdmin_Writers"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  
+        $argument_list = " list writers"
+        $executable = "VSSAdmin.exe"
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+        
+
+            
+    }
+    catch {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        $ret = $false
+        return $ret   
+    }
+
+}
+
+function GetSQLVSSWriterLog()
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    
+    [console]::TreatControlCAsInput = $true
+    
+    if ($true -eq $global:sqlvsswriter_has_run)
+    {
+        return
+    }
+
+    # set this to true
+    $global:sqlvsswriter_has_run = $true
+
+    if ($global:sql_major_version -lt 15)
+    {
+        Write-LogDebug "SQL Server major version is $global:sql_major_version. Not collecting SQL VSS log" -DebugLogLevel 4
+        return
+    }
+
+
+    try 
+    {
+        [string]$DestinationFolder = $global:output_folder
+        
+         # if backup restore scenario, we will get a verbose trace
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit))
+        {
+            #  collect verbose SQL VSS Writer log if SQL 2019
+            $file = 'C:\Program Files\Microsoft SQL Server\90\Shared\SqlWriterConfig.ini'
+            (Get-Content $file).Replace("TraceLevel=DEFAULT","TraceLevel=VERBOSE") | Set-Content $file
+            (Get-Content $file).Replace("TraceFileSizeMb=1","TraceFileSizeMb=10") | Set-Content $file
+
+            $matchfoundtracelevel = Get-Content $file | Select-String -Pattern 'TraceLevel=VERBOSE' -CaseSensitive -SimpleMatch
+            
+            if ([String]::IsNullOrEmpty -ne $matchfoundtracelevel)
+            {
+                Write-LogDebug "The TraceLevel is setting is: $matchfoundtracelevel" -DebugLogLevel 4
+            }
+
+            $matchfoundFileSize = Get-Content $file | Select-String -Pattern 'TraceFileSizeMb=10' -CaseSensitive -SimpleMatch
+            
+            if ([String]::IsNullOrEmpty -ne $matchfoundFileSize)
+            {
+                Write-LogDebug "The TraceFileSizeMb is: $matchfoundFileSize" -DebugLogLevel 4
+            }
+            
+
+            Write-LogWarning "To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process."
+            $userinputvss = Read-Host "Do you want to restart SQL VSS Writer Service>" 
+            $HelpMessage = "Please enter a valid input (Y or N)"
+
+            $ValidInput = "Y","N"
+            $AllInput = @()
+            $AllInput += , $ValidInput
+            $AllInput += , $userinputvss
+            $AllInput += , $HelpMessage
+
+            $userinputvss = validateUserInput($AllInput)
+
+            if($userinputvss -eq "Y")
+            {
+                Restart-Service SQLWriter -force
+                Write-LogInformation "SQLWriter Service has been restarted."
+            }
+            if($userinputvss -eq "N")
+            {
+                Write-LogInformation "You have chosen not to restart SQLWriter Service. No verbose logging will be collected"
+            }
+
+            # copy the SqlWriterConfig.txt file in all scenarios
+            $file = 'C:\Program Files\Microsoft SQL Server\90\Shared\SqlWriterLogger.txt'
+            Get-childitem $file |  Copy-Item -Destination $DestinationFolder | Out-Null
+        }    
+        
+        # if Basic scenario only, then collect the default SQL 2019+ VSS writer trace
+        elseif (($true -eq (IsScenarioEnabled -scenarioBit $global:basicBit)) `
+                -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit)) 
+                )     
+        {
+            $file = 'C:\Program Files\Microsoft SQL Server\90\Shared\SqlWriterLogger.txt'
+            Get-childitem $file |  Copy-Item -Destination $DestinationFolder | Out-Null
+        }
+    }
+    catch 
+    {
+        $mycommand = $MyInvocation.MyCommand 
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+    }
+    finally 
+    {
+        # we just finished executing this once, don't repeat
+        $global:sqlvsswriter_has_run = $true
+        Write-LogDebug "Inside finally block for SQLVSSWriter log." -DebugLogLevel 5
+    }
+}
 function GetSysteminfoSummary() 
 {
 
@@ -919,7 +1414,8 @@ function GetSysteminfoSummary()
 
     [console]::TreatControlCAsInput = $true
 
-    try {
+    try 
+    {
         $partial_output_file_name = Create-PartialOutputFilename ($server)
         $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
     
@@ -936,9 +1432,9 @@ function GetSysteminfoSummary()
         $executable = "systeminfo"
         $argument_list = "/FO LIST"
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -RedirectStandardOutput $output_file -PassThru
-        [void]$global:processes.Add($p)
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -RedirectStandardOutput $output_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
@@ -977,11 +1473,11 @@ function GetMisciagInfo()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-    }
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
 
+    }
     catch 
     {
         $mycommand = $MyInvocation.MyCommand
@@ -1021,17 +1517,15 @@ function GetErrorlogs()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -W -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret    
+        return
     }
 
 }
@@ -1062,9 +1556,8 @@ function GetTaskList ()
         $executable = "tasklist.exe"
         $argument_list = "/V"
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
 
         #in case CTRL+C
         HandleCtrlC
@@ -1077,18 +1570,16 @@ function GetTaskList ()
         $executable = "tasklist.exe"
         $argument_list = "/SVC"
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+        
             
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 }
 
@@ -1118,17 +1609,15 @@ function GetRunningProfilerXeventTraces ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i " + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
         
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 
@@ -1161,10 +1650,9 @@ function GetHighCPUPerfStats ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -1203,9 +1691,8 @@ function GetPerfStats ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -1244,10 +1731,8 @@ function GetPerfStatsSnapshot ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -1264,6 +1749,12 @@ function GetPerfmonCounters ()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
     
     [console]::TreatControlCAsInput = $true
+
+    if ($true -eq $global:perfmon_is_on)
+    {
+        Write-LogDebug "Perfmon has already been started by another collector." -DebugLogLevel 3
+        return
+    }
 
     $server = $global:sql_instance_conn_str
     $internal_folder = $global:internal_output_folder
@@ -1285,10 +1776,10 @@ function GetPerfmonCounters ()
         $executable = "cmd.exe"
         $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon & logman CREATE COUNTER -n logscoutperfmon -cf `"" + $internal_folder + "LogmanConfig.txt`" -f bin -si 00:00:05 -max 250 -cnf 01:00:00  -o " + $output_file + "  & logman start logscoutperfmon "
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
 
+        #turn on the perfmon notification to let others know it is enabled
+        $global:perfmon_is_on = $true
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -1327,9 +1818,7 @@ function GetServiceBrokerInfo ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1365,9 +1854,8 @@ function GetTempdbSpaceLatchingStats ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+
 
     }
     catch {
@@ -1402,9 +1890,7 @@ function GetLinkedServerInfo ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath  $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath  $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1440,9 +1926,8 @@ function GetQDSInfo ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
@@ -1476,9 +1961,7 @@ function GetReplMetadata ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1512,9 +1995,7 @@ function GetChangeDataCaptureInfo () {
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1548,9 +2029,7 @@ function GetChangeTracking ()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1588,9 +2067,8 @@ function GetFilterDrivers ()
         $argument_list = " filters"
         $executable = "fltmc.exe"
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
+
 
         #filters instance
         $collector_name = "FLTMC_Instances"
@@ -1599,9 +2077,8 @@ function GetFilterDrivers ()
         $executable = "fltmc.exe"
         $argument_list = " instances"
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardOutput $output_file -WindowStyle Hidden -RedirectStandardError $error_file
 
     }
     catch {
@@ -1621,7 +2098,17 @@ function GetNetworkTrace ()
 
     [console]::TreatControlCAsInput = $true
 
-    $server = $global:sql_instance_conn_str
+    # special case for network trace - use the host name if no instance specified
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    {
+        $server = $global:host_name
+    }
+    else 
+    {
+        $server = $global:sql_instance_conn_str    
+    }
+    
+
     $internal_folder = $global:internal_output_folder
 
     try {
@@ -1635,18 +2122,15 @@ function GetNetworkTrace ()
         HandleCtrlC
 
         #Perfmon
-        $collector_name = "NetworkTrace"
+        $collector_name = $NETWORKTRACE_NAME
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
         $executable = "cmd.exe"
-        #$argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon & logman CREATE COUNTER -n logscoutperfmon -cf `"" + $internal_folder + "LogmanConfig.txt`" -f bin -si 00:00:05 -max 250 -cnf 01:00:00  -o " + $output_file + "  & logman start logscoutperfmon "
-        #netsh trace stop sessionname='sqllogscout_nettrace'
         $argument_list = "/C netsh trace start sessionname='sqllogscout_nettrace' report=yes persistent=yes capture=yes tracefile=" + $output_file
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
@@ -1721,7 +2205,16 @@ function GetWPRTrace ()
 
     [console]::TreatControlCAsInput = $true
 
-    $server = $global:sql_instance_conn_str
+    # special case for WPR trace - use the host name if no instance specified
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    {
+        $server = $global:host_name
+    }
+    else 
+    {
+        $server = $global:sql_instance_conn_str    
+    }
+    
 
     $wpr_win_version = GetWindowsVersion
 
@@ -1734,11 +2227,9 @@ function GetWPRTrace ()
     {
         try {
 
-            $partial_output_file_name = Create-PartialOutputFilename ($server)
             $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
     
             Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
-            Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
 
             #choose collector type
 
@@ -1755,7 +2246,7 @@ function GetWPRTrace ()
                 Write-LogInformation $i "  " $WPRArray[$i]
             }
             $isInt = $false
-            $wprIdStrIdInt = 777
+            
             Write-LogInformation ""
             Write-LogWarning "Enter the WPR Profile ID for which you want to collect performance data. Then press Enter" 
 
@@ -1790,45 +2281,41 @@ function GetWPRTrace ()
                     "0" { 
                         $collector_name = $global:wpr_collector_name= "WPR_CPU"
                         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-                        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
                         $executable = "cmd.exe"
                         $argument_list = "/C wpr.exe -start CPU -filemode "
                         Write-LogInformation "Executing Collector: $collector_name"
-                        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-                        [void]$global:processes.Add($p)
+                        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+                        
                         Start-Sleep -s 15
                     }
                     "1" { 
                         $collector_name = $global:wpr_collector_name = "WPR_HeapAndVirtualMemory"
                         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-                        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
                         $executable = "cmd.exe"
                         $argument_list = "/C wpr.exe -start Heap -start VirtualAllocation  -filemode "
                         Write-LogInformation "Executing Collector: $collector_name"
-                        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-                        [void]$global:processes.Add($p)
+                        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+                        
                         Start-Sleep -s 15
                     }
                     "2" { 
                         $collector_name = $global:wpr_collector_name = "WPR_DiskIO_FileIO"
                         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-                        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
                         $executable = "cmd.exe"
                         $argument_list = "/C wpr.exe -start DiskIO -start FileIO -filemode "
                         Write-LogInformation "Executing Collector: $collector_name"
-                        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-                        [void]$global:processes.Add($p)
+                        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+                        
                         Start-Sleep -s 15
                     }
                     "3" { 
                         $collector_name = $global:wpr_collector_name = "WPR_MiniFilters"
                         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-                        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
                         $executable = "cmd.exe"
                         $argument_list = "/C wpr.exe -start Minifilter -filemode "
                         Write-LogInformation "Executing Collector: $collector_name"
-                        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-                        [void]$global:processes.Add($p)
+                        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+                        
                         Start-Sleep -s 15
                     }                    
                 }
@@ -1869,10 +2356,8 @@ function GetMemoryLogs()
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
-        Write-LogDebug $executable $argument_list
-        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -PassThru
-        [void]$global:processes.Add($p)
-
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
         
     }
     catch {
@@ -2114,13 +2599,62 @@ function GetClusterLogs()
     }
 }
 
-function GetSQLErrorLogs(){
+function GetSQLErrorLogsDumpsSysHealth()
+{
     
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     [console]::TreatControlCAsInput = $true
 
-    $collector_name = "SQLErrorLogs"
+    $collector_name = "SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel"
+    Write-LogInformation "Executing Collector: $collector_name"
+
+    try{
+            $installedInstances = $global:sql_instance_conn_str
+            if ($installedInstances -notlike '*\*')
+            {
+                $vInstance = "MSSQLSERVER"
+            } 
+            if ($installedInstances -like '*\*')
+            {
+                $selectInstanceName = $global:sql_instance_conn_str              
+                $installedInstances = Strip-InstanceName($selectInstanceName) 
+                $vInstance = $installedInstances
+            }
+            [string]$DestinationFolder = $global:output_folder 
+
+            #in case CTRL+C is pressed
+            HandleCtrlC
+            
+            # get XEL files from last three weeks
+            $time_threshold = (Get-Date).AddDays(-21)
+
+            $vRegInst = (Get-ItemProperty -Path HKLM:"SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL").$vInstance
+            $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
+            $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
+            $vLogPath = $vLogPath -replace 'ERRORLOG'
+            Get-ChildItem -Path $vLogPath -Filter ERRORLOG* | Copy-Item -Destination $DestinationFolder | Out-Null 
+            Get-ChildItem -Path $vLogPath -Filter SQLAGENT* | Copy-Item -Destination $DestinationFolder | Out-Null
+            Get-ChildItem -Path $vLogPath -Filter system_health*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
+            Get-ChildItem -Path "$vLogPath\SQLDump*.mdmp", "$vLogPath\SQLDump*.log" | Where-Object {$_.LastWriteTime -gt $time_threshold} | Copy-Item -Destination $DestinationFolder | Out-Null
+
+            if (IsClustered)
+            {
+                Get-ChildItem -Path $vLogPath -Filter *_MSSQLSERVER_SQLDIAG*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
+            }
+        } catch {
+            Write-LogError "Error Collecting SQL Server Error Log, SystemHealth and Dump Files"
+            Write-LogError $_
+        }
+}
+function GetPolybaseLogs()
+{
+    
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    [console]::TreatControlCAsInput = $true
+
+    $collector_name = "PolybaseLogs"
     Write-LogInformation "Executing Collector: $collector_name"
 
     try{
@@ -2144,11 +2678,19 @@ function GetSQLErrorLogs(){
             $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
             $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
             $vLogPath = $vLogPath -replace 'ERRORLOG'
-            Get-ChildItem $vLogPath -Filter ERRORLOG* | Copy-Item -Destination $DestinationFolder | Out-Null 
-            Get-ChildItem $vLogPath -Filter SQLAGENT* | Copy-Item -Destination $DestinationFolder | Out-Null 
+            # polybase path
+            $polybase_path = $vLogPath + '\Polybase\'            
+            $ValidPath = Test-Path -Path $polybase_path
+            $exclude_ext = @('*.hprof','*.bak')  #exclude file with these extensions when copying.
+            If ($ValidPath -ne $False)
+            {
+                $DestinationFolder_polybase = $DestinationFolder + '\Polybase\'
+                Copy-Item $polybase_path $DestinationFolder
+                Get-ChildItem $polybase_path -recurse -Exclude $exclude_ext  | where-object {$_.length -lt 1073741824} | Copy-Item -Destination $DestinationFolder_polybase | Out-Null
+            }
 
         } catch {
-            Write-LogError "Error Collecting SQL Server Error Log Files"
+            Write-LogError "Error Collecting Polybase Log Files"
             Write-LogError $_
         }
 }
@@ -2222,14 +2764,131 @@ function validateUserInput([string[]]$AllInput)
     }    
 }
 
+function IsCollectingXevents()
+{
+    if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit)) `
+    -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit)) `
+    -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit)) `
+    -or ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit))
+    )
+    {
+        return $true
+    }
+    else 
+    {
+        return $false
+    }
+
+}
+
+function Confirm-WritePermsStartupAccount ()
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    # if interactive prompt is disabled, skip this check
+    if ($InteractivePrompts -eq "Quiet")
+    {
+        return $true  #proceed with execution
+    }
+
+    $host_name = hostname
+
+    $instance_name = $global:sql_instance_conn_str.Substring($global:sql_instance_conn_str.IndexOf("\") + 1)
+
+
+    if ($instance_name -ne $host_name)
+    {
+        $sqlservicename = "MSSQL"+"$"+$instance_name
+    }
+    else
+    {
+        $sqlservicename = "MSSQLServer"
+    }
+
+    #if we are not running an XEvent collector, exit this function as we don't need to raise warning. Return $true to proceed with execution
+    if ($false -eq (IsCollectingXevents ))
+    {
+        return $true
+    }
+
+
+    $startup_account = Get-wmiobject win32_service -Filter "name='$sqlservicename' " | Select-Object  startname
+    $startup_account_name = $startup_account.startname
+
+    Write-LogWarning "At least one of the selected '$global:ScenarioChoice' scenarios collects Xevent traces" 
+    Write-LogWarning "The service account '$startup_account_name' for SQL Server instance '$global:sql_instance_conn_str' must have write/modify permissions on the '$global:output_folder' folder"
+    Write-LogWarning "The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an *.XEL file exists that you can open and read in SSMS"
+    
+    $ValidInput = "Y","N"
+    $confirmAccess = Read-Host "Continue?> (y/n)" -CustomLogMessage "Access verification Console input:"
+    $HelpMessage = "Please enter a valid input (Y or N)"
+
+    $AllInput = @()
+    $AllInput += , $ValidInput
+    $AllInput += , $confirmAccess
+    $AllInput += , $HelpMessage
+
+    $confirmAccess = validateUserInput($AllInput)
+
+    if ($confirmAccess -eq "Y")
+    { 
+        #user chose to proceed
+        return $true
+    } 
+    else 
+    { 
+        #user chose to abort
+        return $false
+    }
+}
+
+
+function DetailedPerfCollectorWarning ()
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    
+    #if we are not running an detailed XEvent collector (scenario 2), exit this function as we don't need to raise warning
+
+    Write-LogWarning "The 'DetailedPerf' scenario collects statement-level, detailed Xevent traces. This can impact the performance of SQL Server"
+
+    if ($InteractivePrompts -eq "Quiet") 
+    {
+        Start-Sleep 5
+        return $true
+    }
+    
+    $ValidInput = "Y","N"
+    $confirmAccess = Read-Host "Are you sure you would like to Continue?> (y/n)" -CustomLogMessage "Detailed Perf Warning Console input:"
+    $HelpMessage = "Please enter a valid input (Y or N)"
+
+    $AllInput = @()
+    $AllInput += , $ValidInput
+    $AllInput += , $confirmAccess
+    $AllInput += , $HelpMessage
+
+    $confirmAccess = validateUserInput($AllInput)
+
+    Write-LogDebug "ConfirmAccess = $confirmAccess" -DebugLogLevel 3
+
+    if ($confirmAccess -eq 'Y')
+    { 
+        #user chose to proceed
+        return $true
+    } 
+    else 
+    { 
+        #user chose to abort
+        return $false
+    }
+}
+
+
 
 function Invoke-CommonCollectors()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:basicBit
+    Write-LogInformation "Collecting logs for '$BASIC_NAME' scenario" -ForegroundColor Green
 
     GetRunningDrivers
     GetSysteminfoSummary
@@ -2237,7 +2896,7 @@ function Invoke-CommonCollectors()
     HandleCtrlC
     Start-Sleep -Seconds 1
 
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2251,7 +2910,8 @@ function Invoke-CommonCollectors()
     HandleCtrlC
     Start-Sleep -Seconds 2
     GetTaskList 
-    GetSQLErrorLogs
+    GetSQLErrorLogsDumpsSysHealth
+    GetPolybaseLogs
 
     HandleCtrlC
     Start-Sleep -Seconds 2
@@ -2267,21 +2927,21 @@ function Invoke-CommonCollectors()
     {
         GetClusterLogs
     } 
-    
+
+    HandleCtrlC
+    GetSQLVSSWriterLog
 } 
 
 function Invoke-GeneralPerfScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:generalperfBit
+    Write-LogInformation "Collecting logs for '$GENERALPERF_NAME' scenario" -ForegroundColor Green
     
-    Invoke-CommonCollectors
+    
     GetPerfmonCounters
     
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2315,14 +2975,12 @@ function Invoke-DetailedPerfScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$DETAILEDPERF_NAME' scenario" -ForegroundColor Green
 
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:detailedperfBit
-
-    Invoke-CommonCollectors
+    
     GetPerfmonCounters
     
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2355,13 +3013,10 @@ function Invoke-AlwaysOnScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$ALWAYSON_NAME' scenario" -ForegroundColor Green
+    
 
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:alwaysonBit
-
-    Invoke-CommonCollectors
-
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2371,6 +3026,7 @@ function Invoke-AlwaysOnScenario()
         GetAlwaysOnDiag
         GetXeventsAlwaysOnMovement
         GetPerfmonCounters
+        GetAlwaysOnHealthXel
     }
 }
 
@@ -2378,13 +3034,9 @@ function Invoke-ReplicationScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:replBit
-
-    Invoke-CommonCollectors
-    
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    Write-LogInformation "Collecting logs for '$REPLICATION_NAME' scenario" -ForegroundColor Green
+        
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2402,9 +3054,7 @@ function Invoke-DumpMemoryScenario
 {  
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:dumpMemoryBit
+    Write-LogInformation "Collecting logs for '$DUMPMEMORY_NAME' scenario" -ForegroundColor Green
 
     #invoke memory dump facility
     GetMemoryDumps
@@ -2416,9 +3066,7 @@ function Invoke-NetworkScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:networktraceBit
+    Write-LogInformation "Collecting logs for '$NETWORKTRACE_NAME' scenario" -ForegroundColor Green
 
     GetNetworkTrace 
 
@@ -2432,12 +3080,9 @@ function Invoke-WPRScenario()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$WPR_NAME' scenario" -ForegroundColor Green
 
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:wprBit
-
-
-    Write-LogWarning "Windows Performance Recorder (WPR) is a resource-intensive data collection process! Use only under Microsoft guidance."
+    Write-LogWarning "WPR is a resource-intensive data collection process! It will run for 15 seconds only. Use under Microsoft guidance."
     
     $ValidInput = "Y","N"
     $WPR_YesNo = Read-Host "Do you want to proceed - Yes ('Y') or No ('N') >" -CustomLogMessage "WPR_YesNo Console input:"
@@ -2463,14 +3108,13 @@ function Invoke-WPRScenario()
 
 function Invoke-MemoryScenario 
 {
+    [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$MEMORY_NAME' scenario" -ForegroundColor Green
 
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:memoryBit
 
-    Invoke-CommonCollectors
-
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
         Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -2485,14 +3129,46 @@ function Invoke-MemoryScenario
 
 function Invoke-SetupScenario 
 {
+    [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    #turn the bit on for this scenario
-    EnableScenario -scenarioBit $global:setupBit
-
-    Invoke-CommonCollectors
+    Write-LogInformation "Collecting logs for '$SETUP_NAME' scenario" -ForegroundColor Green
+    
     HandleCtrlC
     GetSQLSetupLogs
+}
+
+function Invoke-BackupRestoreScenario()
+{
+    [console]::TreatControlCAsInput = $true
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$BACKUPRESTORE_NAME' scenario" -ForegroundColor Green
+
+    GetXeventBackupRestore
+
+    HandleCtrlC
+    
+    GetBackupRestoreTraceFlags
+
+    # adding Perfmon counter collection to this scenario
+    GetPerfmonCounters
+
+    HandleCtrlC
+
+    GetSQLVSSWriterLog
+
+    GetVSSAdminLogs
+}
+
+function Invoke-OnShutDown()
+{
+    [console]::TreatControlCAsInput = $true
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    if (IsScenarioEnabled -scenarioBit $global:basicBit -logged $true)
+    {
+        Invoke-CommonCollectors 
+    }
+
 }
 
 function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop="")
@@ -2518,7 +3194,7 @@ function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop
         #wait until time is reached
         if ($formatted_date_time -gt (Get-Date))
         {
-            Write-LogWarning "Waiting until the specified $startOrStop time '$timeParam' is reached...(CTRL+C to stop)"
+            Write-LogWarning "Waiting until the specified $startOrStop time '$timeParam' is reached...(CTRL+C to stop - wait for response)"
         }
         else
         {
@@ -2527,7 +3203,7 @@ function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop
         
 
         [int] $increment = 0
-        [int] $sleepInterval = 5
+        [int] $sleepInterval = 2
 
         while ((Get-Date) -lt (Get-Date $formatted_date_time)) 
         {
@@ -2559,8 +3235,49 @@ function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop
         $function_name = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-Host "'$function_name' function failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
+    }
+
+}
+
+function ArbitrateSelectedScenarios ([bool] $Skip = $false)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    if ($true -eq $Skip)
+    {
+        return
+    }
+
+    
+    #if generalperf and detailedperf are both enabled , disable general perf and keep detailed (which is a superset)
+    if (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+    -and ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit  )) )
+    {
+        DisableScenario -pScenarioBit $global:generalperfBit
+        Write-LogDebug "Disabling '$GENERALPERF_NAME' scenario since $DETAILEDPERF_NAME is already enabled"
+    }
+
+    #limit WPR to run only with Basic
+    if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) 
+    {
+        #check if Basic is enabled
+        $basic_enabled = IsScenarioEnabled -scenarioBit $global:basicBit
+
+        #reset scenario bit to 0 to turn off all collection
+        Write-LogWarning "The '$WPR_NAME' scenario is only allowed to run together with Basic scenario. All other scenarios will be disabled" 
+        DisableAllScenarios
+        Start-Sleep 5
+        
+        #enable WPR
+        EnableScenario -pScenarioBit $global:wprBit
+        
+        #if Basic was enabled earlier, turn it back on after all was reset
+        if ($true -eq $basic_enabled)
+        {
+            EnableScenario -pScenarioBit $global:basicBit
+        }
+        return
     }
 
 }
@@ -2572,193 +3289,362 @@ function Select-Scenario()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     #check if a timer parameter set is passed and sleep until specified time
-    StartStopTimeForDiagnostics -timeParam $DiagStartTime -startOrStop "start"
+    StartStopTimeForDiagnostics -timeParam $DiagStartTime -startOrStop "start" 
+
+
 
     Write-LogInformation ""
     Write-LogInformation "Initiating diagnostics collection... " -ForegroundColor Green
 
-    [string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup"
+    [string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup", "Backup and Restore"
     $scenarioIntRange = 0..($ScenarioArray.Length -1)  #dynamically count the values in array and create a range
 
-    if (($global:ScenarioChoice -eq "MenuChoice") -or ($global:ScenarioChoice -eq ""))
+    [int[]]$scenIntArray =@()
+
+    #check if the first element of scenarioChoice array contains a prameter or is empty - if so, proceed to menu
+    if (($Scenario[0] -eq "MenuChoice") -or ($Scenario[0] -eq [String]::Empty))
     {
         Write-LogInformation "Please select one of the following scenarios:`n"
         Write-LogInformation ""
-        Write-LogInformation "ID   Scenario"
-        Write-LogInformation "--   ---------------"
+        Write-LogInformation "ID`t Scenario"
+        Write-LogInformation "--`t ---------------"
 
         for($i=0; $i -lt $ScenarioArray.Count;$i++)
         {
-            Write-LogInformation $i "  " $ScenarioArray[$i]
+            Write-LogInformation $i "`t" $ScenarioArray[$i]
         }
 
         $isInt = $false
         $ScenarioIdInt = 777
-        
-
-
+        $WantDetailedPerf = $false
 
         
-        while(($isInt -eq $false) -or ($ValidId -eq $false))
+
+        
+        while(($isInt -eq $false) -or ($ValidId -eq $false) -or ($WantDetailedPerf -eq $false))
         {
             Write-LogInformation ""
-            Write-LogWarning "Enter the Scenario ID for which you want to collect diagnostic data. Then press Enter" 
+            Write-LogWarning "Type one or more Scenario IDs (separated by '+') for which you want to collect diagnostic data. Then press Enter" 
 
-            $ScenIdStr = Read-Host "Enter the Scenario ID from list above>" -CustomLogMessage "Scenario Console input:"
+            $ScenIdStr = Read-Host "Scenario ID(s) e.g. 0+3+6>" -CustomLogMessage "Scenario Console input:"
+            [string[]]$scenStrArray = $ScenIdStr.Split('+')
             
-            try{
-                    $ScenarioIdInt = [convert]::ToInt32($ScenIdStr)
-                    $isInt = $true
-                }
+            Write-LogDebug "You have selected the following scenarios (str): $scenStrArray" -DebugLogLevel 3
 
-            catch [FormatException]
-                {
-                     Write-LogError "The value entered for ID '",$ScenIdStr,"' is not an integer"
-                     continue 
-                }
-
-            #validate this ID is in the list discovered 
-            if($ScenarioIdInt -in ($scenarioIntRange))
+            
+            
+            foreach($int_string in $scenStrArray) 
             {
-                $ValidId = $true
+                try 
+                {
+                    #convert the strings to integers and add to int array
+                    $int_number = [int]::parse($int_string)
+                    $scenIntArray+=$int_number
 
+                    $isInt = $true
+                    if($int_string -notin ($scenarioIntRange))
+                    {
+                        $ValidId = $false
+                        $scenIntArray =@()
+                        Write-LogError "The ID entered '",$ScenIdStr,"' is not in the list "
+                    }
+                    else 
+                    {
+                        $ValidId = $true    
+                    }
+                }
+                catch 
+                {
+                    Write-LogError "The value entered for ID '",$int_string,"' is not an integer"
+                    $scenIntArray =@()
+                    $isInt = $false
+                }
+            }
+
+            
+            #warn users when they select the Detailed perf scenario about perf impact. No warning if all others
+            if ($int_number -eq $DetailedPerfScenId) 
+            {
+                # if true, proceed, else, disable scenario and try again
+                $WantDetailedPerf = DetailedPerfCollectorWarning
+
+                if ($false -eq $WantDetailedPerf)
+                {
+                    #once user declines, need to clear the selected bit
+                    DisableScenario -pScenarioBit $global:detailedperfBit
+                    Write-LogWarning "You selected not to proceed with Detailed Perf scenario. Please choose again"    
+                }
+            }
+            else 
+            {
+                $WantDetailedPerf = $true    
+            }
+            
+        } #end of WHILE to select scenario
+
+            #remove duplicate entries
+            $scenIntArray = $scenIntArray | Select-Object -Unique 
+
+            Write-LogDebug "You have selected the following scearnios (int): $scenIntArray" -DebugLogLevel 3
+            
+            foreach ($ScenarioIdInt in $scenIntArray) 
+            {
                 switch ($ScenarioIdInt) 
                 {
-                    0 { $global:ScenarioChoice = "Basic"}
-                    1 { $global:ScenarioChoice = "GeneralPerf"}
-                    2 { $global:ScenarioChoice = "DetailedPerf"}
-                    3 { $global:ScenarioChoice = "Replication"}
-                    4 { $global:ScenarioChoice = "AlwaysOn"}
-                    5 { $global:ScenarioChoice = "Network"}
-                    6 { $global:ScenarioChoice = "Memory"}
-                    7 { $global:ScenarioChoice = "DumpMemory"}
-                    8 { $global:ScenarioChoice = "WPR"}
-                    9 { $global:ScenarioChoice = "Setup"}
-                    Default { Write-LogError "No valid scenario was picked. Not sure why we are here"}
-                }
-                
-            }
-            else
-            {
-                $ValidId = $false
-                Write-LogError "The ID entered '",$ScenIdStr,"' is not in the list "
-            }
-        } #end of while
+                    $BasicScenId 
+                    { 
+                        EnableScenario -pScenarioBit $global:basicBit
+                    }
+                    $GeneralPerfScenId 
+                    {
+                        EnableScenario -pScenarioBit $global:generalperfBit
+                        
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+                    $DetailedPerfScenId 
+                    { 
+                        EnableScenario -pScenarioBit $global:detailedperfBit
+
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+                    $ReplicationScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:replBit
+                        
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+                    $AlwaysOnScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:alwaysonBit
+                    }
+                    $NetworkTraceScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:networktraceBit
+                    }
+                    $MemoryScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:memoryBit
+
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+                    $DumpMemoryScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:dumpMemoryBit
+                    }
+                    $WprScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:wprBit
+                    }
+                    $SetupScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:setupBit
+
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+                    $BackupRestoreScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:BackupRestoreBit
+
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
+
+                    Default {
+                            Write-LogError "No valid scenario was picked. Not sure why we are here"
+                            return $false
+                    }
+                } # end of Switch
+            } #end of foreach    
 
     } #end of if for using a Scenario menu
 
-    #set additional properties to certain scenarios
-    switch ($global:ScenarioChoice) 
+    #handle the command-line parameter case
+    else 
     {
-        "Basic" { 
-            Set-AutomaticStop -collector_name $global:ScenarioChoice
-        }
-        "Replication" { 
-            Set-AutomaticStop -collector_name $global:ScenarioChoice
-        }
-        "Network" { 
-            Set-InstanceIndependentCollection -collector_name $global:ScenarioChoice
-        }
-        "DumpMemory" { 
-            Set-AutomaticStop -collector_name $global:ScenarioChoice
-        }
-        "WPR" { 
-            Set-AutomaticStop -collector_name $global:ScenarioChoice
-            Set-InstanceIndependentCollection -collector_name $global:ScenarioChoice
-        }
-        "Setup" { 
-            Set-AutomaticStop -collector_name $global:ScenarioChoice
-        }
-    }
-        
+        $ScenarioArray = $Scenario.Split('+')
+        Write-LogDebug "Command-line scenarios selected: $Scenario. Parsed: $ScenarioArray" -DebugLogLevel 3
 
+        #parse startup parameter $Scenario for any values
+        foreach ($scenario_name_item in $ScenarioArray) 
+        {
+            Write-LogDebug "Individual scenario from Scenario param: $scenario_name_item" -DebugLogLevel 5
+
+            # convert the name to a scenario bit
+            $bit = ScenarioNameToBit -pScenarioName $scenario_name_item
+            EnableScenario -pScenarioBit $bit
+
+            # send a warning for Detailed Perf
+            if ($bit -eq $global:detailedperfBit) 
+            {
+                # if true, proceed, else, exit
+                if($false -eq (DetailedPerfCollectorWarning))
+                {
+                    exit
+                }
+            }
+
+            
+        }
+        
+    }
+
+    #resolove /arbitrate any scenario inconsistencies, conflicts, illogical choices
+    ArbitrateSelectedScenarios 
+
+
+    #set additional properties to certain scenarios
+    Set-AutomaticStop 
+    Set-InstanceIndependentCollection 
+    
+
+    Write-LogDebug "Scenario Bit value = $global:scenario_bitvalue" -DebugLogLevel 2
+    Write-LogInformation "The scenarios selected are: '$global:ScenarioChoice'"
+
+    return $true
 }
 
-function Set-AutomaticStop ([string] $collector_name) 
+
+function Set-AutomaticStop () 
 {
     # this function is invoked when the user does not need to wait for any long-term collectors (like Xevents, Perfmon, Netmon). 
     # Just gather everything and shut down
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Write-LogInformation "The selected '$collector_name' collector will stop automatically after it gathers logs" -ForegroundColor Green
-    $global:stop_automatically = $true
+
+
+    if ((
+            ($true -eq (IsScenarioEnabled -scenarioBit $global:basicBit)) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:replBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:dumpMemoryBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:setupBit )) `
+        )  -and
+        (
+            ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
+        ) )
+    {
+        Write-LogInformation "The selected '$global:ScenarioChoice ' collector(s) will stop automatically after logs are gathered" -ForegroundColor Green
+        $global:stop_automatically = $true
+    }
+
+    
 }
 
-function Set-InstanceIndependentCollection ([string] $collector_name) 
+function Set-InstanceIndependentCollection () 
 {
     # this function is invoked when the data collected does not target a specific SQL instance (e.g. WPR, Netmon, Setup). 
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Write-LogInformation "The selected '$collector_name' scenario gathers logs independent of a SQL instance"
-    $global:instance_independent_collection = $true    
+
+    if ((
+            ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit )) `
+            
+        )  -and
+        (
+            ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:replBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:dumpMemoryBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:setupBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
+        ) )
+    {
+        Write-LogInformation "The selected '$global:ScenarioChoice' scenario(s) gather logs independent of a SQL instance"
+        $global:instance_independent_collection = $true    
+    }
+
+
+   
 }
 
 function Start-DiagCollectors ()
 {
-
-
     [console]::TreatControlCAsInput = $true
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    
-            
-    #launch the scenario collectors
+    Write-LogDebug "The ScenarioChoice array contains the following entries: '$global:ScenarioChoice' " -DebugLogLevel 3
 
-    switch ($global:ScenarioChoice) 
+    # launch the scenario collectors that are enabled
+    # common collectors (basic) will be called on shutdown
+    if (IsScenarioEnabled -scenarioBit $global:basicBit -logged $true)
     {
-        "GeneralPerf" 
-        {
-            Invoke-GeneralPerfScenario
-        }
-        "DetailedPerf"
-        {
-            Invoke-DetailedPerfScenario
-        }
-        "Basic"
-        {
-            Invoke-CommonCollectors 
-        }
-        "AlwaysOn"
-        {
-            Invoke-AlwaysOnScenario
-        }
-        "Replication"
-        {
-            Invoke-ReplicationScenario
-        }
-        "Network"
-        {
-            Invoke-NetworkScenario
-        }
-        "Memory"
-        {
-            Invoke-MemoryScenario
-        }
-        "DumpMemory"
-        {
-            Invoke-DumpMemoryScenario
-        }
-        "WPR"
-        {
-            Invoke-WPRScenario
-        }
-        "Setup"
-        {
-            Invoke-SetupScenario
-        }
-
-        Default 
-        {
-            Write-LogInformation "No scenario was invoked"
-        }
+        Write-LogInformation "Basic collectors will execute on shutdown"
     }
+    if (IsScenarioEnabled -scenarioBit $global:generalperfBit -logged $true)
+    {
+        Invoke-GeneralPerfScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:detailedperfBit -logged $true)
+    {
+        Invoke-DetailedPerfScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:alwaysonBit -logged $true)
+    {
+        Invoke-AlwaysOnScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:replBit -logged $true)
+    {
+        Invoke-ReplicationScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:networktraceBit -logged $true)
+    {
+        Invoke-NetworkScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:memoryBit -logged $true)
+    {
+        Invoke-MemoryScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:dumpMemoryBit -logged $true)
+    {
+        Invoke-DumpMemoryScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:wprBit -logged $true)
+    {
+        Invoke-WPRScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:setupBit -logged $true)
+    {
+        Invoke-SetupScenario
+    }
+    if (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit -logged $true)
+    {
+        Invoke-BackupRestoreScenario
+    } 
     
-    Write-LogInformation "Diagnostic collection started." -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
-    Write-LogInformation ""
-
+    if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+    {
+        Write-LogInformation "Diagnostic collection started." -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
+        Write-LogInformation ""
+    }
 }
 
 function Stop-DiagCollectors() 
@@ -2770,7 +3656,7 @@ function Stop-DiagCollectors()
     $ValidStop = $false
 
     #for Basic scenario we don't need to wait as there are only static logs
-    if (($DiagStopTime -ne "0000") -and ($Scenario -ne "Basic"))
+    if (($DiagStopTime -ne "0000") -and ($Scenario -ne $BASIC_NAME))
     {
         #likely a timer parameter is set to stop at a specified time
         StartStopTimeForDiagnostics -timeParam $DiagStopTime -startOrStop "stop"
@@ -2803,8 +3689,8 @@ function Stop-DiagCollectors()
         }  
         else 
         {
-            Write-LogDebug "Shutting down automatically. No user interaction to stop collectors" -DebugLogLevel 2
-            Write-LogInformation "Shutting down the collectors" -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
+            Write-LogInformation "Shutting down automatically. No user interaction to stop collectors" -ForegroundColor Green
+            Write-LogInformation "Shutting down the collectors"  #DO NOT CHANGE - Message is backward compatible
         }        
         #create an output directory. -Force will not overwrite it, it will reuse the folder
         #$global:present_directory = Convert-Path -Path "."
@@ -2812,8 +3698,8 @@ function Stop-DiagCollectors()
         $partial_output_file_name = Create-PartialOutputFilename -server $server
         $partial_error_output_file_name = Create-PartialErrorOutputFilename -server $server
 
-        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
-        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
+        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
         )
         {
             #SQL Server Perf Stats Snapshot
@@ -2821,60 +3707,80 @@ function Stop-DiagCollectors()
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
             $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
             $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
+            $executable = "sqlcmd.exe"
             $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $output_file + " -i" + $input_script
-            Write-LogDebug $argument_list
             Write-LogInformation "Executing shutdown command: $collector_name"
-            $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-            [void]$global:processes.Add($p)
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+                        
         }
 
-        #STOP the XEvent session
-        if (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit -scenarioName "AlwaysOn")) `
-            -and ("" -ne $global:xevent_collector)
+        #STOP the XEvent sessions
+        if ( (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit)) )
             ) 
         { 
-            #avoid errors if there was not Xevent collector started
+            #avoid errors if there was not Xevent collector started 
             $collector_name = "xevents_stop"
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
-            $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER;" 
+            $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_session] ON SERVER;" 
+            $executable = "sqlcmd.exe"
             $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_stop + "`""
             Write-LogInformation "Executing shutdown command: $collector_name"
-            Write-LogDebug $alter_event_session_stop
-            Write-LogDebug $argument_list
-            $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-            [void]$global:processes.Add($p)
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+             
+            
+        }
+
+        if ( $true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit ) ) 
+        { 
+            #avoid errors if there was not Xevent collector started 
+            $collector_name = "xevents_alwayson_data_movement_stop"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
+            $alter_event_session_ag_stop = "ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER;" 
+            $executable = "sqlcmd.exe"
+            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_ag_stop + "`""
+            Write-LogInformation "Executing shutdown command: $collector_name"
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+             
+        }
+
+        
+
+        #Disable backup restore trace flag
+        if ( $true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit ) ) 
+        { 
+            $collector_name = "Disable Backup Restore Trace Flag"
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
+            $Disabled_Trace_Flag = "DBCC TRACEOFF(3004,3212,3605,-1)" 
+            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $Disabled_Trace_Flag + "`""
+            Write-LogInformation "Executing Disabling traceflag command: $collector_name"
+            Write-LogDebug "Disabling trace flags for Backup/Restore: $Disabled_Trace_Flag " -DebugLogLevel 2
+            StartNewProcess -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden
+            
         }
 
         #STOP Perfmon
-        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -scenarioName "GeneralPerf")) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -scenarioName "DetailedPerf")) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:memoryBit -scenarioName "Memory")) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit -scenarioName "AlwaysOn")) `
+        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
             )
         {
 
             $collector_name = "PerfmonStop"
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
             $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon"
+            $executable = "cmd.exe"
             Write-LogInformation "Executing shutdown command: $collector_name"
-            Write-LogDebug $argument_list
-            $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden -PassThru
-            [void]$global:processes.Add($p)
+            StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden
+             
+            
         }
 
 
         
-        # #sp_diag_trace_flag_restore
-        # $collector_name = "RestoreTraceFlagOrigValues"
-        # $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        # $query = "EXEC tempdb.dbo.sp_diag_trace_flag_restore  'SQLDIAG'"  
-        # $argument_list ="-S" + $server +  " -E -Hsqllogscout_stop -w8000 -o"+$error_file + " -Q`""+ $query + "`" "
-        # Write-LogInformation "Stopping Collector: $collector_name"
-        # Write-LogDebug $argument_list
-        # $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        # [void]$global:processes.Add($p)
+
 
         #wait for other work to finish
         Start-Sleep -Seconds 3
@@ -2895,24 +3801,32 @@ function Stop-DiagCollectors()
                 close curSession;
                 deallocate curSession;"  
         $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $query + "`" "
+        $executable = "sqlcmd.exe"
         Write-LogInformation "Executing shutdown command: $collector_name"
-        Write-LogDebug $argument_list
-        $p = Start-Process -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-        [void]$global:processes.Add($p)
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+         
+        
 
         Start-Sleep -Seconds 1
 
         #STOP Network trace
-        if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit -scenarioName "NetworkTrace"))
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit))
         {
 
             $collector_name = "NettraceStop"
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
             $argument_list = "/C title 'stopping network trace...' & netsh trace stop sessionname='sqllogscout_nettrace'"
+            $executable = "cmd.exe"
             Write-LogInformation "Executing shutdown command: $collector_name. Waiting - this may take a few of minutes..."
-            Write-LogDebug $argument_list
-            $p = Start-Process -FilePath "cmd.exe" -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
-            [void]$global:processes.Add($p)
+            # StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal
+            Write-LogDebug $executable $argument_list 
+            $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
+            $pn = $p.ProcessName
+            $sh = $p.SafeHandle
+            if($false -eq $p.HasExited)   
+            {
+                [void]$global:processes.Add($p)
+            }
 
             [int]$cntr = 0
 
@@ -2920,7 +3834,7 @@ function Stop-DiagCollectors()
             {
                 [void] $p.WaitForExit(20000)
                 if ($cntr -gt 0) {
-                    Write-LogWarning "Continuing to wait for network trace to stop..."
+                    Write-LogWarning "Please wait for network trace to stop..."
                 }
                 $cntr++
             } 
@@ -2929,17 +3843,29 @@ function Stop-DiagCollectors()
 
         
         #stop WPR trace
-        if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit -scenarioName "WPR"))
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit ))
         {
+             # special case for WPR trace - use the host name if no instance name specified (only WPR invoked)
+            if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+            {
+                $server = $global:host_name
+            }
             $collector_name = $global:wpr_collector_name
+            $partial_output_file_name_wpr = Create-PartialOutputFilename -server $server
             $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
+            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name_wpr -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
             $executable = "cmd.exe"
             $argument_list = $argument_list = "/C wpr.exe -stop " + $output_file
             Write-LogInformation "Executing shutdown command: $collector_name"
-            Write-LogDebug $argument_list
+            Write-LogDebug $executable $argument_list
+            # StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
             $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-            [void]$global:processes.Add($p)
+            $pn = $p.ProcessName
+            $sh = $p.SafeHandle
+            if($false -eq $p.HasExited)   
+            {
+                [void]$global:processes.Add($p)
+            }
 
             $cntr = 0 #reset the counter
             while ($false -eq $p.HasExited) 
@@ -2947,14 +3873,26 @@ function Stop-DiagCollectors()
                 [void] $p.WaitForExit(5000)
             
                 if ($cntr -gt 0) {
-                    Write-LogWarning "Continuing to wait for WPR trace to stop..."
+                    Write-LogWarning "Please wait for WPR trace to stop..."
                 }
                 $cntr++
             } 
         }
 
+        # planning for future shutdown collectors
+        Invoke-OnShutDown
+
         Write-LogInformation "Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus..." -ForegroundColor Green
         Start-Sleep -Seconds 3
+
+        #Set back the setting of  SqlWriterConfig.ini file 
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit -scenarioName "BackupRestore"))
+        {
+            $file = 'C:\Program Files\Microsoft SQL Server\90\Shared\SqlWriterConfig.ini'
+            (Get-Content $file).Replace("TraceLevel=VERBOSE","TraceLevel=DEFAULT") | Set-Content $file
+            (Get-Content $file).Replace("TraceFileSizeMb=10","TraceFileSizeMb=1") | Set-Content $file
+            Restart-Service SQLWriter -force
+        }
 
 
     }
@@ -2968,7 +3906,7 @@ function Stop-DiagCollectors()
 
 }
 
-function Invoke-DiagnosticCleanUp()
+function Invoke-DiagnosticCleanUpAndExit()
 {
 
   Write-LogDebug "inside" $MyInvocation.MyCommand
@@ -2992,51 +3930,64 @@ function Invoke-DiagnosticCleanUp()
     close curSession;
     deallocate curSession;
     "  
-  if ($server -ne "no_instance_found")
+  if ($server -ne $NO_INSTANCE_NAME)
   {
       $executable = "sqlcmd.exe"
       $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w8000 -Q`""+ $query + "`" "
-      Write-LogDebug $executable $argument_list
-      $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-      [void]$global:processes.Add($p)
+      StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
   }
   
   
+   #STOP the XEvent sessions
+
+  if ($server -ne $NO_INSTANCE_NAME)
+  {  
+    $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_session] ON SERVER; END" 
+    $executable = "sqlcmd.exe"
+    $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w8000 -Q`"" + $alter_event_session_stop + "`""
+    StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+        
+
+    #avoid errors if there was not Xevent collector started 
+    $alter_event_session_ag_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER; END" 
+    $executable = "sqlcmd.exe"
+    $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -Q`"" + $alter_event_session_ag_stop + "`""
+    StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+    
+  }
+
   #STOP Perfmon
   $executable = "cmd.exe"
   $argument_list ="/C logman stop logscoutperfmon & logman delete logscoutperfmon"
-  Write-LogDebug $executable $argument_list
-  $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-  [void]$global:processes.Add($p)
-  
-  if ($server -ne "no_instance_found")
-  {  
-    $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_collector] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_collector] ON SERVER; END" 
-    $executable = "sqlcmd.exe"
-    $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w8000 -Q`"" + $alter_event_session_stop + "`""
-    Write-LogDebug $executable $argument_list
-    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-    [void]$global:processes.Add($p)
-  }
+  StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+
+
 
   #STOP network trace
-  if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit -scenarioName "NetworkTrace"))
+  if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit ))
   {
     $executable = "cmd.exe"
     $argument_list ="/C title 'cleanup network trace...' & echo 'This process may take a few minutes...' & netsh trace stop sessionname='sqllogscout_nettrace'"
-    Write-LogDebug $executable $argument_list
-    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru -Wait
-    [void]$global:processes.Add($p)
+    StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -Wait $true
+    Write-LogWarning "This process of shutting down network tracing may take a few minutes. Please wait..."
+    
   }
 
-  #stop the WPR process if running any
-  if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit -scenarioName "WPR"))
+  #stop the WPR process if running any on the system
+  if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit ))
   {
     $executable = "cmd.exe"
     $argument_list = $argument_list = "/C wpr.exe -cancel " 
+    # StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
     Write-LogDebug $executable $argument_list
     $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -PassThru
-    [void]$global:processes.Add($p)
+    $pn = $p.ProcessName
+    $sh = $p.SafeHandle
+    if($false -eq $p.HasExited)   
+    {
+        [void]$global:processes.Add($p)
+    }
 
     [int]$cntr = 0 
     while ($false -eq $p.HasExited) 
@@ -3049,29 +4000,80 @@ function Invoke-DiagnosticCleanUp()
         }
         $cntr++
     } 
+  } #if wrp enabled
 
-  }
+  if (($server -ne $NO_INSTANCE_NAME) -and ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) )
+  {
+    #clean up backup/restore tace flags
+    $Disabled_Trace_Flag = "DBCC TRACEOFF(3004,3212,3605,-1)" 
+    $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -Q`"" + $Disabled_Trace_Flag + "`""
+    StartNewProcess -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden
+        
+  } 
 
-  
     Write-LogDebug "Checking that all processes terminated..."
 
     #allowing some time for above processes to clean-up
-    Start-Sleep 3
+    Start-Sleep 5
 
-    foreach ($p in $global:processes) {
-        if ($p.HasExited -eq $false) {
+    [string]$processname = [String]::Empty
+    [string]$processid = [String]::Empty
+    [string]$process_startime = [String]::Empty
 
-            $wmiqry = "select * from Win32_Process where ProcessId = " + ([string]$p.Id)
-            $OSCommandLine = (Get-WmiObject -Query $wmiqry).CommandLine
+    foreach ($p in $global:processes) 
+    {
+        # get the properties of the processes we stored in the array into string variables so we can show them
+        if ($true -ne [String]::IsNullOrWhiteSpace($p.ProcessName) )
+        {
+            $processname = $p.ProcessName
+        }
+        else 
+        {
+            $processname = "NoProcessName"
+        }
+        if ($null -ne $p.Id )
+        {
+            $processid = $p.Id.ToString()
+        }
+        else 
+        {
+            $processid = "0"
+        }
+        if ($null -ne $p.StartTime)
+        {
+            $process_startime = $p.StartTime.ToString('yyyyMMddHHmmssfff')
+        }
+        else 
+        {
+            $process_startime = "NoStartTime"
+        }
 
-            Write-LogInformation ("Process ID " + ([string]$p.Id) + " has not exited yet.")
-            Write-LogInformation ("Process CommandLine for Process ID " + ([string]$p.Id) + " is: " + $OSCommandLine)
-            Write-LogDebug ("Process CPU Usage Total / User / Kernel: " + [string]$p.TotalProcessorTime + "     " + [string]$p.UserProcessorTime + "     " + [string]$p.PrivilegedProcessorTime) -DebugLogLevel 3
-            Write-LogDebug ("Process Start Time: " + [string]$p.StartTime) -DebugLogLevel 3
-            Write-LogDebug ("Process CPU Usage %: " + [string](($p.TotalProcessorTime.TotalMilliseconds / ((Get-Date) - $p.StartTime).TotalMilliseconds) * 100)) -DebugLogLevel 3
-            Write-LogDebug ("Process Peak WorkingSet (MB): " + [string]$p.PeakWorkingSet64 / ([Math]::Pow(1024, 2))) -DebugLogLevel 3
-            Write-LogWarning ("Stopping Process ID " + ([string]$p.Id))
-            Stop-Process $p
+        Write-LogDebug "Process contained in Processes array is '$processname', $processid, $process_startime" -DebugLogLevel 5
+
+        if ($p.HasExited -eq $false) 
+        {
+            $cur_proc = Get-Process -Id $p.Id
+
+            $cur_proc_id = $cur_proc.Id.ToString()
+            $cur_proc_starttime = $cur_proc.StartTime.ToString('yyyyMMddHHmmssfff')
+            $cur_proc_name = $cur_proc.ProcessName
+
+            Write-LogDebug "Original process which hasn't exited and is matched by Id is: $cur_proc_id, $cur_proc_name, $cur_proc_starttime" -DebugLogLevel 5
+
+            if (($cur_proc.Id -eq $p.Id) -and ($cur_proc.StartTime -eq $p.StartTime) -and ($cur_proc.ProcessName -eq $p.ProcessName) )
+            {
+                Write-LogInformation ("Process ID " + ([string]$p.Id) + " has not exited yet.")
+                Write-LogInformation ("Process CommandLine for Process ID " + ([string]$p.Id) + " is: " + $OSCommandLine)
+                Write-LogDebug ("Process CPU Usage Total / User / Kernel: " + [string]$p.TotalProcessorTime + "     " + [string]$p.UserProcessorTime + "     " + [string]$p.PrivilegedProcessorTime) -DebugLogLevel 3
+                Write-LogDebug ("Process Start Time: " + [string]$p.StartTime) -DebugLogLevel 3
+                Write-LogDebug ("Process CPU Usage %: " + [string](($p.TotalProcessorTime.TotalMilliseconds / ((Get-Date) - $p.StartTime).TotalMilliseconds) * 100)) -DebugLogLevel 3
+                Write-LogDebug ("Process Peak WorkingSet (MB): " + [string]$p.PeakWorkingSet64 / ([Math]::Pow(1024, 2))) -DebugLogLevel 3
+                Write-LogWarning ("Stopping Process ID " + ([string]$p.Id))
+                Stop-Process $p
+            }
+        }
+        else {
+            Write-LogDebug "Process '$processname', $processid, $process_startime has exited." -DebugLogLevel 5
         }
     }
   
@@ -3106,44 +4108,129 @@ function Invoke-DiagnosticCleanUp()
 [int] $global:dumpMemoryBit    = 128
 [int] $global:wprBit           = 256
 [int] $global:setupBit         = 512
-[int] $global:futureScBit      = 1024
+[int] $global:BackupRestoreBit = 1024
+[int] $global:futureScBit      = 2048
 
-
-function EnableScenario([int]$scenarioBit)
+function ScenarioBitToName ([int] $pScenarioBit)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Write-LogDebug "Enabling scenario bit $scenarioBit" -DebugLogLevel 3
+    [string] $scenName = [String]::Empty
 
-    $global:scenario_bitvalue = $global:scenario_bitvalue -bor $scenarioBit
+    switch ($pScenarioBit) 
+    {
+        1 { $scenName = $BASIC_NAME}
+        2 { $scenName = $GENERALPERF_NAME}
+        4 { $scenName = $DETAILEDPERF_NAME}
+        8 { $scenName = $REPLICATION_NAME}
+        16 { $scenName = $ALWAYSON_NAME}
+        32 { $scenName = $NETWORKTRACE_NAME}
+        64 { $scenName = $MEMORY_NAME}
+        128 { $scenName = $DUMPMEMORY_NAME}
+        256 { $scenName = $WPR_NAME}
+        512 { $scenName = $SETUP_NAME}
+        1024 { $scenName = $BACKUPRESTORE_NAME}
+        Default {}
+    }
+
+   Write-LogDebug "Scenario bit $pScenarioBit translates to $scenName" -DebugLogLevel 5
+
+    return $scenName
 }
 
-function DisableScenario([int]$scenarioBit)
+
+function ScenarioNameToBit ([string] $pScenarioName)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Write-LogDebug "Disabling scenario bit $scenarioBit" -DebugLogLevel 3
+    [int] $scenBit = 0
+
+    switch ($pScenarioName) 
+    {
+        $BASIC_NAME { $scenBit = 1}
+        $GENERALPERF_NAME { $scenBit = 2}
+        $DETAILEDPERF_NAME { $scenBit = 4}
+        $REPLICATION_NAME { $scenBit = 8}
+        $ALWAYSON_NAME { $scenBit = 16}
+        $NETWORKTRACE_NAME { $scenBit = 32}
+        $MEMORY_NAME { $scenBit = 64}
+        $DUMPMEMORY_NAME { $scenBit = 128}
+        $WPR_NAME { $scenBit = 256}
+        $SETUP_NAME { $scenBit = 512}
+        $BACKUPRESTORE_NAME { $scenBit = 1024}
+        Default {}
+    }
+
+    Write-LogDebug "Scenario name $pScenarioName translates to bit $scenBit" -DebugLogLevel 5
+
+    return $scenBit
+}
+
+function EnableScenario([int]$pScenarioBit)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    [string] $scenName = ScenarioBitToName -pScenarioBit $pScenarioBit
+
+    Write-LogDebug "Enabling scenario bit $pScenarioBit, '$scenName' scenario" -DebugLogLevel 3
+
+    #populate the ScenarioChoice array
+    [void] $global:ScenarioChoice.Add($scenName)
+    $global:scenario_bitvalue = $global:scenario_bitvalue -bor $pScenarioBit
+}
+
+function DisableScenario([int]$pScenarioBit)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    Write-LogDebug "Disabling scenario bit $pScenarioBit" -DebugLogLevel 3
     
-    $global:scenario_bitvalue = $global:scenario_bitvalue -bxor $scenarioBit
+    [string] $scenName = ScenarioBitToName -pScenarioBit $pScenarioBit
+    
+    $global:ScenarioChoice.Remove($scenName)
+    $global:scenario_bitvalue = $global:scenario_bitvalue -bxor $pScenarioBit
 }
 
-
-function IsScenarioEnabled([int]$scenarioBit, [string]$scenarioName="No Scenario")
+function DisableAllScenarios()
 {
-    Write-LogDebug "Inside" $MyInvocation.MyCommand "($scenarioName)"
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    Write-LogDebug "Setting Scenarios bit to 0" -DebugLogLevel 3
+
+    #reset both scenario structures
+    $global:ScenarioChoice.Clear()
+    $global:scenario_bitvalue = 0
+}
+
+function IsScenarioEnabled([int]$scenarioBit, [bool] $logged = $false)
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #perform the check 
     $bm_enabled = $global:scenario_bitvalue -band $scenarioBit
 
-    Write-LogDebug "The bitmask result for $scenarioName scenario = $bm_enabled" -DebugLogLevel 4
-
-    if (($global:scenario_bitvalue -band $scenarioBit) -gt 0)
+    if ($true -eq $logged)
     {
-        Write-LogDebug "$scenarioName scenario is enabled" -DebugLogLevel 2
+        [string] $scenName = ScenarioBitToName -pScenarioBit $scenarioBit
+        Write-LogDebug "The bitmask result for $scenName scenario = $bm_enabled" -DebugLogLevel 4
+    }
+
+    #if enabled, return true, else false
+    if ($bm_enabled -gt 0)
+    {
+        if ($true -eq $logged)
+        {
+            Write-LogDebug "$scenName scenario is enabled" -DebugLogLevel 2
+        }
+        
         return $true
     }
     else
     {
-        Write-LogDebug "$scenarioName scenario is disabled" -DebugLogLevel 2
+        if ($true -eq $logged)
+        {
+            Write-LogDebug "$scenName scenario is disabled" -DebugLogLevel 2
+        }
         return $false
     }
 
@@ -3218,7 +4305,7 @@ function Build-HostnamePlusInstance([string]$instance)
         #take the array instance-only names and look it up against the cluster resources and get the VNN that matches that instance. Then populate the NetName array
         $host_name = hostname
 
-        Write-LogDebug "HostNames+Instance :   " ($host_name + "\" + $instance) -DebugLogLevel 2
+        Write-LogDebug "HostNames+Instance:   " ($host_name + "\" + $instance) -DebugLogLevel 4
 
         if ($instance -eq "MSSQLSERVER")
         {
@@ -3229,7 +4316,7 @@ function Build-HostnamePlusInstance([string]$instance)
             $NetworkNamePlustInstance = ($host_name + "\" + $instance)
         }
 
-        Write-LogDebug "Combined HostName+Instance: " $NetworkNamePlustInstance -DebugLogLevel 2
+        Write-LogDebug "Combined HostName+Instance: " $NetworkNamePlustInstance -DebugLogLevel 3
     }
 
     return $NetworkNamePlustInstance
@@ -3318,7 +4405,7 @@ function Get-InstanceNamesOnly()
     if ($SqlTaskList.Count -eq 0)
     {
 
-        Write-LogInformation "There are curerntly no running instances of SQL Server. Would you like to proceed with OS-only log collection" -ForegroundColor Green
+        Write-LogInformation "There are currently no running instances of SQL Server. Would you like to proceed with OS-only log collection" -ForegroundColor Green
         
         if ($InteractivePrompts -eq "Noisy")
         {
@@ -3357,7 +4444,7 @@ function Get-InstanceNamesOnly()
     {
         Write-LogDebug "The running instances are: " $SqlTaskList -DebugLogLevel 3
         Write-LogDebug "" -DebugLogLevel 3
-        $SqlTaskList | Select-Object  PID, "Image name", Services | ForEach-Object {Write-LogDebug $_ -DebugLogLevel 3}
+        $SqlTaskList | Select-Object  PID, "Image name", Services | ForEach-Object {Write-LogDebug $_ -DebugLogLevel 5}
         Write-LogDebug ""
     
         foreach ($sqlinstance in $SqlTaskList.Services)
@@ -3490,7 +4577,7 @@ function Pick-SQLServer-for-Diagnostics()
         }
         elseif ($NetNamePlusinstanceArray -and ($null -ne $NetNamePlusinstanceArray))
         {
-            Write-LogDebug "NetNamePlusinstanceArray contains: " $NetNamePlusinstanceArray -DebugLogLevel 2
+            Write-LogDebug "NetNamePlusinstanceArray contains: " $NetNamePlusinstanceArray -DebugLogLevel 4
 
             #prompt the user to pick from the list
 
@@ -3498,6 +4585,7 @@ function Pick-SQLServer-for-Diagnostics()
             if ($NetNamePlusinstanceArray.Count -ge 1)
             {
                 
+                $instanceIDArray = 0..($NetNamePlusinstanceArray.Length -1)
 
                 #print out the instance names
 
@@ -3505,6 +4593,9 @@ function Pick-SQLServer-for-Diagnostics()
                 Write-LogInformation ""
                 Write-LogInformation "ID	SQL Instance Name"
                 Write-LogInformation "--	----------------"
+
+                # sort the array by instance name
+                $NetNamePlusinstanceArray = $NetNamePlusinstanceArray | Sort-Object
 
                 for($i=0; $i -lt $NetNamePlusinstanceArray.Count;$i++)
                 {
@@ -3527,21 +4618,21 @@ function Pick-SQLServer-for-Diagnostics()
                     catch [FormatException]
                         {
                             Write-LogError "The value entered for ID '",$SqlIdStr,"' is not an integer"
+                            continue
                         }
         
                     #validate this ID is in the list discovered 
-                    for($i=0;$i -lt $NetNamePlusinstanceArray.Count;$i++)
+                    if ($SqlIdInt -in ($instanceIDArray))
                     {
-                        if($SqlIdInt -eq $i)
-                        {
-                            $ValidId = $true
-                            break;
-                        }
-                        else
-                        {
-                            $ValidId = $false
-                        }
-                    } #end of for
+                        $ValidId = $true
+                        break;
+                    }
+                    else 
+                    {
+                        $ValidId = $false
+                        Write-LogError "The numeric instance ID entered '$SqlIdInt' is not in the list"
+                    }
+
 
                 }   #end of while
 
@@ -3565,7 +4656,7 @@ function Pick-SQLServer-for-Diagnostics()
         #set the global variable so it can be easily used by multiple collectors
         $global:sql_instance_conn_str = $NetNamePlusinstanceArray[$SqlIdInt] 
 
-        return $NetNamePlusinstanceArray[$SqlIdInt] 
+        #return $NetNamePlusinstanceArray[$SqlIdInt] 
 
     }
 
@@ -3708,7 +4799,18 @@ function Copy-OriginalLogmanConfig()
 
 function PrepareCountersFile()
 {
-    Write-LogDebug "inside" $MyInvocation.MyCommand
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    #if we are not calling a Perfmon scenario, return and don't proceed
+    if ( ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
+    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
+    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) )
+    {
+        Write-LogDebug "No Perfmon-collection scenario is selected. Perfmon counters file will not be created" -DebugLogLevel 3
+        return
+    }
 
     if (($global:sql_instance_conn_str -ne "") -and ($null -ne $global:sql_instance_conn_str) )
     {
@@ -3741,7 +4843,7 @@ function Check-ElevatedAccess
   
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
     {
-         Write-Warning "Administrator rights are recommended!`nSome functionality will not be available. Exiting..."
+         Write-Warning "Local Administrator rights are recommended!`nSome functionality will not be available. Exiting..."
          exit
     }
     
@@ -3779,9 +4881,10 @@ param (
 
     Write-LogDebug "inside " $MyInvocation.MyCommand
 
-    if ($global:sql_instance_conn_str -eq "no_instance_found")
+    if (($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME) -or ($true -eq $global:instance_independent_collection ) )
     {
-        return
+        Write-LogWarning "No SQL Server instance provided or Instance-independent collection. SQL Permissions-checking is not necessary"
+        return $true
     }
     elseif ($global:sql_instance_conn_str -ne "")
     {
@@ -3797,7 +4900,7 @@ param (
     Write-LogDebug "Received parameter SQLUser: `"$SQLUser`"" -DebugLogLevel 2
     Write-LogDebug "Received parameter SQLPassword (true/false): " (-not ($null -eq $SQLPassword)) #we don't print the password, just inform if we received it or not
 
-    $SqlQuery = "select SUSER_SNAME() login_name, HAS_PERMS_BY_NAME(null, null, 'view server state') has_view_server_state, HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') has_alter_any_event_session"
+    $SqlQuery = "select SUSER_SNAME() login_name, HAS_PERMS_BY_NAME(null, null, 'view server state') has_view_server_state, HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') has_alter_any_event_session, SERVERPROPERTY('ProductMajorVersion') sql_major_version"
     $ConnString = "Server=$SQLInstance;Database=master;"
 
     #if either SQLUser or SQLPassword are null we setup Integrated Authentication
@@ -3832,12 +4935,13 @@ param (
         Write-LogError "$mycommand Function failed with error:  $error_msg"
         
         # we can't connect to SQL, probably whole capture will fail, so we just abort here
-        return ($false)
+        return $false
     }
     
     Write-LogDebug "Closing SqlConnection" -DebugLogLevel 2
     $SqlConnection.Close()
 
+    $global:sql_major_version = $DataSet.Tables[0].Rows[0].sql_major_version
     $account = $DataSet.Tables[0].Rows[0].login_name
 
     if ((1 -eq $DataSet.Tables[0].Rows[0].has_view_server_state) -and (1 -eq $DataSet.Tables[0].Rows[0].has_alter_any_event_session))
@@ -3884,9 +4988,9 @@ param (
         }
 
         if ($confirm -eq "Y"){ #user chose to continue
-            return ($true)
+            return $true
         } else { #user chose to abort
-            return ($false)
+            return $false
         }
     }
 
@@ -3898,7 +5002,7 @@ function HandleCtrlC ()
        Write-LogWarning "*******************"
        Write-LogWarning "You pressed CTRL-C. Stopping diagnostic collection..."
        Write-LogWarning "*******************"
-       Invoke-DiagnosticCleanUp
+       Invoke-DiagnosticCleanUpAndExit
        break
     }
 
@@ -3917,12 +5021,12 @@ function HandleCtrlCFinal ()
             Write-LogWarning "<*******************>"
             Write-LogWarning "You pressed CTRL-C. Stopping diagnostic collection..."
             Write-LogWarning "<*******************>"
-            Invoke-DiagnosticCleanUp
+            Invoke-DiagnosticCleanUpAndExit
         }
 		
 		else
 		{
-			Invoke-DiagnosticCleanUp
+			Invoke-DiagnosticCleanUpAndExit
 			break;
 		}
     }
@@ -3932,19 +5036,37 @@ function HandleCtrlCFinal ()
 
 function GetPerformanceDataAndLogs 
 {
+   try 
+   {
+        Write-LogDebug "inside" $MyInvocation.MyCommand
         
+        [bool] $Continue = $false
+
         #prompt for diagnostic scenario
-        Select-Scenario
+        $Continue = Select-Scenario
+        if ($false -eq $Continue)
+        {
+            Write-LogInformation "No diagnostic logs will be collected because no scenario is selected. Exiting..."
+            return
+        }
+
 
         #pick a sql instnace
         Pick-SQLServer-for-Diagnostics
 
         #check SQL permission and continue only if user has permissions or user confirms to continue without permissions
-        $canContinue = Confirm-SQLPermissions 
-
-        if ($false -eq $canContinue)
+        $Continue = Confirm-SQLPermissions 
+        if ($false -eq $Continue)
         {
-            Write-LogInformation "No diagnostic logs will be collected"
+            Write-LogInformation "No diagnostic logs will be collected due to insufficient SQL permissions. Exiting..."
+            return
+        }
+
+        # validate SQL startup account write permissions to \output folder
+        $Continue = Confirm-WritePermsStartupAccount
+        if ($false -eq $Continue)
+        {
+            Write-LogInformation "No diagnostic logs will be collected. Exiting..."
             return
         }
 
@@ -3956,76 +5078,35 @@ function GetPerformanceDataAndLogs
         
         #stop data collection
         Stop-DiagCollectors
-}
-
-function InvokePluginMenu () 
-{
-    <#
-    .SYNOPSIS
-        Can be used as an initial/first menu where we can call SQL LogScout collectors or external scipts if we find them useful
-    #>
-
-    $PluginArray = "Performance and Basic Logs", "Memory Dump(s)"
-    
-    Write-LogInformation "Please select what data you would like to collect:`n"
-    Write-LogInformation ""
-    Write-LogInformation "Choice   Scenario"
-    Write-LogInformation "------   ---------------------------------"
-
-    for ($i = 0; $i -lt $PluginArray.Count; $i++) {
-        Write-LogInformation $i "      " $PluginArray[$i]
-    }
-
-    $isInt = $false
-    $ScenarioIdInt = 777
-    $pluginIntList = 0..1  #as we add more scenarios above, we will increase the range to match them
-
-
-
         
-    while (($isInt -eq $false) -or ($ValidId -eq $false)) {
-        Write-LogInformation ""
-        Write-LogWarning "Enter the Choice ID for which you want to collect diagnostic data. Then press Enter" 
-
-        $ScenIdStr = Read-Host "Enter the Choice ID from list above>" -CustomLogMessage "PlugIn Console input:"
-            
-        try {
-            $ScenarioIdInt = [convert]::ToInt32($ScenIdStr)
-            $isInt = $true
-        }
-
-        catch [FormatException] {
-            Write-LogError "The value entered for Choice '", $ScenIdStr, "' is not an integer"
-            continue 
-        }
-
-        #validate this ID is in the list discovered 
-        if ($ScenarioIdInt -in ($pluginIntList)) {
-            $ValidId = $true
-
-            switch ($ScenarioIdInt) {
-                0 { 
-                    # Basic and Performance Logs
-                    GetPerformanceDataAndLogs
-                }
-                1 {
-                    # Memory Dumps
-                    Write-Host "Output folder is $global:output_folder"
-                    .\SQLDumpHelper.ps1 -DumpOutputFolder $global:output_folder # next make this use a parameter for dump location
-                }
-                Default { Write-LogError "No plugin was picked. Not sure why we are here" }
-            }
-                
-        }
-        else {
-            $ValidId = $false
-            Write-LogError "The ID entered '", $ScenIdStr, "' is not in the list "
-        }
-    } #end of while
+   }
+   catch 
+   {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        $call_stack = $PSItem.Exception.InnerException 
+        Write-LogError "Function '$mycommand' failed with error:  $error_msg"
+        Write-LogError "Function '$mycommand' :  $call_stack"
+   }
+   
 }
+
+
+function CopyrightAndWarranty()
+{
+    Microsoft.PowerShell.Utility\Write-Host "Copyright (c) 2021 Microsoft Corporation. All rights reserved. `n
+    THE SOFTWARE IS PROVIDED `"AS IS`", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE."
+}
+
 function main () 
 {
-
+    CopyrightAndWarranty
     
     Write-LogDebug "Scenario prameter passed is '$Scenario'" -DebugLogLevel 3
 
@@ -4053,9 +5134,14 @@ function main ()
         Write-LogInformation "Ending data collection" #DO NOT CHANGE - Message is backward compatible
     }   
     catch{
-        Write-Error "An error occurred:"
-        Write-Error $_
-        Write-Error $_.ScriptStackTrace
+        # Write-Error $_
+        # Write-Error $_.ScriptStackTrace
+
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        $call_stack = $PSItem.Exception.InnerException 
+        Write-LogError "Function '$mycommand' failed with error:  $error_msg"
+        Write-LogError "Function '$mycommand' :  $call_stack"
     }
     finally {
         HandleCtrlCFinal
