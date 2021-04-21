@@ -30,6 +30,10 @@ SQL LogScout can be executed with multiple switches allowing for full automation
 
 See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) for detailed information.
 
+## Interrupting data collection/execution
+
+If the need arises, you can interrupt the execution of SQL LogScout by pressing **CTRL+C** at any time. In some cases you may have to be patient before the CTRL+C is reflected (a few seconds) depending on what is being executed at the time. But in most cases the process is immediate. It is not recommended to close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system.
+
 # Examples
 
 ## A. Execute SQL LogScout (most common execution)
