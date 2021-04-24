@@ -80,8 +80,6 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv DeleteDefaultFolder 
 
 **Note:**  Selecting Quiet mode implicitly selects "Y" to all the screens that requires your agreement to proceed. 
 
-
-
 # Parameters
 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
@@ -100,7 +98,13 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "WPR"
     - "Setup"
     - "BackupRestore"
-    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. *Note:* Not required when parameters are not specified for the command.
+    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. 
+
+   You can select one or more scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
+
+   `GeneralPerf+Memory+Setup`
+
+   *Note:* Not required when parameters are not specified for the command.
 
    For more information on each scenario see [Scenarios](#Scenarios)
 
