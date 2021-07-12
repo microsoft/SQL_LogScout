@@ -113,7 +113,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 1. **CustomOutputPath** - specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
     - "PromptForCustomDir" - will cause the user to be prompted whether to specify a custom path
     - "UsePresentDir"  - will use the present directory wher SQL LogScout is copied (no custom path)
-    - An existing path (e.g. D:\logs) - will use the specified path for data collection.  **Note:** Do not use a trailing backslash at the end. For example "D:\logs\" will lead to an error
+    - An existing path (e.g. D:\logs) - will use the specified path for data collection.  **Note:** Do not use a trailing backslash at the end. For example "D:\logs\\" will lead to an error.
 
 1. **DeleteExistingOrCreateNew** - possible values are: 
     - "DeleteDefaultFolder" - will cause the default \output folder to be deleted and recreated
