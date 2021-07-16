@@ -151,6 +151,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - [AlwaysOn_health*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#BKMK_alwayson_health)
    - [MSSQLSERVER_SQLDIAG*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
    - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
+   - [SQL Assessment API](https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview) log
 
 1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
@@ -162,30 +163,31 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - Tempdb contention info from SQL DMVs/system views
    - Linked Server metadata (SQL DMVs/system views)
    - Service Broker configuration information (SQL DMVs/system views)
-2. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
+
+1. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
    - GeneralPerf scenario
    - Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level starting/completed events and actual XML query plans (for completed queries)
 
-3. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
+1. **Replication scenario** collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and Change Tracking (CT) information
    - Basic Scenario
-   - Replication, CDC, CT diagnostic info (SQL DMVs/system views)
+   - Replication, CDC, CT diagnostic info (SQL DMVs/system views). This is captured both at startup and shutdown so a comparative analysis can be performed on the data collected during SQL LogScout execution. 
 
-4. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
+1. **AlwaysOn scenario** collects all the Basic scenario logs as well as Always On configuration information from DMVs
    - Basic scenario
    - Always On diagnostic info (SQL DMVs/system views)
    - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141)
    - Performance Monitor counters for SQL Server instance and general OS counters
 
-5. **Network Trace scenario** collects a Netsh-based network trace from the machine where SQL LogSout is running. The output is an .ETL file
+1. **Network Trace scenario** collects a network trace from the machine where SQL LogSout is running. The output is an .ETL file. This is achived with a combination of Netsh trace and Logman built-in Windows utilities. These are invoked via StartNetworkTrace.bat.
 
-6. **Memory** - collects
+1. **Memory** - collects
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
    - Memory diagnostic info from SQL DMVs/system views
 
-7. **Generate Memory Dumps scenario** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
+1. **Generate Memory Dumps scenario** - allows to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
 
-8. **Windows Performance Recorder (WPR) scenario** allows to collect a [Windows Performance Recorder](https://docs.microsoft.com/windows-hardware/test/wpt/introduction-to-wpr) trace. Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
+1. **Windows Performance Recorder (WPR) scenario** allows to collect a [Windows Performance Recorder](https://docs.microsoft.com/windows-hardware/test/wpt/introduction-to-wpr) trace. Here you can execute a sub-scenario depending on the knd of problem you want to address. These subscenarios are:
     - CPU - collects Windows performance data about CPU-related activities performed by processes and the OS
     - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS
     - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS
@@ -193,16 +195,21 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 
    **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 15 seconds of data collection.
 
-9. **Setup scenario** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system. This allows analysis of setup or installation issues of SQL Server components.
+1. **Setup scenario** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system. This allows analysis of setup or installation issues of SQL Server components.
 
-10. **Backup and Restore scenario** - collects the Basic scenario logs and various logs related to backup and restore activities in SQL Server. These logs include:
+1. **Backup and Restore scenario** - collects the Basic scenario logs and various logs related to backup and restore activities in SQL Server. These logs include:
 
     - Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
     - Enables backup and restore related TraceFlags to produce information in the Errorlog
     - Performance Monitor counters for SQL Server instance and general OS counters
     - SQL VSS Writer Log (on SQL Server 2019 and later)
     - VSS Admin (OS) logs for VSS backup-related scenarios
- 
+
+1. **I/O** - collects the Basic scenario logs and several logs related to disk I/O activity:
+    - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
+    - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
+    - Performance Monitor counters for SQL Server instance and general OS counters
+
 # Sample output
 
 ```bash
@@ -338,7 +345,7 @@ Removed .\##STDERR.LOG which was 0 bytes
 
 # Output folders
 
-**Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. 
+**Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. By default this folder is created in the same location where SQL LogScout files reside (present directory). However a user can choose to collect data on a different disk volume and folder. This can be done by following the prompt for a non-default drive and directory or by using the CustomOutputPath parameter ([Parameters](#Parameters))
 
 **Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
 
@@ -349,6 +356,10 @@ SQL LogScout logs the flow of activity on the console as well as in a log file -
 # Targeted SQL instances
 
 Diagnostic data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only.
+
+# Security
+
+SQL LogScout is released with digitally-signed Powershell files. For other files, SQL LogScout calculates a SHA512 hash and compares it to the expected value of each file. If the stored hash does not match the calculated hash on disk, then SQL LogScout will not run.  
 
 # Test Suite
 
