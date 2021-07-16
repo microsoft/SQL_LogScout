@@ -1,7 +1,7 @@
 ## Copyright (c) Microsoft Corporation.
 ## Licensed under the MIT license.
 
-##=======================================Script parameters =====================================
+#=======================================Script parameters =====================================
 
 param
 (
@@ -12,9 +12,10 @@ param
 
     #scenario is an optional parameter since there is a menu that covers for it if not present
     #[ValidateSet("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore")]
-    [ValidateScript({ 
+    [ValidateScript(
+        { 
             $ScenarioArrayParam = $_.Split('+')
-            [string[]] $localScenArray = @(("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore"))
+            [string[]] $localScenArray = @(("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore","I/O"))
             try 
             {
                 foreach ($scenItem in $ScenarioArrayParam)
@@ -30,7 +31,8 @@ param
             }
 
             return $true
-     })]
+        }
+     )]
     [Parameter(Position=1,HelpMessage='Choose a plus-sign separated list of one or more of: Basic,GeneralPerf,DetailedPerf,Replication,AlwaysOn,Memory,DumpMemory,WPR,Setup. Or MenuChoice')]
     [string[]] $Scenario=[String]::Empty,
 
@@ -38,25 +40,47 @@ param
     [Parameter(Position=2)]
     [string] $ServerInstanceConStr = [String]::Empty,
 
+    [ValidateScript(
+        { 
+
+            if ($_ -in "UsePresentDir", "PromptForCustomDir")
+            {
+                return $true
+            }
+            elseif ((Test-Path -Path $_ -PathType Container) -eq $false)
+            {
+                return $false
+            }
+            else 
+            {
+                return $true    
+            }
+        
+        }
+    )]
+    [Parameter(Position=3,HelpMessage='Specify a valid path for your output folder, or type "UsePresentDir"')]
+    [string] $CustomOutputPath = "PromptForCustomDir",
+
     #scenario is an optional parameter since there is a menu that covers for it if not present
     [ValidateSet("DeleteDefaultFolder","NewCustomFolder")]
-    [Parameter(Position=3,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder')]
+    [Parameter(Position=4,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder')]
     [string] $DeleteExistingOrCreateNew = [String]::Empty,
 
     #specify start time for diagnostic
     [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
-    [Parameter(Position=4,HelpMessage='Format is: "2020-10-27 19:26:00"')]
+    [Parameter(Position=5,HelpMessage='Format is: "2020-10-27 19:26:00"')]
     [string] $DiagStartTime = "0000",
     
     #specify end time for diagnostic
     [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
-    [Parameter(Position=5,HelpMessage='Format is: "2020-10-27 19:26:00"')]
+    [Parameter(Position=6,HelpMessage='Format is: "2020-10-27 19:26:00"')]
     [string] $DiagStopTime = "0000",
 
     #specify quiet mode for any Y/N prompts
     [ValidateSet("Quiet","Noisy")]
-    [Parameter(Position=6,HelpMessage='Choose Quiet|Noisy')]
+    [Parameter(Position=7,HelpMessage='Choose Quiet|Noisy')]
     [string] $InteractivePrompts = "Noisy"
+
     
 )
 
@@ -66,10 +90,12 @@ param
 [string]$global:present_directory = ""
 [string]$global:output_folder = ""
 [string]$global:internal_output_folder = ""
+[string]$global:custom_user_directory = ""  # This is for log folder selected by user other that default
+[string]$global:userLogfolderselected = ""
 [string]$global:perfmon_active_counter_file = "LogmanConfig.txt"
 [bool]$global:perfmon_counters_restored = $false
-[string]$NO_INSTANCE_NAME = "no_instance_name"
-[string]$global:sql_instance_conn_str = $NO_INSTANCE_NAME
+[string]$NO_INSTANCE_NAME = "no_instance_found"
+[string]$global:sql_instance_conn_str = $NO_INSTANCE_NAME #setting the connection sting to $NO_INSTANCE_NAME initially
 [System.Collections.ArrayList]$global:processes = [System.Collections.ArrayList]::new()
 [int]$global:DEBUG_LEVEL = $DebugLevel #zero to disable, 1 to 5 to enable different levels of debug logging
 [System.Collections.ArrayList] $global:ScenarioChoice = @()
@@ -79,6 +105,7 @@ param
 [string] $global:xevent_alwayson_session = "SQLLogScout_AlwaysOn_Data_Movement"
 [bool] $global:xevent_on = $false
 [bool] $global:perfmon_is_on = $false
+[bool] $global:perfmon_scenario_enabled = $false
 [bool] $global:sqlvsswriter_has_run = $false
 [string] $global:app_version = ""
 [string] $global:host_name = hostname
@@ -100,7 +127,8 @@ param
 [string] $WPR_NAME = "WPR"
 [string] $SETUP_NAME = "Setup"
 [string] $BACKUPRESTORE_NAME = "BackupRestore"
-[string[]] $global:ScenarioArray = @($BASIC_NAME,$GENERALPERF_NAME,$DETAILEDPERF_NAME,$REPLICATION_NAME,$ALWAYSON_NAME,$NETWORKTRACE_NAME,$MEMORY_NAME,$DUMPMEMORY_NAME,$WPR_NAME,$SETUP_NAME,$BACKUPRESTORE_NAME)
+[string] $IO_NAME = "IO"
+[string[]] $global:ScenarioArray = @($BASIC_NAME,$GENERALPERF_NAME,$DETAILEDPERF_NAME,$REPLICATION_NAME,$ALWAYSON_NAME,$NETWORKTRACE_NAME,$MEMORY_NAME,$DUMPMEMORY_NAME,$WPR_NAME,$SETUP_NAME,$BACKUPRESTORE_NAME,$IO_NAME)
 
 [int] $BasicScenId = 0
 [int] $GeneralPerfScenId = 1
@@ -113,27 +141,28 @@ param
 [int] $WprScenId = 8
 [int] $SetupScenId = 9
 [int] $BackupRestoreScenId = 10
+[int] $IOScenId = 11
 #=======================================Start of \OUTPUT and \ERROR directories and files Section
 
 function Init-AppVersion()
 {
-    $major_version = "3"
-    $minor_version = "3"
-    $build = "3"
+    $major_version = "4"
+    $minor_version = "0"
+    $build = "0"
     $global:app_version = $major_version + "." + $minor_version + "." + $build
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
 function InitCriticalDirectories()
 {
     #initialize this directories
-    Get-PresentDirectory 
-    Get-OutputPath
-    Get-InternalPath
+    Set-PresentDirectory 
+    Set-OutputPath
+    Set-InternalPath
 
 }
 
 
-function Get-PresentDirectory()
+function Set-PresentDirectory()
 {
 	Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
     $global:present_directory = Convert-Path -Path "."
@@ -141,29 +170,80 @@ function Get-PresentDirectory()
     Write-LogInformation "The Present folder for this collection is" $global:present_directory 
 }
 
-function Get-OutputPath([string]$output_dirname = "")
+function Set-OutputPath()
 {
+
 	Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
     
-    if (($output_dirname -eq "") -or ($output_dirname -eq $null))
-    {
+        #default final directory to present directory (.)
+        [string] $final_directory  = $global:present_directory
+
+        # if "UsePresentDir" is passed as a param value, then create where SQL LogScout runs
+        if ($CustomOutputPath -eq "UsePresentDir")
+        {
+            $final_directory  = $global:present_directory
+        }
+        #if a custom directory is passed as a parameter to the script. Parameter validation also runs Test-Path on $CustomOutputPath
+        elseif (Test-Path -Path $CustomOutputPath)
+        {
+            $final_directory = $CustomOutputPath
+
+        }
+        elseif ($CustomOutputPath -eq "PromptForCustomDir")    
+        {
+            $userlogfolder = Read-Host "Would your like the logs to be collected on a non-default drive and directory?" -CustomLogMessage "Prompt CustomDir Console Input:"
+            $HelpMessage = "Please enter a valid input (Y or N)"
+
+            $ValidInput = "Y","N"
+            $AllInput = @()
+            $AllInput += , $ValidInput
+            $AllInput += , $userlogfolder
+            $AllInput += , $HelpMessage
+
+            $YNselected = validateUserInput($AllInput)
+            
+
+            if ($YNselected -eq "Y")
+            {
+                [string] $customOutDir = [string]::Empty
+
+                while([string]::IsNullOrWhiteSpace($customOutDir) -or !(Test-Path -Path $customOutDir))
+                {
+
+                    $customOutDir = Read-Host "Enter an output folder with no quotes (e.g. C:\MyTempFolder or C:\My Folder)" -CustomLogMessage "Get Custom Output Folder Console Input:"
+                    if ($customOutDir -eq "" -or !(Test-Path -Path $customOutDir))
+                    {
+                        Write-Host "'" $customOutDir "' is not a valid path. Please, enter a valid drive and folder location" -ForegroundColor Yellow
+                    }
+                }
+
+                $final_directory =  $customOutDir
+            }
+
+
+        }
+
         #the output folder is subfolder of current folder where the tool is running
-        $global:output_folder =  ($global:present_directory + "\output\")
-    }
-    else 
-    {
-        $global:output_folder =  ($global:present_directory + $output_dirname)
-    }
-    Write-LogInformation "Output path: $global:output_folder" #DO NOT CHANGE - Message is backward compatible
+        $global:output_folder =  ($final_directory + "\output\")
+
 }
 
-function Get-InternalPath()
+function Set-NewOutputPath 
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
+
+    [string] $new_output_folder_name = "_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
+    $global:output_folder = $global:output_folder.Substring(0, ($global:output_folder.Length-1)) + $new_output_folder_name    
+    
+}
+
+function Set-InternalPath()
 {
 	Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
     
     #the \internal folder is subfolder of \output
     $global:internal_output_folder =  ($global:output_folder  + "internal\")
-    Write-LogInformation "The Error files path is" $global:internal_output_folder 
+    
 }
 
 function Create-PartialOutputFilename ([string]$server)
@@ -245,7 +325,7 @@ function Reuse-or-RecreateOutputFolder() {
                 switch ($DeleteExistingOrCreateNew) 
                 {
                     "DeleteDefaultFolder"   {$DeleteOrNew = "D"}
-                    "NewCustomFolder"             {$DeleteOrNew = "N"}
+                    "NewCustomFolder"       {$DeleteOrNew = "N"}
                 }
                 
             }
@@ -254,20 +334,25 @@ function Reuse-or-RecreateOutputFolder() {
 
         
         #Get-Childitem -Path $output_folder -Recurse | Remove-Item -Confirm -Force -Recurse  | Out-Null
-        if ($DeleteOrNew -eq "D") {
+        if ($DeleteOrNew -eq "D") 
+        {
+            #delete the existing \output folder
             Remove-Item -Path $global:output_folder -Force -Recurse  | Out-Null
             Write-LogWarning "Deleted $global:output_folder and its contents"
         }
-        elseif ($DeleteOrNew -eq "N") {
-        
-            [string] $new_output_folder_name = "\output_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
-            Write-LogDebug "The new output folder name is: $new_output_folder_name" -DebugLogLevel 3
+        elseif ($DeleteOrNew -eq "N") 
+        {
 
-            #these two calls updates the two globals for the new output and internal folders
-            Get-OutputPath -output_dirname $new_output_folder_name
+            #these two calls updates the two globals for the new output and internal folders using the \Output_ddMMyyhhmmss format.
+            
+            # [string] $new_output_folder_name = "_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
+            # $global:output_folder = $global:output_folder.Substring(0, ($global:output_folder.Length-1)) + $new_output_folder_name
+
+            Set-NewOutputPath
             Write-LogDebug "The new output path is: $global:output_folder" -DebugLogLevel 3
         
-            Get-InternalPath
+            #call Set-InternalPath to reset the \Internal folder
+            Set-InternalPath
             Write-LogDebug "The new error path is: $global:internal_output_folder" -DebugLogLevel 3
         }
 
@@ -277,6 +362,8 @@ function Reuse-or-RecreateOutputFolder() {
         #create an output folder AND error directory in one shot (creating the child folder \internal will create the parent \output also). -Force will not overwrite it, it will reuse the folder
         New-Item -Path $global:internal_output_folder -ItemType Directory -Force | out-null 
         
+        Write-LogInformation "Output path: $global:output_folder"  #DO NOT CHANGE - Message is backward compatible
+        Write-LogInformation "Error  path is" $global:internal_output_folder 
     }
     catch {
         $function_name = $MyInvocation.MyCommand
@@ -428,6 +515,9 @@ function StartNewProcess()
 . ./LoggingFacility.ps1
 #======================================== END of Console LOG SECTION
 
+#======================================== START of File Attribute Validation SECTION
+. ./Confirm-FileAttributes.ps1
+#======================================== END of File Attribute Validation SECTION
 
 #======================================== Start OF Diagnostics Collection SECTION
 
@@ -515,8 +605,7 @@ function GetWindowsHotfixes ()
         $function_name = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "$function_name Function failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 }
 
@@ -556,8 +645,7 @@ function GetEventLogs($server)
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -587,8 +675,7 @@ function GetPowerPlan($server)
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -687,9 +774,7 @@ function GetRunningDrivers()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand Function failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
-    
+        return     
     }
 }
 
@@ -937,8 +1022,7 @@ function GetXeventsDetailedPerf()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
 }
 
@@ -977,8 +1061,7 @@ function GetAlwaysOnDiag()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
 
 }
@@ -1050,8 +1133,7 @@ function GetXeventsAlwaysOnMovement()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
 }
 
@@ -1064,18 +1146,25 @@ function GetAlwaysOnHealthXel
     Write-LogInformation "Executing Collector: $collector_name"
 
     try{
-            $installedInstances = $global:sql_instance_conn_str
-            if ($installedInstances -notlike '*\*')
+            $server = $global:sql_instance_conn_str
+
+            $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+            Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+
+            if ($server -notlike '*\*')
             {
                 $vInstance = "MSSQLSERVER"
             } 
-            if ($installedInstances -like '*\*')
+            if ($server -like '*\*')
             {
                 $selectInstanceName = $global:sql_instance_conn_str              
-                $installedInstances = Strip-InstanceName($selectInstanceName) 
-                $vInstance = $installedInstances
+                $server = Strip-InstanceName($selectInstanceName) 
+                $vInstance = $server
             }
             [string]$DestinationFolder = $global:output_folder 
+
 
             #in case CTRL+C is pressed
             HandleCtrlC
@@ -1084,7 +1173,7 @@ function GetAlwaysOnHealthXel
             $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
             $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
             $vLogPath = $vLogPath -replace 'ERRORLOG'
-            Get-ChildItem -Path $vLogPath -Filter AlwaysOn_health*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
+            Get-ChildItem -Path $vLogPath -Filter AlwaysOn_health*.xel | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
 
         } catch {
             Write-LogError $_
@@ -1302,8 +1391,7 @@ function GetVSSAdminLogs()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1440,8 +1528,7 @@ function GetSysteminfoSummary()
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret      
+        return
     }
 }
 
@@ -1483,8 +1570,7 @@ function GetMisciagInfo()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret    
+        return
     }
 }
 
@@ -1658,8 +1744,7 @@ function GetHighCPUPerfStats ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1698,18 +1783,24 @@ function GetPerfStats ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
 
-function GetPerfStatsSnapshot () 
+function GetPerfStatsSnapshot ([string] $TimeOfCapture="Startup") 
 {
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     [console]::TreatControlCAsInput = $true
+
+
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    {
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of PerfStats shutdown collector"
+        return
+    }
 
     $server = $global:sql_instance_conn_str
 
@@ -1724,7 +1815,7 @@ function GetPerfStatsSnapshot ()
         HandleCtrlC
 
         #SQL Server Perf Stats Snapshot
-        $collector_name = "SQLServerPerfStatsSnapshotStartup"
+        $collector_name = "SQLServerPerfStatsSnapshot"+ $TimeOfCapture
         $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
@@ -1738,8 +1829,7 @@ function GetPerfStatsSnapshot ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1785,8 +1875,7 @@ function GetPerfmonCounters ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1825,8 +1914,7 @@ function GetServiceBrokerInfo ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1862,8 +1950,7 @@ function GetTempdbSpaceLatchingStats ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1897,8 +1984,7 @@ function GetLinkedServerInfo ()
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1933,8 +2019,7 @@ function GetQDSInfo ()
         $mycommand = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -1968,13 +2053,12 @@ function GetReplMetadata ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
 
-function GetChangeDataCaptureInfo () {
+function GetChangeDataCaptureInfo ([string] $TimeOfCapture = "Startup") {
     
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
@@ -1990,8 +2074,9 @@ function GetChangeDataCaptureInfo () {
         #Change Data Capture (CDC)
         $collector_name = "ChangeDataCapture"
         $input_script = Build-InputScript $global:present_directory $collector_name
-        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $collector_name_time_of_capture = $collector_name + $TimeOfCapture
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name_time_of_capture -needExtraQuotes $true
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name_time_of_capture -needExtraQuotes $false
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
@@ -2002,13 +2087,12 @@ function GetChangeDataCaptureInfo () {
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
 
-function GetChangeTracking () 
+function GetChangeTracking ([string] $TimeOfCapture = "Startup") 
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
@@ -2024,8 +2108,9 @@ function GetChangeTracking ()
         #Change Tracking
         $collector_name = "Change_Tracking"
         $input_script = Build-InputScript $global:present_directory $collector_name
-        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $collector_name_time_of_capture = $collector_name + $TimeOfCapture
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name_time_of_capture -needExtraQuotes $true
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name_time_of_capture -needExtraQuotes $false
         $executable = "sqlcmd.exe"
         $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
         Write-LogInformation "Executing Collector: $collector_name"
@@ -2036,8 +2121,7 @@ function GetChangeTracking ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -2085,8 +2169,7 @@ function GetFilterDrivers ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -2097,17 +2180,8 @@ function GetNetworkTrace ()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     [console]::TreatControlCAsInput = $true
-
-    # special case for network trace - use the host name if no instance specified
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
-    {
-        $server = $global:host_name
-    }
-    else 
-    {
-        $server = $global:sql_instance_conn_str    
-    }
     
+    $server = $global:sql_instance_conn_str
 
     $internal_folder = $global:internal_output_folder
 
@@ -2124,20 +2198,21 @@ function GetNetworkTrace ()
         #Perfmon
         $collector_name = $NETWORKTRACE_NAME
         $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
+        $netsh_output = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name "delete" -needExtraQuotes $true -fileExt ".me"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt "_"
+        $param2 =  Split-Path (Split-Path $output_file -Parent) -Leaf
         $executable = "cmd.exe"
-        $argument_list = "/C netsh trace start sessionname='sqllogscout_nettrace' report=yes persistent=yes capture=yes tracefile=" + $output_file
+        #$argument_list = "/C netsh trace start sessionname='sqllogscout_nettrace' report=yes persistent=yes capture=yes tracefile=" + $output_file
+        $argument_list  = "/c StartNetworkTrace.bat " + $output_file + " " + $netsh_output
         Write-LogInformation "Executing Collector: $collector_name"
-        
+        Write-LogDebug $param2
         StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
-        
     }
     catch {
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
@@ -2173,8 +2248,7 @@ function GetMemoryDumps ()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 } 
 
@@ -2189,8 +2263,7 @@ function GetWindowsVersion
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
    }
    
    
@@ -2205,17 +2278,6 @@ function GetWPRTrace ()
 
     [console]::TreatControlCAsInput = $true
 
-    # special case for WPR trace - use the host name if no instance specified
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
-    {
-        $server = $global:host_name
-    }
-    else 
-    {
-        $server = $global:sql_instance_conn_str    
-    }
-    
-
     $wpr_win_version = GetWindowsVersion
 
     if ($wpr_win_version -lt 8) 
@@ -2227,7 +2289,7 @@ function GetWPRTrace ()
     {
         try {
 
-            $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+            $partial_error_output_file_name = Create-PartialErrorOutputFilename -server $server
     
             Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
 
@@ -2322,12 +2384,10 @@ function GetWPRTrace ()
             }
         }
         catch {
-            
             $mycommand = $MyInvocation.MyCommand 
             $error_msg = $PSItem.Exception.Message 
             Write-LogError "Function $mycommand failed with error:  $error_msg"
-            $ret = $false
-            return $ret   
+            return
         }
     }
 
@@ -2364,8 +2424,7 @@ function GetMemoryLogs()
         $function_name = $MyInvocation.MyCommand 
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "$function_name Function failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 
@@ -2610,17 +2669,24 @@ function GetSQLErrorLogsDumpsSysHealth()
     Write-LogInformation "Executing Collector: $collector_name"
 
     try{
-            $installedInstances = $global:sql_instance_conn_str
-            if ($installedInstances -notlike '*\*')
+
+            $server = $global:sql_instance_conn_str
+
+            
+            $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+            Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+
+            if ($server -notlike '*\*')
             {
                 $vInstance = "MSSQLSERVER"
             } 
-            if ($installedInstances -like '*\*')
+            elseif ($server -like '*\*')
             {
-                $selectInstanceName = $global:sql_instance_conn_str              
-                $installedInstances = Strip-InstanceName($selectInstanceName) 
-                $vInstance = $installedInstances
+                $vInstance = Strip-InstanceName($server) 
             }
+
             [string]$DestinationFolder = $global:output_folder 
 
             #in case CTRL+C is pressed
@@ -2633,14 +2699,25 @@ function GetSQLErrorLogsDumpsSysHealth()
             $vRegPath = "SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst + "\MSSQLServer\Parameters" 
             $vLogPath = (Get-ItemProperty -Path HKLM:$vRegPath).SQLArg1 -replace '-e'
             $vLogPath = $vLogPath -replace 'ERRORLOG'
-            Get-ChildItem -Path $vLogPath -Filter ERRORLOG* | Copy-Item -Destination $DestinationFolder | Out-Null 
-            Get-ChildItem -Path $vLogPath -Filter SQLAGENT* | Copy-Item -Destination $DestinationFolder | Out-Null
-            Get-ChildItem -Path $vLogPath -Filter system_health*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
-            Get-ChildItem -Path "$vLogPath\SQLDump*.mdmp", "$vLogPath\SQLDump*.log" | Where-Object {$_.LastWriteTime -gt $time_threshold} | Copy-Item -Destination $DestinationFolder | Out-Null
+
+            Write-LogDebug "The \LOG folder discovered for instance is: $vLogPath" -DebugLogLevel 4
+
+            Write-LogDebug "Getting ERRORLOG .xel files" -DebugLogLevel 3
+            Get-ChildItem -Path $vLogPath -Filter "ERRORLOG*" | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
+
+            Write-LogDebug "Getting *_SQLDIAG .xel files" -DebugLogLevel 3
+            Get-ChildItem -Path $vLogPath -Filter "SQLAGENT*" | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
+
+            Write-LogDebug "Getting System_Health .xel files" -DebugLogLevel 3
+            Get-ChildItem -Path $vLogPath -Filter "system_health*.xel" | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
+            
+            Write-LogDebug "Getting SQL Dump files" -DebugLogLevel 3
+            Get-ChildItem -Path "$vLogPath\SQLDump*.mdmp", "$vLogPath\SQLDump*.log" | Where-Object {$_.LastWriteTime -gt $time_threshold} | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
 
             if (IsClustered)
             {
-                Get-ChildItem -Path $vLogPath -Filter *_MSSQLSERVER_SQLDIAG*.xel | Copy-Item -Destination $DestinationFolder | Out-Null
+                Write-LogDebug "Getting MSSQLSERVER_SQLDIAG .xel files" -DebugLogLevel 3
+                Get-ChildItem -Path $vLogPath -Filter "*_SQLDIAG*.xel" | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
             }
         } catch {
             Write-LogError "Error Collecting SQL Server Error Log, SystemHealth and Dump Files"
@@ -2658,16 +2735,20 @@ function GetPolybaseLogs()
     Write-LogInformation "Executing Collector: $collector_name"
 
     try{
-            $installedInstances = $global:sql_instance_conn_str
-            if ($installedInstances -notlike '*\*')
+            $server = $global:sql_instance_conn_str
+
+            $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+            Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+
+            if ($server -notlike '*\*')
             {
                 $vInstance = "MSSQLSERVER"
             } 
-            if ($installedInstances -like '*\*')
+            if ($server -like '*\*')
             {
-                $selectInstanceName = $global:sql_instance_conn_str              
-                $installedInstances = Strip-InstanceName($selectInstanceName) 
-                $vInstance = $installedInstances
+                $vInstance = Strip-InstanceName($server) 
             }
             [string]$DestinationFolder = $global:output_folder 
 
@@ -2686,13 +2767,310 @@ function GetPolybaseLogs()
             {
                 $DestinationFolder_polybase = $DestinationFolder + '\Polybase\'
                 Copy-Item $polybase_path $DestinationFolder
-                Get-ChildItem $polybase_path -recurse -Exclude $exclude_ext  | where-object {$_.length -lt 1073741824} | Copy-Item -Destination $DestinationFolder_polybase | Out-Null
+                Get-ChildItem $polybase_path -recurse -Exclude $exclude_ext  | where-object {$_.length -lt 1073741824} | Copy-Item -Destination $DestinationFolder_polybase 2>> $error_file | Out-Null
             }
 
         } catch {
             Write-LogError "Error Collecting Polybase Log Files"
             Write-LogError $_
         }
+}
+
+function Getstorport()
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    [console]::TreatControlCAsInput = $true
+
+    $collector_name = "StorPort"
+    Write-LogInformation "Executing Collector: $collector_name"
+    $server = $global:sql_instance_conn_str
+
+    try
+    {
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+      
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
+
+        $executable = "cmd.exe"
+        $argument_list = "/C logman create trace  ""storport"" -ow -o $output_file -p ""Microsoft-Windows-StorPort"" 0xffffffffffffffff 0xff -nb 16 16 -bs 1024 -mode Circular -f bincirc -max 4096 -ets"
+
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+    }
+    catch 
+    {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+}
+
+function GetHighIOPerfStats () 
+{
+
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    [console]::TreatControlCAsInput = $true
+
+    $server = $global:sql_instance_conn_str
+
+    try {
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
+        #SQL Server High IO Perf Stats
+        $collector_name = "High_IO_Perfstats"
+        $input_script = Build-InputScript $global:present_directory $collector_name
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  -needExtraQuotes $false
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -o" + $output_file + " -i" + $input_script
+        Write-LogInformation "Executing Collector: $collector_name"
+        
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+        
+    }
+    catch {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return 
+    }
+
+}
+
+function GetSQLAssessmentAPI() 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    [console]::TreatControlCAsInput = $true
+
+    $server = $global:sql_instance_conn_str
+
+    try 
+    {
+
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
+
+        $collector_name = "SQLAssessmentAPI"
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        if (Get-Module -ListAvailable -Name sqlserver)
+        {
+            if ((Get-Module -ListAvailable -Name sqlserver).exportedCommands.Values | Where-Object name -EQ "Invoke-SqlAssessment")
+            {
+                Write-LogDebug "Invoke-SqlAssessment() function present" -DebugLogLevel 3
+                Write-LogInformation "Executing Collector: $collector_name"
+                Get-SqlInstance -ServerInstance $server | Invoke-SqlAssessment -FlattenOutput | Out-File $output_file
+            } 
+            else 
+            {
+                Write-LogDebug "Invoke-SqlAssessment() function NOT present" -DebugLogLevel 3
+            }
+
+        }
+        else
+        {
+                Write-Host "SQLServer PS module not installed"
+        }
+    
+    }
+
+    catch 
+    {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+}
+
+function GetUserRights () 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    $server = $global:sql_instance_conn_str
+
+    $userRights = @(
+        [PSCustomObject]@{Constant="SeTrustedCredManAccessPrivilege"; Description="Access Credential Manager as a trusted caller"}
+        ,[PSCustomObject]@{Constant="SeNetworkLogonRight"; Description="Access this computer from the network"}
+        ,[PSCustomObject]@{Constant="SeTcbPrivilege"; Description="Act as part of the operating system"}
+        ,[PSCustomObject]@{Constant="SeMachineAccountPrivilege"; Description="Add workstations to domain"}
+        ,[PSCustomObject]@{Constant="SeIncreaseQuotaPrivilege"; Description="Adjust memory quotas for a process"}
+        ,[PSCustomObject]@{Constant="SeInteractiveLogonRight"; Description="Allow log on locally"}
+        ,[PSCustomObject]@{Constant="SeRemoteInteractiveLogonRight"; Description="Allow log on through Remote Desktop Services"}
+        ,[PSCustomObject]@{Constant="SeBackupPrivilege"; Description="Back up files and directories"}
+        ,[PSCustomObject]@{Constant="SeChangeNotifyPrivilege"; Description="Bypass traverse checking"}
+        ,[PSCustomObject]@{Constant="SeSystemtimePrivilege"; Description="Change the system time"}
+        ,[PSCustomObject]@{Constant="SeTimeZonePrivilege"; Description="Change the time zone"}
+        ,[PSCustomObject]@{Constant="SeCreatePagefilePrivilege"; Description="Create a pagefile"}
+        ,[PSCustomObject]@{Constant="SeCreateTokenPrivilege"; Description="Create a token object"}
+        ,[PSCustomObject]@{Constant="SeCreateGlobalPrivilege"; Description="Create global objects"}
+        ,[PSCustomObject]@{Constant="SeCreatePermanentPrivilege"; Description="Create permanent shared objects"}
+        ,[PSCustomObject]@{Constant="SeCreateSymbolicLinkPrivilege"; Description="Create symbolic links"}
+        ,[PSCustomObject]@{Constant="SeDebugPrivilege"; Description="Debug programs"}
+        ,[PSCustomObject]@{Constant="SeDenyNetworkLogonRight"; Description="Deny access to this computer from the network"}
+        ,[PSCustomObject]@{Constant="SeDenyBatchLogonRight"; Description="Deny log on as a batch job"}
+        ,[PSCustomObject]@{Constant="SeDenyServiceLogonRight"; Description="Deny log on as a service"}
+        ,[PSCustomObject]@{Constant="SeDenyInteractiveLogonRight"; Description="Deny log on locally"}
+        ,[PSCustomObject]@{Constant="SeDenyRemoteInteractiveLogonRight"; Description="Deny log on through Remote Desktop Services"}
+        ,[PSCustomObject]@{Constant="SeEnableDelegationPrivilege"; Description="Enable computer and user accounts to be trusted for delegation"}
+        ,[PSCustomObject]@{Constant="SeRemoteShutdownPrivilege"; Description="Force shutdown from a remote system"}
+        ,[PSCustomObject]@{Constant="SeAuditPrivilege"; Description="Generate security audits"}
+        ,[PSCustomObject]@{Constant="SeImpersonatePrivilege"; Description="Impersonate a client after authentication"}
+        ,[PSCustomObject]@{Constant="SeIncreaseWorkingSetPrivilege"; Description="Increase a process working set"}
+        ,[PSCustomObject]@{Constant="SeIncreaseBasePriorityPrivilege"; Description="Increase scheduling priority"}
+        ,[PSCustomObject]@{Constant="SeLoadDriverPrivilege"; Description="Load and unload device drivers"}
+        ,[PSCustomObject]@{Constant="SeLockMemoryPrivilege"; Description="Lock pages in memory"}
+        ,[PSCustomObject]@{Constant="SeBatchLogonRight"; Description="Log on as a batch job"}
+        ,[PSCustomObject]@{Constant="SeServiceLogonRight"; Description="Log on as a service"}
+        ,[PSCustomObject]@{Constant="SeSecurityPrivilege"; Description="Manage auditing and security log"}
+        ,[PSCustomObject]@{Constant="SeRelabelPrivilege"; Description="Modify an object label"}
+        ,[PSCustomObject]@{Constant="SeSystemEnvironmentPrivilege"; Description="Modify firmware environment values"}
+        ,[PSCustomObject]@{Constant="SeDelegateSessionUserImpersonatePrivilege"; Description="Obtain an impersonation token for another user in the same session"}
+        ,[PSCustomObject]@{Constant="SeManageVolumePrivilege"; Description="Perform volume maintenance tasks"}
+        ,[PSCustomObject]@{Constant="SeProfileSingleProcessPrivilege"; Description="Profile single process"}
+        ,[PSCustomObject]@{Constant="SeSystemProfilePrivilege"; Description="Profile system performance"}
+        ,[PSCustomObject]@{Constant="SeUndockPrivilege"; Description="Remove computer from docking station"}
+        ,[PSCustomObject]@{Constant="SeAssignPrimaryTokenPrivilege"; Description="Replace a process level token"}
+        ,[PSCustomObject]@{Constant="SeRestorePrivilege"; Description="Restore files and directories"}
+        ,[PSCustomObject]@{Constant="SeShutdownPrivilege"; Description="Shut down the system"}
+        ,[PSCustomObject]@{Constant="SeSyncAgentPrivilege"; Description="Synchronize directory service data"}
+        ,[PSCustomObject]@{Constant="SeTakeOwnershipPrivilege"; Description="Take ownership of files or other objects"}
+        ,[PSCustomObject]@{Constant="SeUnsolicitedInputPrivilege"; Description="Read unsolicited input from a terminal device"}
+    )
+
+    try {
+
+        $collectorData = [System.Text.StringBuilder]::new()
+        [void]$collectorData.AppendLine("Defined User Rights")
+        [void]$collectorData.AppendLine("===================")
+        [void]$collectorData.AppendLine()
+
+        $partial_output_file_name = Create-PartialOutputFilename ($server)
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+    
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
+
+        #Linked Server configuration
+        $collector_name = "UserRights"
+        #$input_script = Build-InputScript $global:present_directory $collector_name
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $executable = "$Env:windir\system32\secedit.exe"
+        $argument_list = "/export /areas USER_RIGHTS /cfg `"$output_file.tmp`" /quiet"
+
+        Write-LogDebug "The output_file is $output_file" -DebugLogLevel 5
+        Write-LogDebug "The error_file is $error_file" -DebugLogLevel 5
+        Write-LogDebug "The executable is $executable" -DebugLogLevel 5
+        Write-LogDebug "The argument_list is $argument_list" -DebugLogLevel 5
+
+        Write-LogInformation "Executing Collector: $collector_name"
+        StartNewProcess -FilePath  $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -Wait $true
+
+        #$allRights = (Get-Content -Path "$output_file.tmp" | Select-String '^(Se\S+) = (\S+)')
+        $allRights = Get-Content -Path "$output_file.tmp"
+        Remove-Item -Path "$output_file.tmp" #delete the temporary file created by SECEDIT.EXE
+
+        foreach($right in $userRights){
+
+            Write-LogDebug "Processing " $right.Constant -DebugLogLevel 5
+            
+            $line = $allRights | Where-Object {$_.StartsWith($right.Constant)}
+
+            [void]$collectorData.AppendLine($right.Description)
+            [void]$collectorData.AppendLine("=" * $right.Description.Length)
+
+            if($null -eq $line){
+                
+                [void]$collectorData.AppendLine("0 account(s) with the " + $right.Constant + " user right:")
+                
+            } else {
+
+                $users = $line.Split(" = ")[3].Split(",")
+                [void]$collectorData.AppendLine([string]$users.Count + " account(s) with the " + $right.Constant + " user right:")
+                
+                $resolvedUserNames = [System.Collections.ArrayList]::new()
+
+                foreach ($user in $users) {
+                    
+                    if($user[0] -eq "*"){
+                        
+                        $SID = [System.Security.Principal.SecurityIdentifier]::new($user.Substring(1))
+
+                        try { #some account lookup may fail hence then nested try-catch
+                            $account = $SID.Translate([Security.Principal.NTAccount]).Value    
+                        } catch {
+                            $account = $user.Substring(1) + " <== SID Lookup failed with: " + $_.Exception.InnerException.Message
+                        }
+                        
+                        [void]$resolvedUserNames.Add($account)
+
+                    } else {
+                        
+                        $NTAccount = [System.Security.Principal.NTAccount]::new($user)
+
+                        try {
+                            
+                            #try to get SID from account, then translate SID back to account
+                            #done to mimic SDP behavior adding hostname to local accounts
+                            $SID = [System.Security.Principal.SecurityIdentifier]::new($NTAccount.Translate([Security.Principal.SecurityIdentifier]).Value)
+                            $account = $SID.Translate([Security.Principal.NTAccount]).Value
+                            [void]$resolvedUserNames.Add($account)
+
+                        } catch {
+
+                            #if the above fails we just add user name as fail-safe
+                            [void]$resolvedUserNames.Add($user)
+
+                        }
+
+                    }
+
+                }
+
+                [void]$resolvedUserNames.Sort()
+                [void]$collectorData.AppendLine($resolvedUserNames -Join "`r`n")
+                [void]$collectorData.AppendLine("All accounts enumerated")
+
+            }
+
+            [void]$collectorData.AppendLine()
+            [void]$collectorData.AppendLine()
+
+        }
+
+        Add-Content -Path $output_file -Value $collectorData.ToString()
+        
+    }
+    catch {
+        $mycommand = $MyInvocation.MyCommand 
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+
 }
 
 function validateUserInput([string[]]$AllInput)
@@ -2785,6 +3163,15 @@ function Confirm-WritePermsStartupAccount ()
 {
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
+    [console]::TreatControlCAsInput = $true
+
+
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    {
+        Write-LogWarning "No SQL Server instance found. Write permissions check for XEvent is not necessary"
+        return $true
+    }
+
     # if interactive prompt is disabled, skip this check
     if ($InteractivePrompts -eq "Quiet")
     {
@@ -2814,6 +3201,8 @@ function Confirm-WritePermsStartupAccount ()
 
     $startup_account = Get-wmiobject win32_service -Filter "name='$sqlservicename' " | Select-Object  startname
     $startup_account_name = $startup_account.startname
+
+    HandleCtrlC
 
     Write-LogWarning "At least one of the selected '$global:ScenarioChoice' scenarios collects Xevent traces" 
     Write-LogWarning "The service account '$startup_account_name' for SQL Server instance '$global:sql_instance_conn_str' must have write/modify permissions on the '$global:output_folder' folder"
@@ -2890,34 +3279,39 @@ function Invoke-CommonCollectors()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
     Write-LogInformation "Collecting logs for '$BASIC_NAME' scenario" -ForegroundColor Green
 
-    GetRunningDrivers
+  
+    GetTaskList 
+    GetFilterDrivers
     GetSysteminfoSummary
-    
-    HandleCtrlC
-    Start-Sleep -Seconds 1
 
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
         GetMisciagInfo
         HandleCtrlC
+        GetSQLErrorLogsDumpsSysHealth
+        Start-Sleep -Seconds 2
+        GetPolybaseLogs
+        HandleCtrlC
+        GetSQLVSSWriterLog
+        HandleCtrlC
+        GetSQLAssessmentAPI
     }
+    
+    GetUserRights
+    GetRunningDrivers
     
 
     HandleCtrlC
-    Start-Sleep -Seconds 2
-    GetTaskList 
-    GetSQLErrorLogsDumpsSysHealth
-    GetPolybaseLogs
+    Start-Sleep -Seconds 1
 
-    HandleCtrlC
-    Start-Sleep -Seconds 2
+    
     GetPowerPlan
     GetWindowsHotfixes
-    GetFilterDrivers
+    
     
     HandleCtrlC
     Start-Sleep -Seconds 2
@@ -2928,8 +3322,6 @@ function Invoke-CommonCollectors()
         GetClusterLogs
     } 
 
-    HandleCtrlC
-    GetSQLVSSWriterLog
 } 
 
 function Invoke-GeneralPerfScenario()
@@ -2943,7 +3335,7 @@ function Invoke-GeneralPerfScenario()
     
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
@@ -2982,7 +3374,7 @@ function Invoke-DetailedPerfScenario()
     
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
@@ -3018,7 +3410,7 @@ function Invoke-AlwaysOnScenario()
 
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
@@ -3038,7 +3430,7 @@ function Invoke-ReplicationScenario()
         
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
@@ -3116,7 +3508,7 @@ function Invoke-MemoryScenario
     
     if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
     {
-        Write-LogInformation "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
     else 
     {
@@ -3159,16 +3551,54 @@ function Invoke-BackupRestoreScenario()
     GetVSSAdminLogs
 }
 
+
+function Invoke-IOScenario()
+{
+    [console]::TreatControlCAsInput = $true
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$IO_NAME' scenario" -ForegroundColor Green
+
+    Getstorport
+    GetHighIOPerfStats
+    HandleCtrlC
+    
+    # adding Perfmon counter collection to this scenario
+    GetPerfmonCounters
+
+    HandleCtrlC
+
+}
+
+
 function Invoke-OnShutDown()
 {
     [console]::TreatControlCAsInput = $true
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    # collect Basic collectors on shutdown
     if (IsScenarioEnabled -scenarioBit $global:basicBit -logged $true)
     {
         Invoke-CommonCollectors 
     }
 
+    HandleCtrlC
+
+    # PerfstatsSnapshot needs to be collected on shutdown so people can perform comparative analysis
+    
+    if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit -logged $true)) `
+    -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit -logged $true)) )
+    {
+        GetPerfStatsSnapshot -TimeOfCapture "Shutdown"
+    }
+
+    HandleCtrlC
+
+    # CDC and CT needs to be collected on shutdown so people can perform comparative analysis
+    if (IsScenarioEnabled -scenarioBit $global:replBit -logged $true)
+    {
+        GetChangeDataCaptureInfo -TimeOfCapture "Shutdown"
+        GetChangeTracking -TimeOfCapture "Shutdown"
+    }
 }
 
 function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop="")
@@ -3296,7 +3726,7 @@ function Select-Scenario()
     Write-LogInformation ""
     Write-LogInformation "Initiating diagnostics collection... " -ForegroundColor Green
 
-    [string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup", "Backup and Restore"
+    [string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup", "Backup and Restore","IO"
     $scenarioIntRange = 0..($ScenarioArray.Length -1)  #dynamically count the values in array and create a range
 
     [int[]]$scenIntArray =@()
@@ -3465,7 +3895,15 @@ function Select-Scenario()
                             EnableScenario -pScenarioBit $global:basicBit
                         }
                     }
+                    $IOScenId
+                    { 
+                        EnableScenario -pScenarioBit $global:IOBit
 
+                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
+                        {
+                            EnableScenario -pScenarioBit $global:basicBit
+                        }
+                    }
                     Default {
                             Write-LogError "No valid scenario was picked. Not sure why we are here"
                             return $false
@@ -3512,7 +3950,7 @@ function Select-Scenario()
     #set additional properties to certain scenarios
     Set-AutomaticStop 
     Set-InstanceIndependentCollection 
-    
+    Set-PerfmonScenarioEnabled
 
     Write-LogDebug "Scenario Bit value = $global:scenario_bitvalue" -DebugLogLevel 2
     Write-LogInformation "The scenarios selected are: '$global:ScenarioChoice'"
@@ -3532,7 +3970,6 @@ function Set-AutomaticStop ()
 
     if ((
             ($true -eq (IsScenarioEnabled -scenarioBit $global:basicBit)) `
-            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:replBit )) `
             -or ($true -eq (IsScenarioEnabled -scenarioBit $global:dumpMemoryBit )) `
             -or ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) `
             -or ($true -eq (IsScenarioEnabled -scenarioBit $global:setupBit )) `
@@ -3540,10 +3977,12 @@ function Set-AutomaticStop ()
         (
             ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:replBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:IOBit ))
         ) )
     {
         Write-LogInformation "The selected '$global:ScenarioChoice ' collector(s) will stop automatically after logs are gathered" -ForegroundColor Green
@@ -3563,6 +4002,7 @@ function Set-InstanceIndependentCollection ()
     if ((
             ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) `
             -or ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit )) `
+            -or ($true -eq (IsScenarioEnabled -scenarioBit $global:IOBit ))
             
         )  -and
         (
@@ -3584,6 +4024,38 @@ function Set-InstanceIndependentCollection ()
 
    
 }
+
+
+function Set-PerfmonScenarioEnabled()
+{
+    [console]::TreatControlCAsInput = $true
+
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    try 
+    {
+        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:IOBit )) 
+        )
+        {
+            $global:perfmon_scenario_enabled = $true
+        }
+    }
+    catch 
+    {
+        $function_name = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message 
+        Write-Host "'$function_name' function failed with error:  $error_msg"
+        return
+    }
+    
+}
+
+
 
 function Start-DiagCollectors ()
 {
@@ -3639,7 +4111,10 @@ function Start-DiagCollectors ()
     {
         Invoke-BackupRestoreScenario
     } 
-    
+    if (IsScenarioEnabled -scenarioBit $global:IOBit -logged $true)
+    {
+        Invoke-IOScenario
+    }    
     if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
     {
         Write-LogInformation "Diagnostic collection started." -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
@@ -3671,7 +4146,7 @@ function Stop-DiagCollectors()
         { #wait for user to type "STOP"
             while ($ValidStop -eq $false) 
             {
-                Write-LogWarning "Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue"
+                Write-LogInformation "Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue" -ForegroundColor Green
                 $StopStr = Read-Host ">" -CustomLogMessage "StopCollection Console input:"
                     
                 #validate this PID is in the list discovered 
@@ -3698,21 +4173,6 @@ function Stop-DiagCollectors()
         $partial_output_file_name = Create-PartialOutputFilename -server $server
         $partial_error_output_file_name = Create-PartialErrorOutputFilename -server $server
 
-        if ( ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
-        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
-        )
-        {
-            #SQL Server Perf Stats Snapshot
-            $collector_name = "SQLServerPerfStatsSnapshotShutdown"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true
-            $input_script = Build-InputScript $global:present_directory "SQL Server Perf Stats Snapshot"
-            $executable = "sqlcmd.exe"
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $output_file + " -i" + $input_script
-            Write-LogInformation "Executing shutdown command: $collector_name"
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-                        
-        }
 
         #STOP the XEvent sessions
         if ( (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
@@ -3721,28 +4181,13 @@ function Stop-DiagCollectors()
             ) 
         { 
             #avoid errors if there was not Xevent collector started 
-            $collector_name = "xevents_stop"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
-            $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_session] ON SERVER;" 
-            $executable = "sqlcmd.exe"
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_stop + "`""
-            Write-LogInformation "Executing shutdown command: $collector_name"
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-             
-            
+            Stop-Xevent -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
         }
 
         if ( $true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit ) ) 
         { 
             #avoid errors if there was not Xevent collector started 
-            $collector_name = "xevents_alwayson_data_movement_stop"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
-            $alter_event_session_ag_stop = "ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER;" 
-            $executable = "sqlcmd.exe"
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_ag_stop + "`""
-            Write-LogInformation "Executing shutdown command: $collector_name"
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-             
+            Stop-AlwaysOn-Xevents -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
         }
 
         
@@ -3750,14 +4195,7 @@ function Stop-DiagCollectors()
         #Disable backup restore trace flag
         if ( $true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit ) ) 
         { 
-            $collector_name = "Disable Backup Restore Trace Flag"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
-            $Disabled_Trace_Flag = "DBCC TRACEOFF(3004,3212,3605,-1)" 
-            $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $Disabled_Trace_Flag + "`""
-            Write-LogInformation "Executing Disabling traceflag command: $collector_name"
-            Write-LogDebug "Disabling trace flags for Backup/Restore: $Disabled_Trace_Flag " -DebugLogLevel 2
-            StartNewProcess -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden
-            
+            Disable-BackupRestoreTraceFlag -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
         }
 
         #STOP Perfmon
@@ -3767,119 +4205,37 @@ function Stop-DiagCollectors()
             -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
             )
         {
-
-            $collector_name = "PerfmonStop"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
-            $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon"
-            $executable = "cmd.exe"
-            Write-LogInformation "Executing shutdown command: $collector_name"
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden
-             
-            
+            Stop-Perfmon -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
+           
         }
-
-
-        
-
 
         #wait for other work to finish
         Start-Sleep -Seconds 3
 
         #send the output file to \internal
-        $collector_name = "KillActiveLogscoutSessions"
-        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
-        $query = "declare curSession 
-                CURSOR for select 'kill ' + cast( session_id as varchar(max)) from sys.dm_exec_sessions where host_name = 'sqllogscout' and program_name='SQLCMD' and session_id <> @@spid
-                open curSession
-                declare @sql varchar(max)
-                fetch next from curSession into @sql
-                while @@FETCH_STATUS = 0
-                begin
-                    exec (@sql)
-                    fetch next from curSession into @sql
-                end
-                close curSession;
-                deallocate curSession;"  
-        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $query + "`" "
-        $executable = "sqlcmd.exe"
-        Write-LogInformation "Executing shutdown command: $collector_name"
-        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-         
-        
+        Kill-ActiveLogscoutSessions -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
 
         Start-Sleep -Seconds 1
+
 
         #STOP Network trace
         if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit))
         {
-
-            $collector_name = "NettraceStop"
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
-            $argument_list = "/C title 'stopping network trace...' & netsh trace stop sessionname='sqllogscout_nettrace'"
-            $executable = "cmd.exe"
-            Write-LogInformation "Executing shutdown command: $collector_name. Waiting - this may take a few of minutes..."
-            # StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal
-            Write-LogDebug $executable $argument_list 
-            $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
-            $pn = $p.ProcessName
-            $sh = $p.SafeHandle
-            if($false -eq $p.HasExited)   
-            {
-                [void]$global:processes.Add($p)
-            }
-
-            [int]$cntr = 0
-
-            while ($false -eq $p.HasExited) 
-            {
-                [void] $p.WaitForExit(20000)
-                if ($cntr -gt 0) {
-                    Write-LogWarning "Please wait for network trace to stop..."
-                }
-                $cntr++
-            } 
-
+            Stop-NetworkTrace -partial_output_file_name $partial_output_file_name -partial_error_output_file_name $partial_error_output_file_name
         }
 
         
         #stop WPR trace
         if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit ))
         {
-             # special case for WPR trace - use the host name if no instance name specified (only WPR invoked)
-            if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
-            {
-                $server = $global:host_name
-            }
-            $collector_name = $global:wpr_collector_name
-            $partial_output_file_name_wpr = Create-PartialOutputFilename -server $server
-            $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-            $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name_wpr -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
-            $executable = "cmd.exe"
-            $argument_list = $argument_list = "/C wpr.exe -stop " + $output_file
-            Write-LogInformation "Executing shutdown command: $collector_name"
-            Write-LogDebug $executable $argument_list
-            # StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
-            $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
-            $pn = $p.ProcessName
-            $sh = $p.SafeHandle
-            if($false -eq $p.HasExited)   
-            {
-                [void]$global:processes.Add($p)
-            }
-
-            $cntr = 0 #reset the counter
-            while ($false -eq $p.HasExited) 
-            {
-                [void] $p.WaitForExit(5000)
-            
-                if ($cntr -gt 0) {
-                    Write-LogWarning "Please wait for WPR trace to stop..."
-                }
-                $cntr++
-            } 
+            Stop-WPRTrace -partial_error_output_file_name $partial_error_output_file_name
         }
-
-        # planning for future shutdown collectors
+        #stop storport trace
+        if ($true -eq (IsScenarioEnabled -scenarioBit $global:IOBit ))
+        {
+            Stop-StorPortTrace -partial_error_output_file_name $partial_error_output_file_name
+        }
+        # shutdown collectors
         Invoke-OnShutDown
 
         Write-LogInformation "Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus..." -ForegroundColor Green
@@ -3900,11 +4256,239 @@ function Stop-DiagCollectors()
         $function_name = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "$function_name Function failed with error:  $error_msg"
-        $ret = $false
-        return $ret   
+        return
     }
 
 }
+
+
+#***********************************stop collector function start********************************
+
+
+function Stop-Xevent([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    #avoid errors if there was not Xevent collector started
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    { 
+        $collector_name = "xevents_stop"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
+        $alter_event_session_stop = "ALTER EVENT SESSION [$global:xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_session] ON SERVER;" 
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_stop + "`""
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return  
+    }
+}
+
+function Stop-AlwaysOn-Xevents([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    #avoid errors if there was not Xevent collector started 
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "xevents_alwayson_data_movement_stop"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
+        $alter_event_session_ag_stop = "ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER;" 
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $alter_event_session_ag_stop + "`""
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+     }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return  
+    }
+}
+
+function Disable-BackupRestoreTraceFlag([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "Disable Backup Restore Trace Flag"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true  
+        $Disabled_Trace_Flag = "DBCC TRACEOFF(3004,3212,3605,-1)" 
+        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $Disabled_Trace_Flag + "`""
+        #Write-LogInformation "Executing Disabling traceflag command: $collector_name"
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        Write-LogDebug "Disabling trace flags for Backup/Restore: $Disabled_Trace_Flag " -DebugLogLevel 2
+        StartNewProcess -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return 
+    }
+}
+
+function Stop-Perfmon([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "PerfmonStop"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
+        $argument_list = "/C logman stop logscoutperfmon & logman delete logscoutperfmon"
+        $executable = "cmd.exe"
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return   
+    }
+}
+
+
+function Kill-ActiveLogscoutSessions([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "KillActiveLogscoutSessions"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $true
+        $query = "declare curSession 
+                CURSOR for select 'kill ' + cast( session_id as varchar(max)) from sys.dm_exec_sessions where host_name = 'sqllogscout' and program_name='SQLCMD' and session_id <> @@spid
+                open curSession
+                declare @sql varchar(max)
+                fetch next from curSession into @sql
+                while @@FETCH_STATUS = 0
+                begin
+                    exec (@sql)
+                    fetch next from curSession into @sql
+                end
+                close curSession;
+                deallocate curSession;"  
+        $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -o" + $error_file + " -Q`"" + $query + "`" "
+        $executable = "sqlcmd.exe"
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return  
+    }
+}
+
+function Stop-NetworkTrace([string]$partial_output_file_name, [string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "NettraceStop"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
+
+        $argument_list = "/C title Stopping Network trace... & echo This process may take a few minutes. Do not close this window... & StopNetworkTrace.bat"
+        $executable = "cmd.exe"
+
+        Write-LogInformation "Executing shutdown command: $collector_name"
+
+        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Normal -PassThru
+        $pn = $p.ProcessName
+        $sh = $p.SafeHandle
+        if($false -eq $p.HasExited)   
+        {
+            [void]$global:processes.Add($p)
+        }
+
+        [int]$cntr = 0
+
+        while ($false -eq $p.HasExited) 
+        {
+            [void] $p.WaitForExit(20000)
+            if ($cntr -gt 0) {
+                #Write-LogWarning "Please wait for network trace to stop..."
+                Write-LogWarning "Shutting down network tracing may take a few minutes. Please wait..."
+            }
+            $cntr++
+        }
+
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return   
+    }
+}
+
+function Stop-WPRTrace([string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = $global:wpr_collector_name
+        $partial_output_file_name_wpr = Create-PartialOutputFilename -server $server
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name_wpr -collector_name $collector_name -needExtraQuotes $true -fileExt ".etl"
+        $executable = "cmd.exe"
+        $argument_list = $argument_list = "/C wpr.exe -stop " + $output_file
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        Write-LogDebug $executable $argument_list
+        # StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file
+        $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardOutput $error_file -PassThru
+        $pn = $p.ProcessName
+        $sh = $p.SafeHandle
+        if($false -eq $p.HasExited)   
+        {
+            [void]$global:processes.Add($p)
+        }
+
+        $cntr = 0 #reset the counter
+        while ($false -eq $p.HasExited) 
+        {
+            [void] $p.WaitForExit(5000)
+        
+            if ($cntr -gt 0) {
+                Write-LogWarning "Please wait for WPR trace to stop..."
+            }
+            $cntr++
+        }
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return  
+    }
+}
+
+function Stop-StorPortTrace([string]$partial_error_output_file_name)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try
+    {
+        $collector_name = "StorPort_Stop"
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false 
+        $argument_list = "/C logman stop ""storport"" -ets"
+        $executable = "cmd.exe"
+        Write-LogInformation "Executing shutdown command: $collector_name"
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -RedirectStandardError $error_file -WindowStyle Hidden
+    }
+    catch {
+    $function_name = $MyInvocation.MyCommand
+    $error_msg = $PSItem.Exception.Message 
+    Write-LogError "$function_name Function failed with error:  $error_msg"
+    return   
+    }
+}
+
+#**********************************Stop collector function end***********************************
+
 
 function Invoke-DiagnosticCleanUpAndExit()
 {
@@ -3964,14 +4548,33 @@ function Invoke-DiagnosticCleanUpAndExit()
 
 
 
-  #STOP network trace
+  #cleanup network trace
   if ($true -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit ))
   {
     $executable = "cmd.exe"
-    $argument_list ="/C title 'cleanup network trace...' & echo 'This process may take a few minutes...' & netsh trace stop sessionname='sqllogscout_nettrace'"
-    StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -Wait $true
-    Write-LogWarning "This process of shutting down network tracing may take a few minutes. Please wait..."
-    
+    $argument_list ="/C title Cleanup Network trace... & echo This process may take a few minutes. Do not close this window... & StopNetworkTrace.bat"
+    $p = Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Normal -PassThru
+    Write-LogWarning "Cleaning up network tracing may take a few minutes. Please wait..."
+
+    $pn = $p.ProcessName
+    $sh = $p.SafeHandle
+    if($false -eq $p.HasExited)   
+    {
+        [void]$global:processes.Add($p)
+    }
+
+    [int]$cntr = 0
+
+    while ($false -eq $p.HasExited) 
+    {
+        [void] $p.WaitForExit(20000)
+        if ($cntr -gt 0) {
+            #Write-LogWarning "Please wait for network trace to stop..."
+            Write-LogWarning "Shutting down network tracing may take a few minutes. Please do not close this window ..."
+        }
+        $cntr++
+    }
+
   }
 
   #stop the WPR process if running any on the system
@@ -4096,7 +4699,8 @@ function Invoke-DiagnosticCleanUpAndExit()
 # 00010000000 (128) = DumpMemory
 # 00100000000 (256) = WPR
 # 01000000000 (512) = Setup
-# 10000000000 (1024)= XXX
+# 10000000000 (1024)= BackupRestore
+# 10000000001 (2048)= IO
 
 [int] $global:basicBit         = 1
 [int] $global:generalperfBit   = 2 
@@ -4109,7 +4713,8 @@ function Invoke-DiagnosticCleanUpAndExit()
 [int] $global:wprBit           = 256
 [int] $global:setupBit         = 512
 [int] $global:BackupRestoreBit = 1024
-[int] $global:futureScBit      = 2048
+[int] $global:IOBit            = 2048
+[int] $global:futureScBit      = 4096
 
 function ScenarioBitToName ([int] $pScenarioBit)
 {
@@ -4130,6 +4735,7 @@ function ScenarioBitToName ([int] $pScenarioBit)
         256 { $scenName = $WPR_NAME}
         512 { $scenName = $SETUP_NAME}
         1024 { $scenName = $BACKUPRESTORE_NAME}
+        2048 { $scenName = $IO_NAME}
         Default {}
     }
 
@@ -4158,6 +4764,7 @@ function ScenarioNameToBit ([string] $pScenarioName)
         $WPR_NAME { $scenBit = 256}
         $SETUP_NAME { $scenBit = 512}
         $BACKUPRESTORE_NAME { $scenBit = 1024}
+        $IO_NAME { $scenBit = 2048}
         Default {}
     }
 
@@ -4250,7 +4857,7 @@ function Get-ClusterVNN ($instance_name)
     if (($instance_name -ne "") -and ($null -ne $instance_name))
     {
         $sql_fci_object = Get-ClusterResource | Where-Object {($_.ResourceType -eq "SQL Server")} | get-clusterparameter | Where-Object {($_.Name -eq "InstanceName") -and ($_.Value -eq $instance_name)}
-        $vnn_obj = Get-ClusterResource  | Where-Object {($_.ResourceType -eq "SQL Server") -and ($_.Name -eq $sql_fci_object.ClusterObject.OwnerGroup.Name)} | get-clusterparameter -Name VirtualServerName | Select-Object Value
+        $vnn_obj = Get-ClusterResource  | Where-Object {($_.ResourceType -eq "SQL Server") -and ($_.OwnerGroup -eq $sql_fci_object.ClusterObject.OwnerGroup.Name)} | get-clusterparameter -Name VirtualServerName | Select-Object Value
         $vnn = $vnn_obj.Value
     }
     else
@@ -4367,8 +4974,7 @@ function IsClustered()
         $mycommand = $MyInvocation.MyCommand
         $error_msg = $PSItem.Exception.Message 
         Write-LogError "Function $mycommand failed with error:  $error_msg"
-        $ret = $false
-        return $ret              
+        return
     }
 
     return $ret
@@ -4667,6 +5273,26 @@ function Pick-SQLServer-for-Diagnostics()
     }
 }
 
+
+function Set-NoInstanceToHostName()
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try 
+    {
+        if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+        {
+            $global:sql_instance_conn_str = $global:host_name
+        }
+    }
+    catch 
+    {
+        $mycommand = $MyInvocation.MyCommand 
+        $error_msg = $PSItem.Exception.Message 
+        Write-LogError "Function $mycommand failed with error:  $error_msg"
+        return
+    }
+    
+}
 #======================================== END OF NETNAME + INSTANCE SECTION
 
 #======================================== START OF PERFMON COUNTER FILES SECTION
@@ -4802,11 +5428,7 @@ function PrepareCountersFile()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     #if we are not calling a Perfmon scenario, return and don't proceed
-    if ( ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
-    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit )) `
-    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
-    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
-    -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) )
+    if ($global:perfmon_scenario_enabled -eq $false)
     {
         Write-LogDebug "No Perfmon-collection scenario is selected. Perfmon counters file will not be created" -DebugLogLevel 3
         return
@@ -4883,7 +5505,7 @@ param (
 
     if (($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME) -or ($true -eq $global:instance_independent_collection ) )
     {
-        Write-LogWarning "No SQL Server instance provided or Instance-independent collection. SQL Permissions-checking is not necessary"
+        Write-LogWarning "No SQL Server instance found or Instance-independent collection. SQL Permissions-checking is not necessary"
         return $true
     }
     elseif ($global:sql_instance_conn_str -ne "")
@@ -4900,7 +5522,8 @@ param (
     Write-LogDebug "Received parameter SQLUser: `"$SQLUser`"" -DebugLogLevel 2
     Write-LogDebug "Received parameter SQLPassword (true/false): " (-not ($null -eq $SQLPassword)) #we don't print the password, just inform if we received it or not
 
-    $SqlQuery = "select SUSER_SNAME() login_name, HAS_PERMS_BY_NAME(null, null, 'view server state') has_view_server_state, HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') has_alter_any_event_session, SERVERPROPERTY('ProductMajorVersion') sql_major_version"
+    #query bellow does substring of SERVERPROPERTY('ProductVersion') instead of using SERVERPROPERTY('ProductMajorVersion') for backward compatibility with SQL Server 2012 & 2014
+    $SqlQuery = "select SUSER_SNAME() login_name, HAS_PERMS_BY_NAME(null, null, 'view server state') has_view_server_state, HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') has_alter_any_event_session, LEFT(CAST(SERVERPROPERTY(N'ProductVersion') AS NVARCHAR(128)), (CHARINDEX(N'.', CAST(SERVERPROPERTY(N'ProductVersion') AS NVARCHAR(128)))-1)) sql_major_version"
     $ConnString = "Server=$SQLInstance;Database=master;"
 
     #if either SQLUser or SQLPassword are null we setup Integrated Authentication
@@ -4942,6 +5565,8 @@ param (
     $SqlConnection.Close()
 
     $global:sql_major_version = $DataSet.Tables[0].Rows[0].sql_major_version
+    Write-LogDebug "SQL Major Version: " $global:sql_major_version -DebugLogLevel 3
+
     $account = $DataSet.Tables[0].Rows[0].login_name
 
     if ((1 -eq $DataSet.Tables[0].Rows[0].has_view_server_state) -and (1 -eq $DataSet.Tables[0].Rows[0].has_alter_any_event_session))
@@ -5110,9 +5735,10 @@ function main ()
     
     Write-LogDebug "Scenario prameter passed is '$Scenario'" -DebugLogLevel 3
 
-    try {  
-        Init-AppVersion
+    try 
+    {  
 
+        Init-AppVersion
     
         #check for administrator rights
         Check-ElevatedAccess
@@ -5126,8 +5752,14 @@ function main ()
     
         #create a log of events
         Initialize-Log -LogFilePath $global:internal_output_folder -LogFileName "##SQLLOGSCOUT.LOG"
-    
-    
+        
+        #check file attributes against expected attributes
+        $validFileAttributes = Confirm-FileAttributes
+        if (-not($validFileAttributes)){
+            Write-LogInformation "File attribute validation FAILED. Exiting..."
+            return
+        }
+        
         #invoke the main collectors code
         GetPerformanceDataAndLogs
     
