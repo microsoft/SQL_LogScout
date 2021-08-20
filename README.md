@@ -166,6 +166,8 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - Linked Server metadata (SQL DMVs/system views)
    - Service Broker configuration information (SQL DMVs/system views)
 
+ *Note:* If you combine GeneralPerf with DetailedPerf scenario, then the GeneralPerf will be disabled and only DetailedPerf will be collected.
+
 1. **DetailedPerf scenario** collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
    - GeneralPerf scenario
    - Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level starting/completed events and actual XML query plans (for completed queries)
