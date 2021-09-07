@@ -110,7 +110,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 
    For more information on each scenario see [Scenarios](#Scenarios)
 
-1. **ServerInstanceConStr** - specify the SQL Server to collect data from by using the following format "Server\Instance".
+1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN).
 
 1. **CustomOutputPath** - specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
     - "PromptForCustomDir" - will cause the user to be prompted whether to specify a custom path
