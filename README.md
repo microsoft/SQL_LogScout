@@ -100,9 +100,9 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "WPR"
     - "Setup"
     - "BackupRestore"
-    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters must be used. 
+    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s).
 
-   You can select one or more scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
+   Multiple Scenarions: You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
 
    `GeneralPerf+Memory+Setup`
 
