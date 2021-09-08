@@ -149,7 +149,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - SQL Errorlogs
    - SQL Agent logs
    - Polybase logs
-   - Windows Cluster logs
+   - [Windows Cluster logs](https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog)
    - [AlwaysOn_health*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#BKMK_alwayson_health)
    - [MSSQLSERVER_SQLDIAG*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
    - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
