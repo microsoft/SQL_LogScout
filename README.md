@@ -6,7 +6,8 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 
 # Minimum Requirements
 
-SQL LogScout runs on Windows and requires that you run Powershell version 5.0 or later.
+SQL LogScout Windows 2012 or later 
+Powershell version 4.0 or later
 
 # Download
 
@@ -100,6 +101,8 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "WPR"
     - "Setup"
     - "BackupRestore"
+    - "IO"
+    - "LightPerf"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s).
 
    Multiple Scenarions: You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
@@ -145,7 +148,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - Current active PowerPlan
    - Installed Windows Hotfixes
    - Running filter drivers
-   - Event logs (system and application)
+   - Event logs (system and application in both .CSV and .TXT formats)
    - SQL Errorlogs
    - SQL Agent logs
    - Polybase logs
@@ -154,11 +157,12 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
    - [MSSQLSERVER_SQLDIAG*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
    - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
    - [SQL Assessment API](https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview) log
+   - Windows Cluster HKEY_LOCAL_MACHINE\Cluster registry hive in .HIV format
 
 1. **GeneralPerf scenario** collects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
    - Basic scenario
    - Performance Monitor counters for SQL Server instance and general OS counters
-   - Extended Event trace captures batch-level starting/completed events, errors and warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout
+   - Extended Event (XEvent) trace captures batch-level starting/completed events, errors and warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout
    - List of actively-running SQL traces and Xevents
    - Snapshots of SQL DMVs that track waits/blocking and high CPU queries
    - Query Data Store info (if that is active)
@@ -213,6 +217,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
     - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
     - Performance Monitor counters for SQL Server instance and general OS counters
+1. **LightPerf** - collects everything that the GeneralPerf scenario does, _except_ the Extended Event traces. This is intended to capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
 
 # Sample output
 
@@ -355,7 +360,12 @@ Removed .\##STDERR.LOG which was 0 bytes
 
 # Logging
 
-SQL LogScout logs the flow of activity on the console as well as in a log file - ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution.
+## ##SQLLOGSCOUT.LOG file
+SQL LogScout logs the flow of activity in two files ##SQLLOGSCOUT.LOG and ##SQLLOGSCOUT_DEBUG.LOG. The activity flow on the console is logged in ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. 
+## ##STDERR.LOG file
+If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution. The ##STDERR.LOG file is stored in the root directory where SQL LogScout runs because any failures that occur early before the creation of an output folder may be logged in this file. 
+## ##SQLLOGSCOUT_DEBUG.LOG file
+This file contains everything the ##SQLLOGSCOUT.LOG contains, but also adds many debug-level, detailed messages. These can be used to investigate any issues with SQL LogScout and examine the flow of execution in detail. 
 
 # Targeted SQL instances
 
