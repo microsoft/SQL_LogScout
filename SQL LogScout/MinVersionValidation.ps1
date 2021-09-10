@@ -5,9 +5,9 @@ function Test-MinPowerShellVersion
     $psversion_maj = (Get-Host).Version.Major
     $psversion_min = (Get-Host).Version.Minor
 
-    if ($psversion_maj -lt 5)
+    if ($psversion_maj -lt 4)
     {
-        Write-Host "Minimum required PowerShell version is 5.x. Your current verion is $psversion_maj.$psversion_min." -ForegroundColor Yellow
+        Write-Host "Minimum required PowerShell version is 4.x. Your current verion is $psversion_maj.$psversion_min." -ForegroundColor Yellow
         Write-Host "Please upgrade PowerShell @ https://docs.microsoft.com/powershell/scripting/install/installing-powershell"  -ForegroundColor Yellow
         Write-Host "Exiting..." -ForegroundColor Yellow
         exit 7654321

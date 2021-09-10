@@ -5,79 +5,35 @@
 
 param
 (
-
-    [ValidateSet(0,1,2,3,4,5)]
+    # DebugLevel parameter is deprecated
+    # SQL LogScout will generate *_DEBUG.LOG with verbose level 5 logging for all executions
+    # to enable debug messages in console, modify $global:DEBUG_LEVEL in LoggingFacility.ps1
     [Parameter(Position=0,HelpMessage='Choose 0|1|2|3|4|5')]
     [int32] $DebugLevel = 0,
 
-    #scenario is an optional parameter since there is a menu that covers for it if not present
-    #[ValidateSet("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore")]
-    [ValidateScript(
-        { 
-            $ScenarioArrayParam = $_.Split('+')
-            [string[]] $localScenArray = @(("MenuChoice","Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore","I/O"))
-            try 
-            {
-                foreach ($scenItem in $ScenarioArrayParam)
-                {
-                    if ($localScenArray -notcontains $scenItem)
-                    {
-                        return $false
-                    }
-                }
-            }
-            catch 
-            {
-            }
-
-            return $true
-        }
-     )]
     [Parameter(Position=1,HelpMessage='Choose a plus-sign separated list of one or more of: Basic,GeneralPerf,DetailedPerf,Replication,AlwaysOn,Memory,DumpMemory,WPR,Setup. Or MenuChoice')]
     [string[]] $Scenario=[String]::Empty,
 
     #servername\instnacename is an optional parameter since there is code that auto-discovers instances
     [Parameter(Position=2)]
-    [string] $ServerInstanceConStr = [String]::Empty,
+    [string] $ServerName = [String]::Empty,
 
-    [ValidateScript(
-        { 
-
-            if ($_ -in "UsePresentDir", "PromptForCustomDir")
-            {
-                return $true
-            }
-            elseif ((Test-Path -Path $_ -PathType Container) -eq $false)
-            {
-                return $false
-            }
-            else 
-            {
-                return $true    
-            }
-        
-        }
-    )]
     [Parameter(Position=3,HelpMessage='Specify a valid path for your output folder, or type "UsePresentDir"')]
     [string] $CustomOutputPath = "PromptForCustomDir",
 
     #scenario is an optional parameter since there is a menu that covers for it if not present
-    [ValidateSet("DeleteDefaultFolder","NewCustomFolder")]
     [Parameter(Position=4,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder')]
     [string] $DeleteExistingOrCreateNew = [String]::Empty,
 
     #specify start time for diagnostic
-    [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
     [Parameter(Position=5,HelpMessage='Format is: "2020-10-27 19:26:00"')]
     [string] $DiagStartTime = "0000",
     
     #specify end time for diagnostic
-    [ValidateScript({ [DateTime]::Parse($_, [cultureinfo]::InvariantCulture)})]
     [Parameter(Position=6,HelpMessage='Format is: "2020-10-27 19:26:00"')]
     [string] $DiagStopTime = "0000",
 
     #specify quiet mode for any Y/N prompts
-    [ValidateSet("Quiet","Noisy")]
     [Parameter(Position=7,HelpMessage='Choose Quiet|Noisy')]
     [string] $InteractivePrompts = "Noisy"
 
@@ -96,12 +52,11 @@ param
 [bool]$global:perfmon_counters_restored = $false
 [string]$NO_INSTANCE_NAME = "no_instance_found"
 [string]$global:sql_instance_conn_str = $NO_INSTANCE_NAME #setting the connection sting to $NO_INSTANCE_NAME initially
-[System.Collections.ArrayList]$global:processes = [System.Collections.ArrayList]::new()
-[int]$global:DEBUG_LEVEL = $DebugLevel #zero to disable, 1 to 5 to enable different levels of debug logging
+[System.Collections.ArrayList]$global:processes = New-Object -TypeName System.Collections.ArrayList
 [System.Collections.ArrayList] $global:ScenarioChoice = @()
 [bool] $global:stop_automatically = $false
 [string] $global:xevent_target_file = "xevent_LogScout_target"
-[string] $global:xevent_session = "Xevent_SQLLogScout"
+[string] $global:xevent_session = "xevent_SQLLogScout"
 [string] $global:xevent_alwayson_session = "SQLLogScout_AlwaysOn_Data_Movement"
 [bool] $global:xevent_on = $false
 [bool] $global:perfmon_is_on = $false
@@ -128,7 +83,8 @@ param
 [string] $SETUP_NAME = "Setup"
 [string] $BACKUPRESTORE_NAME = "BackupRestore"
 [string] $IO_NAME = "IO"
-[string[]] $global:ScenarioArray = @($BASIC_NAME,$GENERALPERF_NAME,$DETAILEDPERF_NAME,$REPLICATION_NAME,$ALWAYSON_NAME,$NETWORKTRACE_NAME,$MEMORY_NAME,$DUMPMEMORY_NAME,$WPR_NAME,$SETUP_NAME,$BACKUPRESTORE_NAME,$IO_NAME)
+[string] $LIGHTPERF_NAME = "LightPerf"
+[string[]] $global:ScenarioArray = @($BASIC_NAME,$GENERALPERF_NAME,$DETAILEDPERF_NAME,$REPLICATION_NAME,$ALWAYSON_NAME,$NETWORKTRACE_NAME,$MEMORY_NAME,$DUMPMEMORY_NAME,$WPR_NAME,$SETUP_NAME,$BACKUPRESTORE_NAME,$IO_NAME,$LIGHTPERF_NAME)
 
 [int] $BasicScenId = 0
 [int] $GeneralPerfScenId = 1
@@ -142,13 +98,48 @@ param
 [int] $SetupScenId = 9
 [int] $BackupRestoreScenId = 10
 [int] $IOScenId = 11
+[int] $LightPerfScenId = 12
+
+
+# 00000000000001 (1)   = Basic
+# 00000000000010 (2)   = GeneralPerf
+# 00000000000100 (4)   = DetailedPerf
+# 00000000001000 (8)   = Replication
+# 00000000010000 (16)  = alwayson
+# 00000000100000 (32)  = networktrace
+# 00000001000000 (64)  = memory
+# 00000010000000 (128) = DumpMemory
+# 00000100000000 (256) = WPR
+# 00001000000000 (512) = Setup
+# 00010000000000 (1024)= BackupRestore
+# 00100000000000 (2048)= IO
+# 01000000000000 (4096)= LightPerf
+# 10000000000000 (8192)= futureBit
+
+
+[int] $global:basicBit         = 1
+[int] $global:generalperfBit   = 2 
+[int] $global:detailedperfBit  = 4
+[int] $global:replBit          = 8
+[int] $global:alwaysonBit      = 16
+[int] $global:networktraceBit  = 32
+[int] $global:memoryBit        = 64
+[int] $global:dumpMemoryBit    = 128
+[int] $global:wprBit           = 256
+[int] $global:setupBit         = 512
+[int] $global:BackupRestoreBit = 1024
+[int] $global:IOBit            = 2048
+[int] $global:LightPerfBit     = 4096
+[int] $global:futureScBit      = 8192
+
+
 #=======================================Start of \OUTPUT and \ERROR directories and files Section
 
 function Init-AppVersion()
 {
     $major_version = "4"
-    $minor_version = "0"
-    $build = "0"
+    $minor_version = "1"
+    $build = "11"
     $global:app_version = $major_version + "." + $minor_version + "." + $build
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
@@ -577,7 +568,7 @@ function GetWindowsHotfixes ()
         #in case CTRL+C is pressed
         HandleCtrlC
 
-        [System.Text.StringBuilder]$rs_runningdrives = [System.Text.StringBuilder]::new()
+        [System.Text.StringBuilder]$rs_runningdrives = New-Object -TypeName System.Text.StringBuilder
 
         #Running drivers header
         [void]$rs_runningdrives.Append("-- Windows Hotfix List --`r`n")
@@ -616,30 +607,146 @@ function GetEventLogs($server)
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
     [console]::TreatControlCAsInput = $true
-
-    Write-LogInformation "Executing Collector:" $MyInvocation.MyCommand
+    
+    $collector_name = $MyInvocation.MyCommand
+    Write-LogInformation "Executing Collector:" $collector_name
 
     $server = $global:sql_instance_conn_str
 
     try {
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = Create-PartialOutputFilename ($server)
+
+        $partial_error_output_file_name = Create-PartialErrorOutputFilename($server)
+        $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
     
         Write-LogDebug "The partial_output_file_name is $partial_output_file_name" -DebugLogLevel 3
     
-        #gather system and application Event logs in text format
-        $servers = "."
+        #in case CTRL+C is pressed
+        HandleCtrlC
+
+        $sbWriteLogBegin = {
+
+            [System.Text.StringBuilder]$TXTEvtOutput = New-Object -TypeName System.Text.StringBuilder
+            [System.Text.StringBuilder]$CSVEvtOutput = New-Object -TypeName System.Text.StringBuilder
+
+            # TXT header
+            [void]$TXTEvtOutput.Append("Date Time".PadRight(25))
+            [void]$TXTEvtOutput.Append("Type/Level".PadRight(16))
+            [void]$TXTEvtOutput.Append("Computer Name".PadRight(17))
+            [void]$TXTEvtOutput.Append("EventID".PadRight(8))
+            [void]$TXTEvtOutput.Append("Source".PadRight(51))
+            [void]$TXTEvtOutput.Append("Task Category".PadRight(20))
+            [void]$TXTEvtOutput.Append("Username".PadRight(51))
+            [void]$TXTEvtOutput.AppendLine("Message")
+            [void]$TXTEvtOutput.AppendLine("-" * 230)
+
+            # CSV header
+            [void]$CSVEvtOutput.AppendLine("`"EntryType`",`"TimeGenerated`",`"Source`",`"EventID`",`"Category`",`"Message`"")
+        }
+
+        $sbWriteLogProcess = {
+            
+            [string]$TimeGenerated = $_.TimeGenerated.ToString("MM/dd/yyyy hh:mm:ss tt")
+            [string]$EntryType = $_.EntryType.ToString()
+            [string]$MachineName = $_.MachineName.ToString()
+            [string]$EventID = $_.EventID.ToString()
+            [string]$Source = $_.Source.ToString()
+            [string]$Category = $_.Category.ToString()
+            [string]$UserName = $_.UserName
+            [string]$Message = ((($_.Message.ToString() -replace "`r") -replace "`n", " ") -replace "`t", " ")
+
+            # during testing some usernames are blank so we handle just like Windows Event Viewer displaying "N/A"
+            if ($null -eq $UserName) {$UserName = "N/A"}
+
+            # during testing some categories are "(0)" and Windows Event Viewer displays "None", so we just mimic same behavior
+            if ("(0)" -eq $Category) {$Category = "None"}
+
+            # TXT event record
+            [void]$TXTEvtOutput.Append($TimeGenerated.PadRight(25))
+            [void]$TXTEvtOutput.Append($EntryType.PadRight(16))
+            [void]$TXTEvtOutput.Append($MachineName.PadRight(17))
+            [void]$TXTEvtOutput.Append($EventID.PadRight(8))
+            [void]$TXTEvtOutput.Append($Source.PadRight(50).Substring(0, 50).PadRight(51))
+            [void]$TXTEvtOutput.Append($Category.PadRight(20))            
+            [void]$TXTEvtOutput.Append($UserName.PadRight(50).Substring(0, 50).PadRight(51))
+            [void]$TXTEvtOutput.AppendLine($Message)
+
+            # CSV event record
+            [void]$CSVEvtOutput.Append('"' + $EntryType + '",')
+            [void]$CSVEvtOutput.Append('"' + $TimeGenerated + '",')
+            [void]$CSVEvtOutput.Append('"' + $Source + '",')
+            [void]$CSVEvtOutput.Append('"' + $EventID + '",')
+            [void]$CSVEvtOutput.Append('"' + $Category + '",')
+            [void]$CSVEvtOutput.AppendLine('"' + $Message + '"')
+
+            $evtCount++
+
+            # write to the files every 10000 events
+            if (($evtCount % 10000) -eq 0) {
+                
+                $TXTevtfile.Write($TXTEvtOutput.ToString())
+                $TXTevtfile.Flush()
+                [void]$TXTEvtOutput.Clear()
+
+                $CSVevtfile.Write($CSVEvtOutput.ToString())
+                $CSVevtfile.Flush()
+                [void]$CSVEvtOutput.Clear()
+
+                Write-LogInformation "   Produced $evtCount records in the EventLog"
+
+                #in case CTRL+C is pressed
+                HandleCtrlC
+
+            }
+
+        }
         
-        $appevtfile = New-Item -type file ($partial_output_file_name + "_EventLog_Application.csv") -Force;
-        $sysevtfile = New-Item -type file ($partial_output_file_name + "_EventLog_System.csv") -Force;
-        Get-EventLog -LogName Application -Newest 7777 | Select-Object -Property EntryType,TimeGenerated,Source,EventID,Category,Message | Export-CSV -Path $appevtfile -NoTypeInformation
+        $sbWriteLogEnd = {
+            # at end of process we write any remaining messages, flush and close the file    
+            if ($TXTEvtOutput.Length -gt 0){
+                $TXTevtfile.Write($TXTEvtOutput.ToString())
+            }
+            $TXTevtfile.Flush()
+            $TXTevtfile.Close()
+
+            if ($CSVEvtOutput.Length -gt 0){
+                $CSVevtfile.Write($CSVEvtOutput.ToString())
+            }
+            $CSVevtfile.Flush()
+            $CSVevtfile.Close()
+            
+            Remove-Variable -Name "TXTEvtOutput"
+            Remove-Variable -Name "CSVEvtOutput"
+
+            Write-LogInformation "   Produced $evtCount records in the EventLog"
+        }
+
+        Write-LogInformation "Gathering Application EventLog in TXT and CSV format  "
+        
+        $TXTevtfile = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($partial_output_file_name + "_EventLog_Application.out"), $false, [System.Text.Encoding]::ASCII)
+        $CSVevtfile = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($partial_output_file_name + "_EventLog_Application.csv"), $false, [System.Text.Encoding]::ASCII)
+
+        [int]$evtCount = 0
+
+        Get-EventLog -LogName Application -After (Get-Date).AddDays(-90) | ForEach-Object -Begin $sbWriteLogBegin -Process $sbWriteLogProcess -End $sbWriteLogEnd 2>> $error_file | Out-Null
+        
+        Write-LogInformation "Application EventLog in TXT and CSV format completed!"
 
         #in case CTRL+C is pressed
         HandleCtrlC
         
-        Get-EventLog -LogName System -Newest 7777 | Select-Object -Property EntryType,TimeGenerated,Source,EventID,Category,Message | Export-CSV -Path $sysevtfile -NoTypeInformation
+        Write-LogInformation "Gathering System EventLog in TXT and CSV format  "
 
-            
+        $TXTevtfile = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($partial_output_file_name + "_EventLog_System.out"), $false, [System.Text.Encoding]::ASCII)
+        $CSVevtfile = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($partial_output_file_name + "_EventLog_System.csv"), $false, [System.Text.Encoding]::ASCII)
+
+        [int]$evtCount = 0
+
+        Get-EventLog -LogName System -After (Get-Date).AddDays(-90) | ForEach-Object -Begin $sbWriteLogBegin -Process $sbWriteLogProcess -End $sbWriteLogEnd 2>> $error_file | Out-Null
+        
+        Write-LogInformation "System EventLog in TXT and CSV format completed!"
+
     }
     catch {
         $mycommand = $MyInvocation.MyCommand 
@@ -733,8 +840,8 @@ function GetRunningDrivers()
             Select-Object -Property Length, LastWriteTime -ExpandProperty "VersionInfo" | `
             Sort-Object CompanyName, FileDescription
 
-        [System.Text.StringBuilder]$TXToutput = [System.Text.StringBuilder]::new()
-        [System.Text.StringBuilder]$CSVoutput = [System.Text.StringBuilder]::new()
+        [System.Text.StringBuilder]$TXToutput = New-Object -TypeName System.Text.StringBuilder
+        [System.Text.StringBuilder]$CSVoutput = New-Object -TypeName System.Text.StringBuilder
 
         #CSV header
         [void]$CSVoutput.Append("ID,Module Path,Product Version,File Version,Company Name,File Description,File Size,File Time/Date String,`r`n")
@@ -2430,7 +2537,7 @@ function GetMemoryLogs()
 
 }
 
-function GetClusterLogs()
+function GetClusterInformation()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
@@ -2439,23 +2546,23 @@ function GetClusterLogs()
     $server = $global:sql_instance_conn_str
     $output_folder = $global:output_folder
     $ClusterError = 0
-    $collector_name = "GetClusterInfo"
+    $collector_name = "ClusterInfo"
     $partial_output_file_name = Create-PartialOutputFilename ($server)
     
     Write-LogInformation "Executing Collector: $collector_name"
 
     $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false -fileExt ".out"
-    [System.Text.StringBuilder]$rs_ClusterLog = [System.Text.StringBuilder]::new()
+    [System.Text.StringBuilder]$rs_ClusterLog = New-Object -TypeName System.Text.StringBuilder
 
     try 
     {
             Import-Module FailoverClusters
             [void]$rs_ClusterLog.Append("-- Windows Cluster Name --`r`n")
             $clusterName = Get-cluster
-            [void]$rs_ClusterLog.Append("$clusterName`r`n") 
+            [void]$rs_ClusterLog.Append("$clusterName`r`n")
             
             # dumping windows cluster log
-            Write-LogWarning "Collecting Windows cluster log for all nodes, this process may takes some time....." 
+            Write-LogWarning "Collecting Windows cluster log for all running nodes, this process may take some time....." 
             Get-ClusterLog -Destination $output_folder  -UseLocalTime | Out-Null
     }
     catch 
@@ -2470,10 +2577,20 @@ function GetClusterLogs()
     {
         try 
         {
-                $ReportPath = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name "ClusterRegistryHive" -needExtraQuotes $false -fileExt ".out"
-                Get-ChildItem 'HKLM:HKEY_LOCAL_MACHINE\Cluster' -Recurse | Out-File -FilePath $ReportPath
-                #reg save "HKEY_LOCAL_MACHINE\Cluster" $ReportPath
-            
+                #Cluster Registry Hive
+                $collector_name = "ClusterRegistryHive"
+                
+                $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false -fileExt ".out"
+                Get-ChildItem 'HKLM:HKEY_LOCAL_MACHINE\Cluster' -Recurse | Out-File -FilePath $output_file
+                
+                $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $true -fileExt ".hiv"
+                $error_file = Build-FinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name  -needExtraQuotes $false
+                $executable = "reg.exe"
+                $argument_list = "save `"HKEY_LOCAL_MACHINE\Cluster`" $output_file"
+                Write-LogInformation "Executing Collector: $collector_name"
+                
+                StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file
+
         }
         catch
         {
@@ -2873,6 +2990,7 @@ function GetSQLAssessmentAPI()
 
 
         $collector_name = "SQLAssessmentAPI"
+        Write-LogInformation "Executing Collector: $collector_name"
         $output_file = Build-FinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
 
         if (Get-Module -ListAvailable -Name sqlserver)
@@ -2880,7 +2998,6 @@ function GetSQLAssessmentAPI()
             if ((Get-Module -ListAvailable -Name sqlserver).exportedCommands.Values | Where-Object name -EQ "Invoke-SqlAssessment")
             {
                 Write-LogDebug "Invoke-SqlAssessment() function present" -DebugLogLevel 3
-                Write-LogInformation "Executing Collector: $collector_name"
                 Get-SqlInstance -ServerInstance $server | Invoke-SqlAssessment -FlattenOutput | Out-File $output_file
             } 
             else 
@@ -2891,7 +3008,7 @@ function GetSQLAssessmentAPI()
         }
         else
         {
-                Write-Host "SQLServer PS module not installed"
+                Write-LogWarning "SQLServer PS module not installed. Will not collect $collector_name"
         }
     
     }
@@ -2962,7 +3079,7 @@ function GetUserRights ()
 
     try {
 
-        $collectorData = [System.Text.StringBuilder]::new()
+        $collectorData = New-Object System.Text.StringBuilder
         [void]$collectorData.AppendLine("Defined User Rights")
         [void]$collectorData.AppendLine("===================")
         [void]$collectorData.AppendLine()
@@ -3011,13 +3128,13 @@ function GetUserRights ()
                 $users = $line.Split(" = ")[3].Split(",")
                 [void]$collectorData.AppendLine([string]$users.Count + " account(s) with the " + $right.Constant + " user right:")
                 
-                $resolvedUserNames = [System.Collections.ArrayList]::new()
+                $resolvedUserNames = New-Object -TypeName System.Collections.ArrayList
 
                 foreach ($user in $users) {
                     
                     if($user[0] -eq "*"){
                         
-                        $SID = [System.Security.Principal.SecurityIdentifier]::new($user.Substring(1))
+                        $SID = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList (($user.Substring(1)))
 
                         try { #some account lookup may fail hence then nested try-catch
                             $account = $SID.Translate([Security.Principal.NTAccount]).Value    
@@ -3029,13 +3146,13 @@ function GetUserRights ()
 
                     } else {
                         
-                        $NTAccount = [System.Security.Principal.NTAccount]::new($user)
+                        $NTAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList ($user)
 
                         try {
                             
                             #try to get SID from account, then translate SID back to account
                             #done to mimic SDP behavior adding hostname to local accounts
-                            $SID = [System.Security.Principal.SecurityIdentifier]::new($NTAccount.Translate([Security.Principal.SecurityIdentifier]).Value)
+                            $SID = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList (($NTAccount.Translate([Security.Principal.SecurityIdentifier]).Value))
                             $account = $SID.Translate([Security.Principal.NTAccount]).Value
                             [void]$resolvedUserNames.Add($account)
 
@@ -3175,6 +3292,7 @@ function Confirm-WritePermsStartupAccount ()
     # if interactive prompt is disabled, skip this check
     if ($InteractivePrompts -eq "Quiet")
     {
+        Write-LogDebug "Running in QUIET mode" -DebugLogLevel 4
         return $true  #proceed with execution
     }
 
@@ -3242,6 +3360,7 @@ function DetailedPerfCollectorWarning ()
 
     if ($InteractivePrompts -eq "Quiet") 
     {
+        Write-LogDebug "Running in QUIET mode" -DebugLogLevel 4
         Start-Sleep 5
         return $true
     }
@@ -3319,7 +3438,7 @@ function Invoke-CommonCollectors()
 
     if (IsClustered)
     {
-        GetClusterLogs
+        GetClusterInformation
     } 
 
 } 
@@ -3401,6 +3520,43 @@ function Invoke-DetailedPerfScenario()
     } 
 }
 
+function Invoke-LightPerfScenario ()
+{
+    [console]::TreatControlCAsInput = $true
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogInformation "Collecting logs for '$LIGHTPERF_NAME' scenario" -ForegroundColor Green
+    
+    
+    GetPerfmonCounters
+    
+    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    {
+        Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
+    }
+    else 
+    {
+
+        HandleCtrlC
+        Start-Sleep -Seconds 1
+        GetRunningProfilerXeventTraces 
+
+        HandleCtrlC
+        Start-Sleep -Seconds 2
+        GetHighCPUPerfStats
+        GetPerfStats 
+
+        HandleCtrlC
+        Start-Sleep -Seconds 2
+        GetPerfStatsSnapshot 
+        GetQDSInfo 
+
+        HandleCtrlC
+        Start-Sleep -Seconds 2
+        GetTempdbSpaceLatchingStats 
+        GetLinkedServerInfo 
+        GetServiceBrokerInfo
+    } 
+}
 function Invoke-AlwaysOnScenario()
 {
     [console]::TreatControlCAsInput = $true
@@ -3620,6 +3776,7 @@ function StartStopTimeForDiagnostics ([string] $timeParam, [string] $startOrStop
         $formatted_date_time = [DateTime]::Parse($datetime, [cultureinfo]::InvariantCulture);
         
         Write-LogDebug "The formatted time is: $formatted_date_time" -DebugLogLevel 3
+        Write-LogDebug ("The current time is:" + (Get-Date) ) -DebugLogLevel 3
     
         #wait until time is reached
         if ($formatted_date_time -gt (Get-Date))
@@ -3679,14 +3836,39 @@ function ArbitrateSelectedScenarios ([bool] $Skip = $false)
         return
     }
 
+    #set up Basic bit to ON for several scenarios
+
+    if ( ($false -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:replBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:setupBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:IOBit)) `
+    -or ($false -eq (IsScenarioEnabled -scenarioBit $global:LightPerfBit))
+    )
+    {
+        EnableScenario -pScenarioBit $global:basicBit
+    }
     
     #if generalperf and detailedperf are both enabled , disable general perf and keep detailed (which is a superset)
     if (($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit )) `
     -and ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit  )) )
     {
         DisableScenario -pScenarioBit $global:generalperfBit
-        Write-LogDebug "Disabling '$GENERALPERF_NAME' scenario since $DETAILEDPERF_NAME is already enabled"
+        Write-LogWarning "Disabling '$GENERALPERF_NAME' scenario since '$DETAILEDPERF_NAME' is already enabled"
     }
+
+    #if lightperf and detailedperf are both enabled , disable general perf and keep detailed (which is a superset)
+    if (
+        ($true -eq (IsScenarioEnabled -scenarioBit $global:LightPerfBit )) `
+        -and ( ($true -eq (IsScenarioEnabled -scenarioBit $global:detailedperfBit ) )  -or ($true -eq (IsScenarioEnabled -scenarioBit $global:generalperfBit ) ))
+    )
+    {
+        DisableScenario -pScenarioBit $global:LightPerfBit
+        Write-LogWarning "Disabling '$LIGHTPERF_NAME' scenario since '$DETAILEDPERF_NAME' or '$GENERALPERF_NAME' is already enabled"
+    }
+
 
     #limit WPR to run only with Basic
     if ($true -eq (IsScenarioEnabled -scenarioBit $global:wprBit )) 
@@ -3726,7 +3908,7 @@ function Select-Scenario()
     Write-LogInformation ""
     Write-LogInformation "Initiating diagnostics collection... " -ForegroundColor Green
 
-    [string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup", "Backup and Restore","IO"
+    #[string[]]$ScenarioArray = "Basic (no performance data)","General Performance (recommended for most cases)","Detailed Performance (statement level and query plans)","Replication","AlwaysON", "Network Trace","Memory", "Generate Memory dumps","Windows Performance Recorder (WPR)", "Setup", "Backup and Restore","IO"
     $scenarioIntRange = 0..($ScenarioArray.Length -1)  #dynamically count the values in array and create a range
 
     [int[]]$scenIntArray =@()
@@ -3829,28 +4011,16 @@ function Select-Scenario()
                     {
                         EnableScenario -pScenarioBit $global:generalperfBit
                         
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $DetailedPerfScenId 
                     { 
                         EnableScenario -pScenarioBit $global:detailedperfBit
 
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $ReplicationScenId
                     { 
                         EnableScenario -pScenarioBit $global:replBit
                         
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $AlwaysOnScenId
                     { 
@@ -3864,10 +4034,6 @@ function Select-Scenario()
                     { 
                         EnableScenario -pScenarioBit $global:memoryBit
 
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $DumpMemoryScenId
                     { 
@@ -3881,28 +4047,20 @@ function Select-Scenario()
                     { 
                         EnableScenario -pScenarioBit $global:setupBit
 
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $BackupRestoreScenId
                     { 
                         EnableScenario -pScenarioBit $global:BackupRestoreBit
 
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
                     }
                     $IOScenId
                     { 
                         EnableScenario -pScenarioBit $global:IOBit
 
-                        if ($false -eq (IsScenarioEnabled -scenarioBit $global:basicBit))
-                        {
-                            EnableScenario -pScenarioBit $global:basicBit
-                        }
+                    }
+                    $LightPerfScenId
+                    {
+                        EnableScenario -pScenarioBit $global:LightPerfBit
                     }
                     Default {
                             Write-LogError "No valid scenario was picked. Not sure why we are here"
@@ -3982,7 +4140,8 @@ function Set-AutomaticStop ()
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:networktraceBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
             -and ($false -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
-            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:IOBit ))
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:IOBit )) `
+            -and ($false -eq (IsScenarioEnabled -scenarioBit $global:LightPerfBit ))
         ) )
     {
         Write-LogInformation "The selected '$global:ScenarioChoice ' collector(s) will stop automatically after logs are gathered" -ForegroundColor Green
@@ -4039,7 +4198,8 @@ function Set-PerfmonScenarioEnabled()
         -or ($true -eq (IsScenarioEnabled -scenarioBit $global:alwaysonBit )) `
         -or ($true -eq (IsScenarioEnabled -scenarioBit $global:memoryBit )) `
         -or ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) `
-        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:IOBit )) 
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:IOBit )) `
+        -or ($true -eq (IsScenarioEnabled -scenarioBit $global:LightPerfBit )) 
         )
         {
             $global:perfmon_scenario_enabled = $true
@@ -4070,6 +4230,10 @@ function Start-DiagCollectors ()
     if (IsScenarioEnabled -scenarioBit $global:basicBit -logged $true)
     {
         Write-LogInformation "Basic collectors will execute on shutdown"
+    }
+    if (IsScenarioEnabled -scenarioBit $global:LightPerfBit -logged $true)
+    {
+        Invoke-LightPerfScenario
     }
     if (IsScenarioEnabled -scenarioBit $global:generalperfBit -logged $true)
     {
@@ -4495,6 +4659,8 @@ function Invoke-DiagnosticCleanUpAndExit()
 
   Write-LogDebug "inside" $MyInvocation.MyCommand
 
+  Write-LogWarning "Launching cleanup and exit routine... please wait"
+
   $server = $global:sql_instance_conn_str
 
   #quick cleanup to ensure no collectors are running. 
@@ -4680,6 +4846,7 @@ function Invoke-DiagnosticCleanUpAndExit()
         }
     }
   
+  Write-LogInformation "Thank you for using SQL LogScout!" -ForegroundColor Yellow
   exit
 }
 
@@ -4689,33 +4856,6 @@ function Invoke-DiagnosticCleanUpAndExit()
 
 #======================================== START OF Bitmask Enabling, Diabling and Checking of Scenarios
 
-# 00000000001 (1)   = Basic
-# 00000000010 (2)   = GeneralPerf
-# 00000000100 (4)   = DetailedPerf
-# 00000001000 (8)   = Replication
-# 00000010000 (16)  = alwayson
-# 00000100000 (32)  = networktrace
-# 00001000000 (64)  = memory
-# 00010000000 (128) = DumpMemory
-# 00100000000 (256) = WPR
-# 01000000000 (512) = Setup
-# 10000000000 (1024)= BackupRestore
-# 10000000001 (2048)= IO
-
-[int] $global:basicBit         = 1
-[int] $global:generalperfBit   = 2 
-[int] $global:detailedperfBit  = 4
-[int] $global:replBit          = 8
-[int] $global:alwaysonBit      = 16
-[int] $global:networktraceBit  = 32
-[int] $global:memoryBit        = 64
-[int] $global:dumpMemoryBit    = 128
-[int] $global:wprBit           = 256
-[int] $global:setupBit         = 512
-[int] $global:BackupRestoreBit = 1024
-[int] $global:IOBit            = 2048
-[int] $global:futureScBit      = 4096
-
 function ScenarioBitToName ([int] $pScenarioBit)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
@@ -4724,18 +4864,19 @@ function ScenarioBitToName ([int] $pScenarioBit)
 
     switch ($pScenarioBit) 
     {
-        1 { $scenName = $BASIC_NAME}
-        2 { $scenName = $GENERALPERF_NAME}
-        4 { $scenName = $DETAILEDPERF_NAME}
-        8 { $scenName = $REPLICATION_NAME}
-        16 { $scenName = $ALWAYSON_NAME}
-        32 { $scenName = $NETWORKTRACE_NAME}
-        64 { $scenName = $MEMORY_NAME}
-        128 { $scenName = $DUMPMEMORY_NAME}
-        256 { $scenName = $WPR_NAME}
-        512 { $scenName = $SETUP_NAME}
-        1024 { $scenName = $BACKUPRESTORE_NAME}
-        2048 { $scenName = $IO_NAME}
+        $global:basicBit { $scenName = $BASIC_NAME}
+        $global:generalperfBit { $scenName = $GENERALPERF_NAME}
+        $global:detailedperfBit { $scenName = $DETAILEDPERF_NAME}
+        $global:replBit { $scenName = $REPLICATION_NAME}
+        $global:alwaysonBit { $scenName = $ALWAYSON_NAME}
+        $global:networktraceBit { $scenName = $NETWORKTRACE_NAME}
+        $global:memoryBit { $scenName = $MEMORY_NAME}
+        $global:dumpMemoryBit { $scenName = $DUMPMEMORY_NAME}
+        $global:wprBit { $scenName = $WPR_NAME}
+        $global:setupBit { $scenName = $SETUP_NAME}
+        $global:BackupRestoreBit { $scenName = $BACKUPRESTORE_NAME}
+        $global:IOBit { $scenName = $IO_NAME}
+        $global:LightPerfBit { $scenName = $LIGHTPERF_NAME}
         Default {}
     }
 
@@ -4753,18 +4894,19 @@ function ScenarioNameToBit ([string] $pScenarioName)
 
     switch ($pScenarioName) 
     {
-        $BASIC_NAME { $scenBit = 1}
-        $GENERALPERF_NAME { $scenBit = 2}
-        $DETAILEDPERF_NAME { $scenBit = 4}
-        $REPLICATION_NAME { $scenBit = 8}
-        $ALWAYSON_NAME { $scenBit = 16}
-        $NETWORKTRACE_NAME { $scenBit = 32}
-        $MEMORY_NAME { $scenBit = 64}
-        $DUMPMEMORY_NAME { $scenBit = 128}
-        $WPR_NAME { $scenBit = 256}
-        $SETUP_NAME { $scenBit = 512}
-        $BACKUPRESTORE_NAME { $scenBit = 1024}
-        $IO_NAME { $scenBit = 2048}
+        $BASIC_NAME { $scenBit = $global:basicBit}
+        $GENERALPERF_NAME { $scenBit = $global:generalperfBit}
+        $DETAILEDPERF_NAME { $scenBit = $global:detailedperfBit}
+        $REPLICATION_NAME { $scenBit = $global:replBit}
+        $ALWAYSON_NAME { $scenBit = $global:alwaysonBit}
+        $NETWORKTRACE_NAME { $scenBit = $global:networktraceBit}
+        $MEMORY_NAME { $scenBit = $global:memoryBit}
+        $DUMPMEMORY_NAME { $scenBit = $global:dumpMemoryBit}
+        $WPR_NAME { $scenBit = $global:wprBit}
+        $SETUP_NAME { $scenBit = $global:setupBit}
+        $BACKUPRESTORE_NAME { $scenBit = $global:BackupRestoreBit}
+        $IO_NAME { $scenBit = $global:IOBit}
+        $LIGHTPERF_NAME { $scenBit = $global:LightPerfBit}
         Default {}
     }
 
@@ -4781,8 +4923,14 @@ function EnableScenario([int]$pScenarioBit)
 
     Write-LogDebug "Enabling scenario bit $pScenarioBit, '$scenName' scenario" -DebugLogLevel 3
 
-    #populate the ScenarioChoice array
-    [void] $global:ScenarioChoice.Add($scenName)
+    #de-duplicate entries
+    if (!$global:ScenarioChoice.Contains($scenName))
+    {
+        #populate the ScenarioChoice array
+        [void] $global:ScenarioChoice.Add($scenName)
+
+    }
+
     $global:scenario_bitvalue = $global:scenario_bitvalue -bor $pScenarioBit
 }
 
@@ -4960,6 +5108,7 @@ function IsClustered()
         if (($clusRegKeyExists -eq $true) -and ($clusServiceisRunning -eq $true ))
         {
             Write-LogDebug 'This is a Windows Cluster for sure!' -DebugLogLevel 2
+            Write-LogInformation 'This is a Windows Cluster'
             return $true
         }
         else 
@@ -5029,6 +5178,7 @@ function Get-InstanceNamesOnly()
         }
         elseif ($InteractivePrompts -eq "Quiet") 
         {
+            Write-LogDebug "QUIET mode enabled" -DebugLogLevel 4
             $confirm = "Y"
         }
 
@@ -5168,8 +5318,8 @@ function Pick-SQLServer-for-Diagnostics()
         return
     }
 
-    #if SQL LogScout did not accept any values for parameter $ServerInstanceConStr 
-    if (($true -eq [string]::IsNullOrWhiteSpace($ServerInstanceConStr)) -and $ServerInstanceConStr.Length -le 1 )
+    #if SQL LogScout did not accept any values for parameter $ServerName 
+    if (($true -eq [string]::IsNullOrWhiteSpace($ServerName)) -and $ServerName.Length -le 1 )
     {
         Write-LogDebug "Server Instance param is blank. Switching to auto-discovery of instances" -DebugLogLevel 2
 
@@ -5268,8 +5418,8 @@ function Pick-SQLServer-for-Diagnostics()
 
     else 
     {
-        Write-LogDebug "Server Instance param is '$ServerInstanceConStr'. Using this value for data collection" -DebugLogLevel 2
-        $global:sql_instance_conn_str = $ServerInstanceConStr
+        Write-LogDebug "Server Instance param is '$ServerName'. Using this value for data collection" -DebugLogLevel 2
+        $global:sql_instance_conn_str = $ServerName
     }
 }
 
@@ -5430,7 +5580,7 @@ function PrepareCountersFile()
     #if we are not calling a Perfmon scenario, return and don't proceed
     if ($global:perfmon_scenario_enabled -eq $false)
     {
-        Write-LogDebug "No Perfmon-collection scenario is selected. Perfmon counters file will not be created" -DebugLogLevel 3
+        Write-LogWarning "No Perfmon-collection scenario is selected. Perfmon counters file will not be created"
         return
     }
 
@@ -5465,7 +5615,7 @@ function Check-ElevatedAccess
   
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
     {
-         Write-Warning "Local Administrator rights are recommended!`nSome functionality will not be available. Exiting..."
+         Write-Warning "Elevated privilege (run as Admininstrator) is required to run SQL_LogScout! Exiting..."
          exit
     }
     
@@ -5716,28 +5866,229 @@ function GetPerformanceDataAndLogs
    
 }
 
-
-function CopyrightAndWarranty()
+function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_help = $true)
 {
-    Microsoft.PowerShell.Utility\Write-Host "Copyright (c) 2021 Microsoft Corporation. All rights reserved. `n
-    THE SOFTWARE IS PROVIDED `"AS IS`", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-    THE SOFTWARE."
+   if ($brief_help -eq $true)
+   {
+
+       $debugLevelHlpStr = "`n[-DebugLevel <int>] " 
+       $scenarioHlpStr = "`n[-Scenario <string[]>] "
+       $serverInstHlpStr = "`n[-ServerInstanceConStr <string>] " 
+       $customOutputPathHlpStr = "`n[-CustomOutputPath <string>] "
+       $delExistingOrCreateNewHlpStr = "`n[-DeleteExistingOrCreateNew <string>] "
+       $DiagStartTimeHlpStr = "`n[-DiagStartTime <string>] "
+       $DiagStopTimeHlpStr = "`n[-DiagStopTime <string>] "
+       $InteractivePromptsHlpStr = "`n[-InteractivePrompts <string>] " 
+       
+        
+
+       switch ($index) 
+       {
+           0 { $debugLevelHlpStr = $debugLevelHlpStr + "<" + $ValidArguments +">"}
+           1 { $scenarioHlpStr = $scenarioHlpStr + "<" + $ValidArguments +">"}
+           2 { $serverInstHlpStr = $serverInstHlpStr + "<" + $ValidArguments +">"}
+           3 { $customOutputPathHlpStr = $customOutputPathHlpStr + "<" + $ValidArguments +">"}
+           4 { $delExistingOrCreateNewHlpStr = $delExistingOrCreateNewHlpStr + "<" + $ValidArguments +">"}
+           5 { $DiagStartTimeHlpStr= $DiagStartTimeHlpStr + "<" + $ValidArguments +">"}
+           6 { $DiagStopTimeHlpStr = $DiagStopTimeHlpStr + "<" + $ValidArguments +">"}
+           7 { $InteractivePromptsHlpStr = $InteractivePromptsHlpStr + "<" + $ValidArguments +">"}
+       }
+
+   
+
+       $HelpString = "`nSQL_LogScout `n" `
+       + $debugLevelHlpStr  `
+       + $scenarioHlpStr `
+       + $serverInstHlpStr `
+       + $customOutputPathHlpStr `
+       + $delExistingOrCreateNewHlpStr `
+       + $DiagStartTimeHlpStr`
+       + $DiagStopTimeHlpStr `
+       + $InteractivePromptsHlpStr + "`n" `
+
+
+       Microsoft.PowerShell.Utility\Write-Host $HelpString
+    }
+    else {
+    
+
+        Microsoft.PowerShell.Utility\Write-Host "
+
+        sql_logscout.cmd [-DebugLevel <int>] [-Scenario <string[]>] [-ServerInstanceConStr <string>] [-CustomOutputPath <string>] [-DeleteExistingOrCreateNew <string>] [-DiagStartTime <string>] [-DiagStopTime <string>] [-InteractivePrompts <string>] [<CommonParameters>]
+        
+        DESCRIPTION
+            SQL LogScout allows you to collect diagnostic logs from your SQL Server 
+            system to help you and Microsoft technical support engineers (CSS) to 
+            resolve SQL Server technical incidents faster. 
+            
+        ONLINE HELP:    
+            You can find help for SQLLogScout help PowerShell online  
+            at https://github.com/microsoft/sql_logscout 
+
+        EXAMPLES:
+            A. Execute SQL LogScout (most common execution)
+            This is the most common method to execute SQL LogScout which allows you to pick your choices from a menu of options " -ForegroundColor Green
+
+        Microsoft.PowerShell.Utility\Write-Host " "
+        Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd"
+
+        Microsoft.PowerShell.Utility\Write-Host "
+            B. Execute SQL LogScout using a specific scenario and debug level. This command starts the diagnostic collection with 
+            no debug logging and specifies the GeneralPerf scenario." -ForegroundColor Green
+
+        Microsoft.PowerShell.Utility\Write-Host " "
+        Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd 0 GeneralPerf" 
+            
+        Microsoft.PowerShell.Utility\Write-Host "
+            C. Execute SQL LogScout by specifying folder creation option
+            Execute SQL LogScout using the DetailedPerf Scenario, DebugLevel 2, specifies the Server name, 
+            use the present directory and folder option to delete the default \output folder if present" -ForegroundColor Green
+
+        Microsoft.PowerShell.Utility\Write-Host " "
+        Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd 2 DetailedPerf SQLInstanceName ""UsePresentDir""  ""DeleteDefaultFolder"" "
+            
+        Microsoft.PowerShell.Utility\Write-Host "
+            D. Execute SQL LogScout with start and stop times
+            
+            The following example uses debuglevel 5, collects the AlwaysOn scenario against the ""DbSrv""  default instance, 
+            prompts user to choose a custom path and a new custom subfolder, and sets the stop time to some time in the future, 
+            while setting the start time in the past to ensure the collectors start without delay. " -ForegroundColor Green
+
+        Microsoft.PowerShell.Utility\Write-Host " "
+        Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd 5 AlwaysOn ""DbSrv"" ""PromptForCustomDir""  ""NewCustomFolder""  ""2000-01-01 19:26:00"" ""2020-10-29 13:55:00""  "
+
+
+        Microsoft.PowerShell.Utility\Write-Host "
+            Note: All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, 
+            the 5 prior parameters have to be passed.
+
+            E. Execute SQL LogScout with multiple scenarios and in Quiet mode
+
+            The example uses debuglevel 5, collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the a default instance, 
+            re-uses the default \output folder but creates it in the ""D:\Log"" custom path, and sets the stop time to some time in the future, 
+            while setting the start time in the past to ensure the collectors start without delay. It also automatically accepts the prompts 
+            by using Quiet mode and helps a full automation with no interaction." -ForegroundColor Green
+
+            Microsoft.PowerShell.Utility\Write-Host " "
+            Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore ""DbSrv"" ""d:\log"" ""DeleteDefaultFolder"" ""01-01-2000"" ""04-01-2021 17:00"" Quiet "
+            
+        Microsoft.PowerShell.Utility\Write-Host "
+            Note: Selecting Quiet mode implicitly selects ""Y"" to all the screens that requires your agreement to proceed."  -ForegroundColor Green
+        
+        Microsoft.PowerShell.Utility\Write-Host ""
+    }
+
+    #Exit the program at this point
+    #exit
 }
 
-function main () 
+function ValidateParameters ()
 {
-    CopyrightAndWarranty
+
+    #validate the $DebugLevel parameter
+    $DbgLevelArr = 0..5
+    if ($DebugLevel -inotin $DbgLevelArr)
+    {
+        Write-LogError "Parameter 'DebugLevel' can only accept one of these values: $DbgLevelArr. Current value $DebugLevel is incorrect."
+        PrintHelp -ValidArguments $DbgLevelArr -index 0
+        return $false
+    }
+
+    #validate the Scenario parameter
+    if ([String]::IsNullOrWhiteSpace($Scenario) -eq $false)
+    {
+        $ScenarioArrayParam = $Scenario.Split('+')
+        [string[]] $localScenArray = @(("Basic","GeneralPerf", "DetailedPerf", "Replication", "AlwaysOn","NetworkTrace","Memory","DumpMemory","WPR", "Setup", "BackupRestore","IO", "LightPerf","MenuChoice"))
+        try 
+        {
+            foreach ($scenItem in $ScenarioArrayParam)
+            {
+                if (($localScenArray -notcontains $scenItem))
+                {
+                    Write-LogError "Parameter 'Scenario' only accepts these values individually or combined, separated by '+' (e.g Basic+AlwaysOn):`n $localScenArray. Current value '$scenItem' is incorrect."
+                    PrintHelp -ValidArguments $localScenArray -index 1
+                    return $false
+                }
+            }
+        }
+        catch 
+        {
+            $mycommand = $MyInvocation.MyCommand
+            $error_msg = $PSItem.Exception.Message 
+            Write-LogError "Function '$mycommand' failed with error:  $error_msg"
+        }
+
+    }
+        
+    #validate CustomOutputPath parameter
+
+    $CustomOutputParamArr = @("UsePresentDir", "PromptForCustomDir")
+    if( ($CustomOutputPath -inotin $CustomOutputParamArr) -and ((Test-Path -Path $CustomOutputPath -PathType Container) -eq $false) )
+    {
+        Write-LogError "Parameter 'CustomOutputPath' accepts an existing folder path OR one of these values: $CustomOutputParamArr. Value '$CustomOutputPath' is incorrect."
+        PrintHelp -ValidArguments $CustomOutputParamArr -index 3
+        return $false
+    }
     
+    #validate DeleteExistingOrCreateNew parameter
+    if ([String]::IsNullOrWhiteSpace($DeleteExistingOrCreateNew) -eq $false)
+    {
+        $DelExistingOrCreateNewParamArr = @("DeleteDefaultFolder","NewCustomFolder")
+        if($DeleteExistingOrCreateNew -inotin $DelExistingOrCreateNewParamArr)
+        {
+            Write-LogError "Parameter 'DeleteExistingOrCreateNew' can only accept one of these values: $DelExistingOrCreateNewParamArr. Current value '$DeleteExistingOrCreateNew' is incorrect."
+            PrintHelp -ValidArguments $DelExistingOrCreateNewParamArr -index 4
+            return $false
+        }
+    }
+
+    #validate DiagStartTime parameter
+    if ($DiagStartTime -ne "0000")
+    {
+        [DateTime] $dtStartOut = New-Object DateTime
+        if([DateTime]::TryParse($DiagStartTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStartOut) -eq $false)
+        {
+            Write-LogError "Parameter 'DiagStartTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`"). Current value '$DiagStartTime' is incorrect."
+            PrintHelp -ValidArguments "yyyy-MM-dd hh:mm:ss" -index 5
+            return $false
+        }
+    }
+    
+
+    #validate DiagStopTime parameter
+    if ($DiagStopTime -ne "0000")
+    {
+        [DateTime] $dtStopOut = New-Object DateTime
+        if([DateTime]::TryParse($DiagStopTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStopOut) -eq $false)
+        {
+            Write-LogError "Parameter 'DiagStopTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`"). Current value '$DiagStopTime' is incorrect."
+            PrintHelp -ValidArguments "yyyy-MM-dd hh:mm:ss" -index 6
+            return $false
+        }
+    }
+    #validate InteractivePrompts parameter
+    $InteractivePromptsParamArr = @("Quiet","Noisy")
+    if($InteractivePrompts -inotin $InteractivePromptsParamArr)
+    {
+        Write-LogError "Parameter 'InteractivePrompts' can only accept one of these values: $InteractivePromptsParamArr. Current value '$InteractivePrompts' is incorrect."
+        PrintHelp -ValidArguments $InteractivePromptsParamArr -index 7
+        return $false
+    }
+
+    else 
+    {
+        return $true
+    }
+}
+
+
+function Start-SQLLogScout 
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
     Write-LogDebug "Scenario prameter passed is '$Scenario'" -DebugLogLevel 3
 
     try 
     {  
-
         Init-AppVersion
     
         #check for administrator rights
@@ -5780,24 +6131,39 @@ function main ()
         Write-LogInformation ""
     }
 }
+function CopyrightAndWarranty()
+{
+    Microsoft.PowerShell.Utility\Write-Host "Copyright (c) 2021 Microsoft Corporation. All rights reserved. `n
+    THE SOFTWARE IS PROVIDED `"AS IS`", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE. `n`n"
+}
+
+function main () 
+{
+    
+    #print copyright message
+    CopyrightAndWarranty
+
+    #validate parameters
+    $ret = ValidateParameters
+
+    #start program
+    if ($ret -eq $true)
+    {
+        Start-SQLLogScout
+    }
+
+}
 
 
 
 
 #to execute from command prompt use: 
 #powershell -ExecutionPolicy Bypass -File sqllogscoutps.ps1
-
-
-
-#cleanup from previous script runs
-#NOT needed when running script from CMD
-#but helps when running script in debug from VSCode
-if ($Global:logbuffer) {Remove-Variable -Name "logbuffer" -Scope "global"}
-if ($Global:logstream)
-{
-    $Global:logstream.Flush
-    $Global:logstream.Close
-    Remove-Variable -Name "logstream" -Scope "global"
-}
 
 main
