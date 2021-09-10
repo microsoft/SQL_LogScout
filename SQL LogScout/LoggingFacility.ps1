@@ -1,8 +1,30 @@
 
 #=======================================Globals =====================================
+[int]$global:DEBUG_LEVEL = 0 # zero to disable, 1 to 5 to enable different levels of debug logging to *CONSOLE*
 [string]$global:full_log_file_path = ""
-[System.IO.StreamWriter]$global:logstream
-$global:logbuffer = @()
+[System.IO.StreamWriter]$global:consoleLogStream
+[System.IO.StreamWriter]$global:debugLogStream
+$global:consoleLogBuffer = @()
+$global:debugLogBuffer = @()
+
+#=======================================Init    =====================================
+#cleanup from previous script runs
+#NOT needed when running script from CMD
+#but helps when running script in debug from VSCode
+if ($Global:consoleLogBuffer) {Remove-Variable -Name "consoleLogBuffer" -Scope "global"}
+if ($Global:debugLogBuffer) {Remove-Variable -Name "debugLogBuffer" -Scope "global"}
+if ($Global:consoleLogStream)
+{
+    $Global:consoleLogStream.Flush
+    $Global:consoleLogStream.Close
+    Remove-Variable -Name "consoleLogStream" -Scope "global"
+}
+if ($Global:debugLogStream)
+{
+    $Global:debugLogStream.Flush
+    $Global:debugLogStream.Close
+    Remove-Variable -Name "debugLogStream" -Scope "global"
+}
 
 function Read-Host
 {
@@ -246,7 +268,8 @@ param (
     [String]$strMessage = ""
     [String]$MessageType = $Message.GetType()
 
-    if ($MessageType -eq "System.Collections.Generic.List[System.Object]")
+    if (($MessageType -eq "System.Collections.Generic.List[System.Object]") -or
+        ($MessageType -eq "System.Collections.ArrayList"))
     {
         foreach ($item in $Message) {
             
@@ -254,7 +277,8 @@ param (
             
             #if item is a list we recurse
             #if not we cast to string and concatenate
-            if($itemType -eq "System.Collections.Generic.List[System.Object]")
+            if(($itemType -eq "System.Collections.Generic.List[System.Object]") -or
+                ($itemType -eq "System.Collections.ArrayList"))
             {
                 $strMessage += (Format-LogMessage($item)) + " "
             } else {
@@ -264,7 +288,9 @@ param (
     } elseif (($MessageType -eq "string") -or ($MessageType -eq "System.String")) {
         $strMessage += [String]$Message + " "
     } else {
-        Write-LogError "Unexpected MessageType in Format-LogMessage: " $MessageType
+        # calls native Write-Host implementation to avoid indirect recursion scenario
+        Microsoft.PowerShell.Utility\Write-Host "Unexpected MessageType $MessageType" -ForegroundColor Red
+        Microsoft.PowerShell.Utility\Write-Error "Unexpected MessageType $MessageType"
     }
     
     return $strMessage
@@ -293,7 +319,7 @@ param(
 
     [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [string]$LogFileName = "##SQLLOGSCOUT.LOG"
+    [string]$LogFileName = "##SQLLOGSCOUT_CONSOLE.LOG"
 
     )
 
@@ -302,7 +328,7 @@ param(
     
     try
     {
-        # if $global:logstream does not exists it means the log has not been initialized yet
+        # if $global:consoleLogStream does not exists it means the log has not been initialized yet
         if ( -not(Get-Variable -Name logstream -Scope global -ErrorAction SilentlyContinue) ){
             
             #$error_folder = $global:internal_output_folder # moved to be passed into $LogFilePath parameter when calling from SQLLogScout.ps1
@@ -312,18 +338,36 @@ param(
             New-Item -Path $LogFilePath -ItemType Directory -Force | out-null 
             
             #create the file and keep a reference to StreamWriter
-            $global:logstream = [System.IO.StreamWriter]::new( $LogFilePath + $LogFileName, $false, [System.Text.Encoding]::ASCII)
+            $global:consoleLogStream = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($LogFilePath + $LogFileName), $false, [System.Text.Encoding]::ASCII)
+
+            if ($LogFileName -like "*CONSOLE*"){
+                # if the log file name contains the word CONSOLE we just replace by DEBUG
+                $LogFileName = ($LogFileName -replace "CONSOLE", "DEBUG")
+            } else {
+                # otherwise just append _DEBUG.LOG to the name
+                $LogFileName = $LogFileName.Split(".")[0]+"_DEBUG.LOG"
+            }
+
+            $global:debugLogStream = New-Object -TypeName System.IO.StreamWriter -ArgumentList (($LogFilePath + $LogFileName), $false, [System.Text.Encoding]::ASCII)
             
             #add initial message
             Write-LogInformation "Initializing log $full_log_file_path"
     
             #if we buffered log messages while log was not initialized, now we need to write them
-            if ($null -ne $global:logbuffer){
-                foreach ($Message in $global:logbuffer) {
-                    $global:logstream.WriteLine([String]$Message)
+            if ($null -ne $global:consoleLogBuffer){
+                foreach ($Message in $global:consoleLogBuffer) {
+                    $global:consoleLogStream.WriteLine([String]$Message)
                 }
-                $global:logstream.Flush()
+                $global:consoleLogStream.Flush()
             }
+
+            if ($null -ne $global:debugLogBuffer){
+                foreach ($Message in $global:debugLogBuffer) {
+                    $global:debugLogStream.WriteLine([String]$Message)
+                }
+                $global:debugLogStream.Flush()
+            }
+
         } else { #if the log has already been initialized then throw an error
             Write-LogError "Attempt to initialize log already initialized!"
         }
@@ -381,33 +425,54 @@ function Write-Log()
         $strMessage += "	"
         $strMessage += Format-LogMessage($Message)
         
-        if ($null -ne $global:logstream)
+        # all non-debug messages are now logged to console log
+        if ($LogType -in("INFO", "WARN", "ERROR")) {
+
+            if ($null -ne $global:consoleLogStream)
+            {
+                #if log was initialized we just write $Message to it
+                $stream = [System.IO.StreamWriter]$global:consoleLogStream
+                $stream.WriteLine($strMessage)
+                $stream.Flush() #this is necessary to ensure all log is written in the event of Powershell being forcefuly terminated
+            } else {
+                #because we may call Write-Log before log has been initialized, I will buffer the contents then dump to log on initialization
+                
+                $global:consoleLogBuffer += ,$strMessage
+            }
+        }
+
+        # log both debug and non-debug messages to debug log
+        if ($null -ne $global:debugLogStream)
         {
             #if log was initialized we just write $Message to it
-            $stream = [System.IO.StreamWriter]$global:logstream
+            $stream = [System.IO.StreamWriter]$global:debugLogStream
             $stream.WriteLine($strMessage)
             $stream.Flush() #this is necessary to ensure all log is written in the event of Powershell being forcefuly terminated
         } else {
             #because we may call Write-Log before log has been initialized, I will buffer the contents then dump to log on initialization
             
-            #if the buffer does not exists we create it
-            #if ($null -eq $global:logbuffer){
-            #    $global:logbuffer = @()
-            #}
-
-            $global:logbuffer += ,$strMessage
+            $global:debugLogBuffer += ,$strMessage
+        }
+        
+        if ($LogType -like "DEBUG*"){
+            $dbgLevel = [int][string]($LogType[5])
+        } else {
+            $dbgLevel = 0
         }
 
-        #Write-Host $strMessage -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor
-        if (($null -eq $ForegroundColor) -and ($null -eq $BackgroundColor)) { #both colors null
-            Microsoft.PowerShell.Utility\Write-Host $strMessage
-        } elseif (($null -ne $ForegroundColor) -and ($null -eq $BackgroundColor)) { #only foreground
-            Microsoft.PowerShell.Utility\Write-Host $strMessage -ForegroundColor $ForegroundColor
-        } elseif (($null -eq $ForegroundColor) -and ($null -ne $BackgroundColor)) { #only bacground
-            Microsoft.PowerShell.Utility\Write-Host $strMessage -BackgroundColor $BackgroundColor
-        } elseif (($null -ne $ForegroundColor) -and ($null -ne $BackgroundColor)) { #both colors not null
-            Microsoft.PowerShell.Utility\Write-Host $strMessage -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor
-        }    
+        if (($LogType -in("INFO", "WARN", "ERROR")) -or
+            ($dbgLevel -le $global:DEBUG_LEVEL)) {
+            #Write-Host $strMessage -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor
+            if (($null -eq $ForegroundColor) -and ($null -eq $BackgroundColor)) { #both colors null
+                Microsoft.PowerShell.Utility\Write-Host $strMessage
+            } elseif (($null -ne $ForegroundColor) -and ($null -eq $BackgroundColor)) { #only foreground
+                Microsoft.PowerShell.Utility\Write-Host $strMessage -ForegroundColor $ForegroundColor
+            } elseif (($null -eq $ForegroundColor) -and ($null -ne $BackgroundColor)) { #only bacground
+                Microsoft.PowerShell.Utility\Write-Host $strMessage -BackgroundColor $BackgroundColor
+            } elseif (($null -ne $ForegroundColor) -and ($null -ne $BackgroundColor)) { #both colors not null
+                Microsoft.PowerShell.Utility\Write-Host $strMessage -ForegroundColor $ForegroundColor -BackgroundColor $BackgroundColor
+            }
+        }
     }
 	catch
 	{
@@ -548,11 +613,11 @@ function Write-LogDebug()
         #log message if debug logging is enabled and
         #debuglevel of the message is less than or equal to global level
         #otherwise we just skip calling Write-Log
-        if(($global:DEBUG_LEVEL -gt 0) -and ($DebugLogLevel -le $global:DEBUG_LEVEL))
-        {
+        # if(($global:DEBUG_LEVEL -gt 0) -and ($DebugLogLevel -le $global:DEBUG_LEVEL))
+        # {
             Write-Log -Message $Message -LogType "DEBUG$DebugLogLevel" -ForegroundColor Magenta
             return #return here so we don't log messages twice if both debug flags are enabled
-        }
+        # }
         
     } catch {
 		Write-Error -Exception $_.Exception
