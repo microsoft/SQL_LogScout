@@ -24,7 +24,7 @@ SQL LogScout allows you to collect diagnostic logs from your SQL Server system t
 
 # Minimum requirements
 
-SQL LogScout Windows 2012 or later 
+Windows 2012 or later
 Powershell version 4.0 or later
 
 # Download location
