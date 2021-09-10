@@ -34,11 +34,11 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 # How to use
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-1. Open a Command Prompt and change to the folder where SQL LogScout files reside
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
 1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
-1. Select which SQL instance you want to diagnose from a numbered list
+1. Select from a list which SQL instance you want to diagnose
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
-1. Stop the collection when you are ready (by typing "stop" or "STOP")
+1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically
 
 ## Automate data collection
 
@@ -75,15 +75,13 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "BackupRestore"
     - "IO"
     - "LightPerf"
-    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s).
+    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#Scenarios)
 
-   Multiple Scenarions: You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
+   **Multiple Scenarions:** You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
 
    `GeneralPerf+Memory+Setup`
 
-   *Note:* Not required when parameters are not specified for the command.
-
-   For more information on what data each scenario collects, see [Scenarios](#Scenarios)
+   *Note:* This is only required when parameters are used for automation.
 
 1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN).
 
