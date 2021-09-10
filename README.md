@@ -1,12 +1,24 @@
 [http://aka.ms/sqllogscout](http://aka.ms/sqllogscout) gets you here
 
-In this document:
+
+
+
 - [Introduction](#Introduction)
 - [Minimum Requirements](#Minimum-requirements)
 - [Download location](#Download-location)
 - [How to use](#How-to-use)
-  - [Automate data collection](#automate_data_collection)
-  - [Interrupt execution](#interrupt_execution)
+  - [Automate data collection](#Automate-data-collection)
+  - [Interrupt execution](#Interrupt-execution)
+- [Examples](#examples)
+- [Parameters for automation](#Parameters)
+- [Scenarios](#Scenarios)
+- [Permissions](#Permissions)
+- [Sample output](#Sample-output)
+- [Output folders](#Output-folders)
+- [Logging](#Logging)
+- [Targeted SQL instances](#Targeted-SQL-instances)
+- [Security](#Security)
+- [Test Suite](#Test-Suite)
 
 # Introduction
 
@@ -25,23 +37,23 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 1. Open a Command Prompt and change to the folder where SQL LogScout files reside
-1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
 1. Select which SQL instance you want to diagnose from a numbered list
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
-## Automate data collection<a name="automate_data_collection"></a>
+## Automate data collection
 
-SQL LogScout can be executed with multiple switches allowing for full automation and no interaction with menus. You can:
+SQL LogScout can be executed with multiple parameters allowing for full automation and no interaction with menus. You can:
 
 - Provide the SQL Server instance name
 - Schedule start and stop time of data collection
 - Use Quiet mode to accept all prompts automatically
-- Choose the destination folder (delete default or create a new one)
+- Choose the destination output folder (custom location, delete default or create a new one folder)
 
 See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) for detailed information.
 
-## Interrupt execution<a name="interrupt_execution"></a>
+## Interrupt execution
 
 If the need arises, you can interrupt the execution of SQL LogScout by pressing **CTRL+C** at any time. In some cases you may have to be patient before the CTRL+C is reflected (a few seconds) depending on what is being executed at the time. But in most cases the process is immediate. It is not recommended to close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system.
 
@@ -119,7 +131,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 
    *Note:* Not required when parameters are not specified for the command.
 
-   For more information on each scenario see [Scenarios](#Scenarios)
+   For more information on what data each scenario collects, see [Scenarios](#Scenarios)
 
 1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN).
 
@@ -140,11 +152,6 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
      - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
      - Noisy - (default) shows prompts requesting user input where necessary
 
-# Permissions
-
-- **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
-
-- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data.
 
 # Scenarios
 
@@ -226,6 +233,14 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
     - Performance Monitor counters for SQL Server instance and general OS counters
 1. **LightPerf** - collects everything that the GeneralPerf scenario does, _except_ the Extended Event traces. This is intended to capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
+
+
+# Permissions
+
+- **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
+
+- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data.
+
 
 # Sample output
 
