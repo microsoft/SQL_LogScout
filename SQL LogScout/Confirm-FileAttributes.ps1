@@ -35,7 +35,7 @@ function Confirm-FileAttributes
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "B63DF8FEDCD904738B406F9ABCA35352FFC4E71B882F6145F00B3C205ACDC8506DA3C787762FF05B051DBDE35B915248B1FA05E7BF7B6DB2F825726AC5026BC1"; FileName = ".\Repl_Metadata_Collector.sql"; FileSize = 53273}
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "4307558EDCD85B40382194411D3502608C412325DC5CE80DFA883A0C6A329E61618453A5A98495DFBF66BE03905A80406478A903B2A88686284D7E0C74EF219F"; FileName = ".\SQL Server Perf Stats Snapshot.sql"; FileSize = 25666}
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "FA61A62C52D10F2C79BBFFA0151D74B129476599A51584BE75FF8E4A4E7F678420B828C381209C3F04B7CE848F89F0F6A1034FA9AA95B6894E1EDAB8572F03ED"; FileName = ".\SQL Server Perf Stats.sql"; FileSize = 68781}
-        ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "862D3B98BE00A1902B17B364DAB12D4AC41F81BDCC6D22382845535832678DEB60B90D3319CC718C6232F6FCB7C6F0D9977D0F7AB927C0440D172D3ADF3554B6"; FileName = ".\SQL_LogScout.cmd"; FileSize = 1587}
+        ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "0CB75267B4B7D857FA4BD40422387FB905787AEA63BC657C1E1CA94C2644E3153027BE53E4C247CC8338E1E6FCF3B88742FD6B0F81CC412FB07174B5385E54A0"; FileName = ".\SQL_LogScout.cmd"; FileSize = 1619}
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "AB735636B1473787DAEB508CB6F64327D6409F5DB0CA7E40EAFB05047D291EA07F24AD2D96ED9A61E0690DB6FEB59554ED4B50F225DE065C4A65772724F0DE74"; FileName = ".\SQL_Server_Mem_Stats.sql"; FileSize = 16571}
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "5CB4E3F3B3FD99E90603D84AD8C18C6A06E663210C2FD6FB42718431CACB7F84E5DFA3B172C1E065F70504B415D4EE9AAB2CFE0333A9CD28381D73E39C77A781"; FileName = ".\SSB_diag.sql"; FileSize = 10531}
         ,[PSCustomObject]@{Algorithm = "SHA512"; Hash = "542C1B4F4A461370726AF54BC738731A30E9E894F6D191EAD8A65EEA3F44713BA4C88F09FBB4EFAC44DFA111990844EBA304B65DE57557953192606729A69942"; FileName = ".\TempDBAnalysis.sql"; FileSize = 1622}
@@ -52,7 +52,7 @@ function Confirm-FileAttributes
     # global array to keep a System.IO.FileStream object for each of the non-Powershell files
     # files are opened with Read sharing before being hashed
     # files are kept opened until SQL LogScout terminates preventing changes to them
-    [System.Collections.ArrayList]$Global:hashedFiles = [System.Collections.ArrayList]::new()
+    [System.Collections.ArrayList]$Global:hashedFiles = New-Object -TypeName System.Collections.ArrayList
 
     foreach ($efa in $expectedFileAttributes) {
         
@@ -150,7 +150,7 @@ function Get-FileAttributes(){
 #>
 
     [int]$fileCount = 0
-    [System.Text.StringBuilder]$sb = [System.Text.StringBuilder]::new()
+    [System.Text.StringBuilder]$sb = New-Object -TypeName System.Text.StringBuilder
 
     [void]$sb.AppendLine("`$expectedFileAttributes = @(")
     
