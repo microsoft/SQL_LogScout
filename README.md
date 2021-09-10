@@ -3,7 +3,10 @@
 In this document:
 - [Introduction](#Introduction)
 - [Minimum Requirements](#Minimum-requirements)
-- [Minimum RequirementsNAME](#minimum_requirements)
+- [Download location](#Download-location)
+- [How to use](#How-to-use)
+  - [Automate data collection](#automate_data_collection)
+  - [Interrupt execution](#interrupt_execution)
 
 # Introduction
 
@@ -18,7 +21,7 @@ Powershell version 4.0 or later
 
 Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout). 
 
-# Usage
+# How to use
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 1. Open a Command Prompt and change to the folder where SQL LogScout files reside
@@ -27,7 +30,7 @@ Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](h
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP")
 
-## Automating data collection
+## Automate data collection<a name="automate_data_collection"></a>
 
 SQL LogScout can be executed with multiple switches allowing for full automation and no interaction with menus. You can:
 
@@ -38,7 +41,7 @@ SQL LogScout can be executed with multiple switches allowing for full automation
 
 See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) for detailed information.
 
-## Interrupting data collection/execution
+## Interrupt execution<a name="interrupt_execution"></a>
 
 If the need arises, you can interrupt the execution of SQL LogScout by pressing **CTRL+C** at any time. In some cases you may have to be patient before the CTRL+C is reflected (a few seconds) depending on what is being executed at the time. But in most cases the process is immediate. It is not recommended to close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system.
 
