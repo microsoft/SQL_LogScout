@@ -269,6 +269,7 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-04-01 12:00:16.467	INFO	8 	 Windows Performance Recorder (WPR) 
 2021-04-01 12:00:16.469	INFO	9 	 Setup 
 2021-04-01 12:00:16.472	INFO	10 	 Backup and Restore 
+2021-04-01 12:00:16.472	INFO	11 	 IO
 2021-04-01 12:00:16.477	INFO	 
 2021-04-01 12:00:16.481	WARN	Type one or more Scenario IDs (separated by '+') for which you want to collect diagnostic data. Then press Enter 
 2021-04-01 12:00:35.449	INFO	Scenario Console input: 1+4+10 
@@ -284,7 +285,7 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-04-01 12:00:35.972	INFO	 
 2021-04-01 12:00:35.977	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
 2021-04-01 12:00:40.456	INFO	SQL Instance Console input: 1 
-2021-04-01 12:00:40.466	INFO	You selected instance 'rabotenlaptop\SQL2014' to collect diagnostic data.  
+2021-04-01 12:00:40.466	INFO	You selected instance 'DbServerMachine\SQL2014' to collect diagnostic data.  
 2021-04-01 12:00:40.585	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2014' 
 2021-04-01 12:00:40.589	INFO	Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2014' 
 2021-04-01 12:00:41.120	WARN	At least one of the selected 'GeneralPerf Basic AlwaysOn BackupRestore' scenarios collects Xevent traces 
