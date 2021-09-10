@@ -1,15 +1,20 @@
 [http://aka.ms/sqllogscout](http://aka.ms/sqllogscout) gets you here
 
+In this document:
+- [Introduction](#Introduction)
+- [Minimum Requirements](#Minimum requirements)
+- [Minimum RequirementsNAME](#minimum_requirements)
+
 # Introduction
 
 SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)).
 
-# Minimum Requirements
+# Minimum requirements<a name="minimum_requirements"></a>
 
 SQL LogScout Windows 2012 or later 
 Powershell version 4.0 or later
 
-# Download
+# Download location
 
 Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout). 
 
