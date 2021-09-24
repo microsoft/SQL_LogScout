@@ -1,4 +1,4 @@
-[https://aka.ms/sqllogscout](http://aka.ms/sqllogscout) gets you here
+[https://aka.ms/sqllogscout](https://aka.ms/sqllogscout) gets you here
 
 
 1. [Introduction](#Introduction)
@@ -31,7 +31,7 @@ SQL LogScout is developed and maintained by members of the Microsoft SQL Server 
 
 # Download location
 
-Download the latest version of SQL LogScout at [http://aka.ms/get-sqllogscout](http://aka.ms/get-sqllogscout). 
+Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](https://aka.ms/get-sqllogscout). 
 
 # How to use
 
