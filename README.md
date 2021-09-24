@@ -37,7 +37,7 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 > **WARNING**
-> Please make sure that the SQL Server startup account account has **write** permissions to the folder you selected. For example, %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders not write-accessible by the SQL Server service account by default.
+> Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
 
 3. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
 4. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
