@@ -1,4 +1,4 @@
-[http://aka.ms/sqllogscout](http://aka.ms/sqllogscout) gets you here
+[https://aka.ms/sqllogscout](http://aka.ms/sqllogscout) gets you here
 
 
 1. [Introduction](#Introduction)
