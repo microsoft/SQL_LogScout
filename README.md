@@ -36,14 +36,14 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
 # How to use
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-> **WARNING**
-> Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
+   > **WARNING**
+   > Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
 
-3. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
-4. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
-5. Select from a list which SQL instance you want to diagnose
-6. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
-7. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
+1. Select from a list which SQL instance you want to diagnose
+1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
+1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically
 
 ## Automate data collection
 
