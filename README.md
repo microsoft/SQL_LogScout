@@ -81,7 +81,9 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "IO"
     - "LightPerf"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#Scenarios)
-    - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped.
+    - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs. 
+
+
    
    *Multiple Scenarions:** You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
 
