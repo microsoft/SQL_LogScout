@@ -222,20 +222,23 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefau
 
    **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 15 seconds of data collection.
 
-1. **Setup scenario** - collects all the Basic scenario logs and all SQL Setup logs from the \Setup Bootstrap\ folders on the system. This allows analysis of setup or installation issues of SQL Server components.
+1. **Setup scenario** - allows analysis of setup or installation issues of SQL Server components. Collects: 
+   - Basic scenario logs 
+   - All SQL Setup logs from the \Setup Bootstrap\ folders on the system. .
 
-1. **Backup and Restore scenario** - collects the Basic scenario logs and various logs related to backup and restore activities in SQL Server. These logs include:
-
-    - Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
-    - Enables backup and restore related TraceFlags to produce information in the Errorlog
-    - Performance Monitor counters for SQL Server instance and general OS counters
-    - SQL VSS Writer Log (on SQL Server 2019 and later)
-    - VSS Admin (OS) logs for VSS backup-related scenarios
+1. **Backup and Restore scenario** - collects various logs related to backup and restore activities in SQL Server. These logs include:
+   - Basic scenario 
+   - Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
+   - Enables backup and restore related TraceFlags to produce information in the Errorlog
+   - Performance Monitor counters for SQL Server instance and general OS counters
+   - SQL VSS Writer Log (on SQL Server 2019 and later)
+   - VSS Admin (OS) logs for VSS backup-related scenarios
 
 1. **I/O** - collects the Basic scenario logs and several logs related to disk I/O activity:
     - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
     - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
     - Performance Monitor counters for SQL Server instance and general OS counters
+
 1. **LightPerf** - collects everything that the GeneralPerf scenario does, _except_ the Extended Event traces. This is intended to capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
 
 # Output folders
