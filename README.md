@@ -235,9 +235,10 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefau
    - VSS Admin (OS) logs for VSS backup-related scenarios
 
 1. **I/O** - collects the Basic scenario logs and several logs related to disk I/O activity:
-    - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
-    - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
-    - Performance Monitor counters for SQL Server instance and general OS counters
+   - Basic scenario
+   - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
+   - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
+   - Performance Monitor counters for SQL Server instance and general OS counters
 
 1. **LightPerf** - collects everything that the GeneralPerf scenario does, _except_ the Extended Event traces. This is intended to capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
 
