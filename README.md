@@ -18,6 +18,9 @@
 1. [Sample output](#Sample-output)
 1. [Test Suite](#Test-Suite)
 
+# Important Note
+   > SQL LogScout development team is aware that some third-party tools are flagging both the ZIP package and individual files of ***`version 4.1.1`*** as a malicious threat. **The development team conducted extensive review of the source files and found no malicious code in it.** In addition, the development teams is improving the software to avoid this annoyance in the future. **We have discovered that if we break up the main file into several files - smaller and less complex scripts - then this issue is no longer reported.** We wanted to remind you that all of the SQL LogScout files are digitally signed which ensures that they cannot be modified or tampered with – for more details around the security measures see section [SQL LogScout - Security](https://github.com/microsoft/SQL_LogScout#Security).
+
 # Introduction
 
 SQL LogScout allows you to collect diagnostic logs from your SQL Server system to help you and Microsoft technical support engineers (CSS) to resolve SQL Server technical incidents faster. It is a light, script-based, open-source tool that is version-agnostic. SQL LogScout discovers the SQL Server instances running locally on the system (including FCI and AG instances) and offers you a list to choose from. SQL LogScout can be executed without the need for Sysadmin privileges on the SQL Server instance (see [Permissions](#permissions)).
@@ -266,6 +269,48 @@ Diagnostic data is collected from the SQL instance you selected locally on the m
 # Security
 
 SQL LogScout is released with digitally-signed Powershell files. For other files, SQL LogScout calculates a SHA512 hash and compares it to the expected value of each file. If the stored hash does not match the calculated hash on disk, then SQL LogScout will not run.  
+
+To manually validate script signature, you may execute the following:
+
+```bash
+Get-ChildItem <SQL LogScout unzipped folder>\*.ps*1 | Get-AuthenticodeSignature | Format-List -Property Path, Status, StatusMessage, SignerCertificate`
+```
+
+Example:
+
+```bash
+Get-ChildItem C:\SQL_LogScout_v4.1.11_Signed\*.ps*1 | Get-AuthenticodeSignature | Format-List -Property Path, Status, StatusMessage, SignerCertificate`
+```
+
+For each file:
+
+1. Confirm the path and filename in `Path` property.
+2. Confirm that `Status` property is **`Valid`**. For any `Status` other than `Valid`, `StatusMessage` property provides an description of the issue.
+4. Confirm the details of `SignerCertificate` property to indicate that Microsoft Corporation is the subject of the certificate.
+
+Example output for successful validation:
+```bash
+Path              : C:\SQL_LogScout_v4.1.11_Signed\SQLLogScoutPs.ps1
+Status            : Valid
+StatusMessage     : Signature verified.
+SignerCertificate : [Subject]
+                      CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US
+
+                    [Issuer]
+                      CN=Microsoft Code Signing PCA 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US
+
+                    [Serial Number]
+                      33000001DF6BF02E92A74AB4D00000000001DF
+
+                    [Not Before]
+                      12/15/2020 6:31:45 PM
+
+                    [Not After]
+                      12/2/2021 6:31:45 PM
+
+                    [Thumbprint]
+                      ABDCA79AF9DD48A0EA702AD45260B3C03093FB4B
+```
 
 # Sample output
 
