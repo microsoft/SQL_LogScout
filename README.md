@@ -1,22 +1,21 @@
 [https://aka.ms/sqllogscout](https://aka.ms/sqllogscout) gets you here
 
-
-1. [Introduction](#Introduction)
-1. [Minimum Requirements](#Minimum-requirements)
-1. [Download location](#Download-location)
-1. [How to use](#How-to-use)
-    - [Automate data collection](#Automate-data-collection)
-    - [Interrupt execution](#Interrupt-execution)
-    - [Parameters](#Parameters)
+1. [Introduction](#introduction)
+1. [Minimum Requirements](#minimum-requirements)
+1. [Download location](#download-location)
+1. [How to use](#how-to-use)
+    - [Automate data collection](#automate-data-collection)
+    - [Interrupt execution](#interrupt-execution)
+    - [Parameters](#parameters)
     - [Examples](#examples)
-1. [Scenarios](#Scenarios)
-1. [Output folders](#Output-folders)
-1. [Logging](#Logging)
-1. [Permissions](#Permissions)
-1. [Targeted SQL instances](#Targeted-SQL-instances)
-1. [Security](#Security)
-1. [Sample output](#Sample-output)
-1. [Test Suite](#Test-Suite)
+1. [Scenarios](#scenarios)
+1. [Output folders](#output-folders)
+1. [Logging](#logging)
+1. [Permissions](#permissions)
+1. [Targeted SQL instances](#targeted-sql-instances)
+1. [Security](#security)
+1. [Sample output](#sample-output)
+1. [Test Suite](#test-suite)
 
 # Introduction
 
@@ -40,9 +39,9 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
    > Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
 
 1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
-1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#Parameters) to automate the execution and bypass interactive menus.
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#parameters) to automate the execution and bypass interactive menus.
 1. Select from a list which SQL instance you want to diagnose
-1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#Parameters))
+1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#parameters))
 1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically
 
 ## Automate data collection
@@ -80,7 +79,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "BackupRestore"
     - "IO"
     - "LightPerf"
-    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#Scenarios)
+    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
     - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs. 
 
 
@@ -172,8 +171,8 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefau
    - SQL Agent logs
    - Polybase logs
    - [Windows Cluster logs](https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog)
-   - [AlwaysOn_health*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#BKMK_alwayson_health)
-   - [MSSQLSERVER_SQLDIAG*.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
+   - [AlwaysOn_health.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health)
+   - [MSSQLSERVER_SQLDIAG.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
    - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
    - [SQL Assessment API](https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview) log
    - Windows Cluster HKEY_LOCAL_MACHINE\Cluster registry hive in .HIV format
@@ -244,7 +243,7 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefau
 
 # Output folders
 
-**Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. By default this folder is created in the same location where SQL LogScout files reside (present directory). However a user can choose to collect data on a different disk volume and folder. This can be done by following the prompt for a non-default drive and directory or by using the CustomOutputPath parameter ([Parameters](#Parameters))
+**Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. By default this folder is created in the same location where SQL LogScout files reside (present directory). However a user can choose to collect data on a different disk volume and folder. This can be done by following the prompt for a non-default drive and directory or by using the CustomOutputPath parameter ([Parameters](#parameters))
 
 **Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
 
