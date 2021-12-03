@@ -63,8 +63,6 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
 
-1. **DebugLevel** - this parameter is no longer honored in version 4.1.11. It is still present but will not do anything. See [Debug Log](#sqllogscout_debuglog-file) for detailed-level debugging information. This parameter will be removed in future versions.
-
 1. **Scenario** - possible values are:
     - "Basic"
     - "GeneralPerf"
@@ -81,7 +79,6 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "LightPerf"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
     - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs. 
-
 
    
    *Multiple Scenarions:** You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
