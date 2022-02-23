@@ -35,20 +35,21 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
 # How to use
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-   > **WARNING**
+   > [!WARNING]
    > Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
 
 1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
 1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#parameters) to automate the execution and bypass interactive menus.
-1. Select from a list which SQL instance you want to diagnose
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#parameters))
-1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically
+1. Select from which SQL instance you want to diagnose
+1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically when it finishes collecting static logs
 
 ## Automate data collection
 
 SQL LogScout can be executed with multiple parameters allowing for full automation and no interaction with menus. You can:
 
 - Provide the SQL Server instance name
+- Select which scenario(s) to collect data for
 - Schedule start and stop time of data collection
 - Use Quiet mode to accept all prompts automatically
 - Choose the destination output folder (custom location, delete default or create a new one folder)
@@ -57,7 +58,14 @@ See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multi
 
 ## Interrupt execution
 
-If the need arises, you can interrupt the execution of SQL LogScout by pressing **CTRL+C** at any time. In some cases you may have to be patient before the CTRL+C is reflected (a few seconds) depending on what is being executed at the time. But in most cases the process is immediate. It is not recommended to close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system.
+If the need arises, you can interrupt the execution of SQL LogScout by pressing **CTRL+C** at any time. In some cases you may have to be patient before the CTRL+C is reflected (a few seconds) depending on what is being executed at the time. But in most cases the process is immediate.
+
+| :warning: WARNING          |
+|:---------------------------|
+| Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
+
+> [!WARNING]
+> Test Warning
 
 ## Parameters
 
@@ -78,16 +86,16 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - "IO"
     - "LightPerf"
     - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
-    - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs. 
+    - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
 
-   
+
    *Multiple Scenarions:** You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
 
    `GeneralPerf+Memory+Setup`
 
    *Note:* Scenario parameter is only required when parameters are used for automation. An empty string "" is equivalent to MenuChoice and will cause the Menu to be displayed. Specifying a string with spaces " " will trigger an incorrect parameter message. In summary, if Scenario contains only "MenuChoice" or only "NoBasic" or is empty (no parameters passed), or MenuChoice+NoBasic is passed, then the Menu will be displayed.
 
-1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN).
+1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN). You can use period "." to connect to a local default instance. If you do so, tt will be converted to the local host name.
 
 1. **CustomOutputPath** - specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
     - "PromptForCustomDir" - will cause the user to be prompted whether to specify a custom path
@@ -121,7 +129,7 @@ SQL_LogScout.cmd
 This command starts the diagnostic collection with no debug logging and specifies the GeneralPerf scenario.
 
 ```bash
-SQL_LogScout.cmd 0 GeneralPerf
+SQL_LogScout.cmd GeneralPerf
 ```
 
 ### C. Execute SQL LogScout by specifying folder creation option
@@ -216,11 +224,11 @@ SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefau
     - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS
     - Filter drivers - collects performance data about filter driver activity on the system (OS)
 
-   **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 15 seconds of data collection.
+   **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 45 seconds of data collection. You can specify a custom value between 3 and 45 seconds.
 
-1. **Setup scenario** - allows analysis of setup or installation issues of SQL Server components. Collects: 
+1. **Setup scenario** - allows analysis of setup or installation issues of SQL Server components. Collects:
    - Basic scenario logs 
-   - All SQL Setup logs from the \Setup Bootstrap\ folders on the system. .
+   - All SQL Setup logs from the \Setup Bootstrap\ folders on the system.
 
 1. **Backup and Restore scenario** - collects various logs related to backup and restore activities in SQL Server. These logs include:
    - Basic scenario 
