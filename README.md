@@ -64,8 +64,8 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 |:---------------------------|
 | Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
-> [!WARNING]
-> Test Warning
+: warning WARNING
+Test Warning
 
 ## Parameters
 
