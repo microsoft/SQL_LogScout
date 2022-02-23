@@ -126,7 +126,7 @@ SQL_LogScout.cmd
 
 ### B. Execute SQL LogScout using a specific scenario and debug level
 
-This command starts the diagnostic collection with no debug logging and specifies the GeneralPerf scenario.
+This command starts the diagnostic collection specifying the GeneralPerf scenario.
 
 ```bash
 SQL_LogScout.cmd GeneralPerf
@@ -134,28 +134,28 @@ SQL_LogScout.cmd GeneralPerf
 
 ### C. Execute SQL LogScout by specifying folder creation option
 
-Execute SQL LogScout using the DetailedPerf Scenario, DebugLevel 2, specifies the Server name, use the present directory and folder option to delete the default \output folder if present
+Execute SQL LogScout using the DetailedPerf Scenario, specifies the Server name, use the present directory and folder option to delete the default \output folder if present
 
 ```bash
-SQL_LogScout.cmd 2 DetailedPerf "DbSrv\SQL2019" "UsePresentDir" "DeleteDefaultFolder"
+SQL_LogScout.cmd DetailedPerf "DbSrv\SQL2019" "UsePresentDir" "DeleteDefaultFolder"
 ```
 
 ### D. Execute SQL LogScout with start and stop times
 
-The following example uses debuglevel 5, collects the AlwaysOn scenario against the "DbSrv" default instance, prompts user to choose a custom path and a new custom subfolder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  
+The following example collects the AlwaysOn scenario against the "DbSrv" default instance, prompts user to choose a custom path and a new custom subfolder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  
 
 ```bash
-SQL_LogScout.cmd 5 AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01 19:26:00" "2020-10-29 13:55:00"
+SQL_LogScout.cmd AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01 19:26:00" "2020-10-29 13:55:00"
 ```
 
 **Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
 
 ### E. Execute SQL LogScout with multiple scenarios and in Quiet mode
 
-The example uses debuglevel 5, collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the "DbSrv" default instance, re-uses the default output folder but creates it in the D:\Log custom path, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  It also automatically accepts the prompts by using Quiet mode and helps a full automation with no interaction.
+The example collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the "DbSrv" default instance, re-uses the default output folder but creates it in the D:\Log custom path, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  It also automatically accepts the prompts by using Quiet mode and helps a full automation with no interaction.
 
 ```bash
-SQL_LogScout.cmd 5 GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefaultFolder "01-01-2000" "04-01-2021 17:00" Quiet
+SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefaultFolder "01-01-2000" "04-01-2021 17:00" Quiet
 ```
 
 **Note:**  Selecting Quiet mode implicitly selects "Y" to all the screens that requires your agreement to proceed. 
