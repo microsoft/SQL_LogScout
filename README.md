@@ -35,8 +35,10 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
 # How to use
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-   > [!WARNING]
-   > Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.
+
+   | :warning: WARNING          |
+   |:---------------------------|
+   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
 
 1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
 1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#parameters) to automate the execution and bypass interactive menus.
@@ -64,8 +66,6 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 |:---------------------------|
 | Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
-: warning WARNING
-Test Warning
 
 ## Parameters
 
@@ -223,8 +223,12 @@ SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefault
     - Heap and Virtual memory - collects Windows performance data about memory allocations (virtual and heap memory)performed by processes and the OS
     - Disk and File I/O - collects Windows performance data about I/O performance performed by processes and the OS
     - Filter drivers - collects performance data about filter driver activity on the system (OS)
+    
 
-   **WARNING**: WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 45 seconds of data collection. You can specify a custom value between 3 and 45 seconds.
+   | :warning: WARNING          |
+   |:---------------------------|
+   | WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 45 seconds of data collection. You can specify a custom value between 3 and 45 seconds.|
+
 
 1. **Setup scenario** - allows analysis of setup or installation issues of SQL Server components. Collects:
    - Basic scenario logs 
