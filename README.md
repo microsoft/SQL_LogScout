@@ -98,13 +98,13 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN). You can use period "." to connect to a local default instance. If you do so, tt will be converted to the local host name.
 
 1. **CustomOutputPath** - specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
-    - "PromptForCustomDir" - will cause the user to be prompted whether to specify a custom path
-    - "UsePresentDir"  - will use the present directory wher SQL LogScout is copied (no custom path)
+    - PromptForCustomDir - will cause the user to be prompted whether to specify a custom path
+    - UsePresentDir  - will use the present directory wher SQL LogScout is copied (no custom path)
     - An existing path (e.g. D:\logs) - will use the specified path for data collection.  **Note:** Do not use a trailing backslash at the end. For example "D:\logs\\" will lead to an error.
 
 1. **DeleteExistingOrCreateNew** - possible values are: 
-    - "DeleteDefaultFolder" - will cause the default \output folder to be deleted and recreated
-    - "NewCustomFolder"  - will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
+    - DeleteDefaultFolder - will cause the default \output folder to be deleted and recreated
+    - NewCustomFolder  - will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
 
 1. **DiagStartTime** - specify the time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).  
 
