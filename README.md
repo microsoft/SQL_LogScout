@@ -72,21 +72,21 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
 
 1. **Scenario** - possible values are:
-    - "Basic"
-    - "GeneralPerf"
-    - "DetailedPerf"
-    - "Replication"
-    - "AlwaysOn"
-    - "NetworkTrace"
-    - "Memory"
-    - "DumpMemory"
-    - "WPR"
-    - "Setup"
-    - "BackupRestore"
-    - "IO"
-    - "LightPerf"
-    - "MenuChoice" - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
-    - "NoBasic" - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
+    - Basic
+    - GeneralPerf
+    - DetailedPerf
+    - Replication
+    - AlwaysOn
+    - NetworkTrace
+    - Memory
+    - DumpMemory
+    - WPR
+    - Setup
+    - BackupRestore
+    - IO
+    - LightPerf
+    - MenuChoice - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
+    - NoBasic - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
 
 
    *Multiple Scenarions:** You can select *one or more* scenarios. To combine multiple scenarios use the *plus sign* (+). For example:
@@ -234,7 +234,7 @@ SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefault
    - Basic scenario logs 
    - All SQL Setup logs from the \Setup Bootstrap\ folders on the system.
 
-1. **Backup and Restore scenario** - collects various logs related to backup and restore activities in SQL Server. These logs include:
+1. **BackupRestore scenario** - collects various logs related to backup and restore activities in SQL Server. These logs include:
    - Basic scenario 
    - Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
    - Enables backup and restore related TraceFlags to produce information in the Errorlog
@@ -242,7 +242,7 @@ SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefault
    - SQL VSS Writer Log (on SQL Server 2019 and later)
    - VSS Admin (OS) logs for VSS backup-related scenarios
 
-1. **I/O** - collects the Basic scenario logs and several logs related to disk I/O activity:
+1. **IO scenario** - collects the Basic scenario logs and several logs related to disk I/O activity:
    - Basic scenario
    - [StorPort trace](https://docs.microsoft.com/archive/blogs/askcore/tracing-with-storport-in-windows-2012-and-windows-8-with-kb2819476-hotfix) which gathers information about the device driver activity connected to STORPORT.SYS.  
    - High_IO_Perfstats - collects data from disk I/O related DMVs in SQL Server
