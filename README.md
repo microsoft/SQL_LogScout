@@ -26,7 +26,7 @@ SQL LogScout is developed and maintained by members of the Microsoft SQL Server 
 # Minimum requirements
 
 - Windows 2012 or later
-- Powershell version 4.0 or later
+- Powershell version 4.0, 5.0, 6.0
 
 # Download location
 
