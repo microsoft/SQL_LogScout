@@ -307,7 +307,7 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
     THE SOFTWARE.
 
 2021-09-10 11:03:32.148	INFO	Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG 
-2021-09-10 11:03:26.230	INFO	SQL LogScout version: 4.1.0 
+2021-09-10 11:03:26.230	INFO	SQL LogScout version: 4.5.33 
 2021-09-10 11:03:26.302	INFO	The Present folder for this collection is C:\temp\log scout\Test 2 
 2021-09-10 11:03:30.479	INFO	Prompt CustomDir Console Input: n 
 2021-09-10 11:03:30.551	INFO	 
@@ -368,9 +368,10 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:04:15.922	INFO	Basic collectors will execute on shutdown 
 2021-09-10 11:04:15.934	INFO	Collecting logs for 'GeneralPerf' scenario 
 2021-09-10 11:04:15.964	INFO	Executing Collector: Perfmon 
-2021-09-10 11:04:17.055	INFO	Executing Collector: xevent_general 
-2021-09-10 11:04:19.130	INFO	Executing Collector: xevent_general_target 
-2021-09-10 11:04:19.152	INFO	Executing Collector: xevent_general_Start 
+2021-09-10 11:04:17.055	INFO	Executing Collector: Xevent_Core_AddSession 
+2021-09-10 11:04:17.088	INFO	Executing Collector: Xevent_General_AddSession 
+2021-09-10 11:04:19.130	INFO	Executing Collector: Xevent_General_Target 
+2021-09-10 11:04:19.152	INFO	Executing Collector: Xevent_General_Start 
 2021-09-10 11:04:19.214	INFO	Executing Collector: ExistingProfilerXeventTraces 
 2021-09-10 11:04:21.313	INFO	Executing Collector: HighCPU_perfstats 
 2021-09-10 11:04:21.364	INFO	Executing Collector: SQLServerPerfStats 
@@ -381,16 +382,18 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:04:25.652	INFO	Executing Collector: SSB_diag 
 2021-09-10 11:04:25.708	INFO	Collecting logs for 'AlwaysOn' scenario 
 2021-09-10 11:04:25.740	INFO	Executing Collector: AlwaysOnDiagScript 
-2021-09-10 11:04:25.809	INFO	Executing Collector: xevent_AlwaysOn_Data_Movement 
+2021-09-10 11:04:25.788	INFO	Executing Collector: Xevent_CoreAddSesion 
+2021-09-10 11:04:25.809	INFO	Executing Collector: Xevent_AlwaysOn_Data_Movement 
 2021-09-10 11:04:27.853	INFO	Executing Collector: AlwaysOn_Data_Movement_target 
 2021-09-10 11:04:27.881	INFO	Executing Collector: AlwaysOn_Data_Movement_Start 
 2021-09-10 11:04:27.922	INFO	Executing Collector: AlwaysOnHealthXevent 
 2021-09-10 11:04:28.007	INFO	Collecting logs for 'BackupRestore' scenario 
-2021-09-10 11:04:28.023	INFO	Executing Collector: xevent_backup_restore 
+2021-09-10 11:04:28.023	INFO	Executing Collector: Xevent_BackupRestore_AddSession 
 2021-09-10 11:04:30.070	INFO	Executing Collector: EnableTraceFlag 
-2021-09-10 11:04:30.159	WARN	To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process. 
+2021-09-10 11:04:30.088	INFO	Executing collector: SetVerboseSQLVSSWriterLog
+2021-09-10 11:04:30.159	WARN	To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process.
 2021-09-10 11:04:36.697	INFO	Console Input: n 
-2021-09-10 11:04:36.705	INFO	You have chosen not to restart SQLWriter Service. No verbose logging will be collected 
+2021-09-10 11:04:36.705	INFO	You have chosen not to restart SQLWriter Service. No verbose logging will be collected for SQL VSS Writer (2019 or later)
 2021-09-10 11:04:36.737	INFO	Executing Collector: VSSAdmin_Providers 
 2021-09-10 11:04:36.778	INFO	Executing Collector: VSSAdmin_Shadows 
 2021-09-10 11:04:37.832	INFO	Executing Collector: VSSAdmin_Shadowstorage 
@@ -398,9 +401,9 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:04:37.924	INFO	Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue 
 2021-09-10 11:04:43.012	INFO	StopCollection Console input: stop 
 2021-09-10 11:04:43.014	INFO	Shutting down the collector 
-2021-09-10 11:04:43.032	INFO	Executing shutdown command: xevents_stop 
-2021-09-10 11:04:43.073	INFO	Executing shutdown command: xevents_alwayson_data_movement_stop 
-2021-09-10 11:04:43.098	INFO	Executing shutdown command: Disable Backup Restore Trace Flag 
+2021-09-10 11:04:43.032	INFO	Executing shutdown command: Xevents_Stop 
+2021-09-10 11:04:43.073	INFO	Executing shutdown command: Xevents_Alwayson_Data_Movement_Stop 
+2021-09-10 11:04:43.098	INFO	Executing shutdown command: Disable_BackupRestore_Trace_Flags
 2021-09-10 11:04:43.145	INFO	Executing shutdown command: PerfmonStop 
 2021-09-10 11:04:46.228	INFO	Executing shutdown command: KillActiveLogscoutSessions 
 2021-09-10 11:04:47.277	INFO	Collecting logs for 'Basic' scenario 
@@ -429,7 +432,9 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:05:59.494	INFO	   Produced 20000 records in the EventLog 
 2021-09-10 11:06:04.839	INFO	   Produced 26007 records in the EventLog 
 2021-09-10 11:06:04.842	INFO	System EventLog in TXT and CSV format completed! 
-2021-09-10 11:06:04.879	INFO	Executing Collector: SQLServerPerfStatsSnapshotShutdown 
+2021-09-10 11:06:04.879	INFO	Executing Collector: PerfStatsSnapshotShutdown
+2021-09-10 11:06:04.888	INFO	Executing collector: GetSQLVSSWriterLog
+2021-09-10 11:06:04.900 INFO	SQLWriter Service has been restarted
 2021-09-10 11:06:04.917	INFO	Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... 
 2021-09-10 11:06:08.518	INFO	Ending data collection 
 2021-09-10 11:06:08.533	WARN	Launching cleanup and exit routine... please wait 
