@@ -128,9 +128,9 @@ begin
 	WHERE CONVERT (decimal (28,1), migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) > 10
 	ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC
 	PRINT ''
-
 	PRINT ''
-	PRINT '-- Current database options --'
+
+	PRINT '-- Current database options --'  
 	SELECT LEFT ([name], 128) AS [name], 
 	  dbid, cmptlevel, 
 	  CONVERT (int, (SELECT SUM (CONVERT (bigint, [size])) * 8192 / 1024 / 1024 FROM master.sys.master_files f WHERE f.database_id = d.dbid)) AS db_size_in_mb, 
@@ -164,32 +164,65 @@ begin
 	  + CASE WHEN DATABASEPROPERTYEX ([name], 'IsSyncWithBackup') = 1 THEN ', IsSyncWithBackup' ELSE '' END
 	  , 512) AS status
 	FROM master.dbo.sysdatabases d
-
-
+	PRINT ''
 	
-	PRINT ' '
 
-	print '--sys.dm_database_encryption_keys  Transparent Database Encryption (TDE) information'
-	select DB_NAME(database_id) as 'database_name', * from sys.dm_database_encryption_keys 
+	print '-- sys.dm_database_encryption_keys TDE --'
+	select DB_NAME(database_id) as 'database_name', 
+	   [database_id]
+      ,[encryption_state]
+      ,[create_date]
+      ,[regenerate_date]
+      ,[modify_date]
+      ,[set_date]
+      ,[opened_date]
+      ,[key_algorithm]
+      ,[key_length]
+      ,[encryptor_thumbprint]
+      ,[encryptor_type]
+      ,[percent_complete]
+	from sys.dm_database_encryption_keys 
+	PRINT ''
+	
 
-	print ''
 	print '-- sys.dm_os_loaded_modules --'
-	select * from sys.dm_os_loaded_modules
+	select base_address      , 
+           file_version, 
+           product_version, 
+           debug, 
+           patched, 
+           prerelease, 
+           private_build, 
+           special_build, 
+           [language], 
+           company, 
+           [description], 
+           [name]
+    from sys.dm_os_loaded_modules
+	PRINT ''
+	
+
+	print '-- sys.dm_server_audit_status --'
+	select  
+		audit_id,
+		[name],
+		[status],
+		status_desc,
+		status_time,
+		event_session_address,
+		audit_file_path,
+		audit_file_size
+	from sys.dm_server_audit_status
 	print ''
 
-	print ''
-	print '--sys.dm_server_audit_status'
-	select * from sys.dm_server_audit_status
-
-	print ''
-	print '--top 10 CPU consuming procedures '
-	SELECT TOP 10 d.object_id, d.database_id, db_name(database_id) 'db name', object_name (object_id, database_id) 'proc name',  d.cached_time, d.last_execution_time, d.total_elapsed_time, d.total_elapsed_time/d.execution_count AS [avg_elapsed_time], d.last_elapsed_time, d.execution_count
+	print '-- top 10 CPU consuming procedures --'
+	SELECT TOP 10 getdate() as runtime, d.object_id, d.database_id, db_name(database_id) 'db name', object_name (object_id, database_id) 'proc name',  d.cached_time, d.last_execution_time, d.total_elapsed_time, d.total_elapsed_time/d.execution_count AS [avg_elapsed_time], d.last_elapsed_time, d.execution_count
 	from sys.dm_exec_procedure_stats d
 	ORDER BY [total_worker_time] DESC
-
 	print ''
-	print '--top 10 CPU consuming triggers '
-	SELECT TOP 10 d.object_id, d.database_id, db_name(database_id) 'db name', object_name (object_id, database_id) 'proc name',  d.cached_time, d.last_execution_time, d.total_elapsed_time, d.total_elapsed_time/d.execution_count AS [avg_elapsed_time], d.last_elapsed_time, d.execution_count
+
+	print '-- top 10 CPU consuming triggers --'
+	SELECT TOP 10 getdate() as runtime, d.object_id, d.database_id, db_name(database_id) 'db name', object_name (object_id, database_id) 'proc name',  d.cached_time, d.last_execution_time, d.total_elapsed_time, d.total_elapsed_time/d.execution_count AS [avg_elapsed_time], d.last_elapsed_time, d.execution_count
 	from sys.dm_exec_trigger_stats d
 	ORDER BY [total_worker_time] DESC
 	print ''
@@ -206,7 +239,7 @@ begin
 	WHILE @@FETCH_STATUS = 0
 	begin
 	
-		declare @sql nvarchar (512)
+		declare @sql nvarchar (max)
 		set @sql = 'USE [' + @dbname + ']'
 	
 		set @sql = @sql + '	insert into #tmpStats	select ' + cast( @dbid as nvarchar(20)) +   ' ''Database_Id''' + ',''' +  @dbname  + ''' Database_Name,  Object_name(st.object_id) ''Object_Name'',  st.* from sys.dm_db_index_usage_stats usg cross apply sys.dm_db_stats_properties (usg.object_id, index_id) st where database_id  = ' + cast( @dbid as nvarchar(20)) 
@@ -224,12 +257,27 @@ begin
 	deallocate dbCursor
 	print ''
 	print '--sys.dm_db_stats_properties--'
-	select * from #tmpStats order by database_name
+	select --*
+		Database_Id,
+		[Database_Name],
+		[Object_Name],
+		[object_id],
+		stats_id,
+		last_updated,
+		[rows],
+		rows_sampled,
+		steps,
+		unfiltered_rows,
+		modification_counter,
+		persisted_sample_percent
+	from #tmpStats 
+		order by [database_name]
 	drop table #tmpStats
 	print ''
 
 
-	--disable indexes
+	--get disabled indexes
+	--import in SQLNexus
 
 	set nocount on
 	declare @dbname_index sysname, @dbid_index int
@@ -238,15 +286,31 @@ begin
 	OPEN dbCursor_Index
 
 	FETCH NEXT FROM dbCursor_Index  INTO @dbname_index, @dbid_index
-	select db_id() 'database_id', db_name() 'database_name', object_name(object_id) 'object_name', * into #tblDisabledIndex from sys.indexes where is_disabled = 1 and 1=0
+	select db_id() 'database_id', db_name() 'database_name', object_name(object_id) 'object_name', object_id,
+                                            name,
+                                            index_id, 
+                                            type, 
+                                            type_desc, 
+                                            is_disabled into #tblDisabledIndex from sys.indexes where is_disabled = 1 and 1=0 
+
 
 	WHILE @@FETCH_STATUS = 0
 	begin
 	
-		declare @sql_index nvarchar (512)
+		declare @sql_index nvarchar (max)
 		set @sql_index = 'USE ' + @dbname_index
 	
-		set @sql_index = @sql_index + '	insert into #tblDisabledIndex	select  db_id()  database_id, db_name() database_name, object_name(object_id) object_name, *  from sys.indexes where is_disabled = 1'
+		set @sql_index = @sql_index + '	insert into #tblDisabledIndex	
+                                          select  db_id()  database_id, 
+                                            db_name() database_name, 
+                                            object_name(object_id) object_name, 
+                                            object_id,
+                                            name,
+                                            index_id, 
+                                            type, 
+                                            type_desc, 
+                                            is_disabled
+                                          from sys.indexes where is_disabled = 1'
 	
 		-- added this check to prevent script from failing on principals with restricted access
 		if HAS_PERMS_BY_NAME(@dbname_index, 'DATABASE', 'CONNECT') = 1
@@ -310,20 +374,53 @@ as
 begin
 	exec #sp_perf_stats_snapshot9
 
-		print 'getting resource governor info'
+	print 'getting resource governor info'
 	print '=========================================='
+	print ''
+	
+	print '-- sys.resource_governor_configuration --'
+	select --* 
+		classifier_function_id,
+		is_enabled,
+		[max_outstanding_io_per_volume]
+	from sys.resource_governor_configuration
+	print ''
+	
+	print '-- sys.resource_governor_resource_pools --'
+	select --* 
+		pool_id,
+		[name],
+		min_cpu_percent,
+		max_cpu_percent,
+		min_memory_percent,
+		max_memory_percent,
+		cap_cpu_percent,
+		min_iops_per_volume,
+		max_iops_per_volume
+	from sys.resource_governor_resource_pools
+	print ''
+	
+	print '-- sys.resource_governor_workload_groups --'
+	select --* 
+		group_id,
+		[name],
+		importance,
+		request_max_memory_grant_percent,
+		request_max_cpu_time_sec,
+		request_memory_grant_timeout_sec,
+		max_dop,
+		group_max_requests,
+		pool_id,
+		external_pool_id --,
+		-- -- Not exist in Lower SQL Version
+		--request_max_memory_grant_percent_numeric
+	from sys.resource_governor_workload_groups
+	print ''
+	
+	print 'Query and plan hash capture '
 
-	print 'sys.resource_governor_configuration'
-	select * from sys.resource_governor_configuration
 
-	print 'sys.resource_governor_resource_pools'
-	select * from sys.resource_governor_resource_pools
-
-	print 'sys.resource_governor_workload_groups'
-	select * from sys.resource_governor_workload_groups
-
-	print '-- query and plan hash capture --'
-	print '-- query and plan hash capture --'
+	--import in SQLNexus
 	print '-- top 10 CPU by query_hash --'
 	select getdate() as runtime, *  --into tbl_QueryHashByCPU
 	from
@@ -343,10 +440,10 @@ begin
 	group by query_hash
 	ORDER BY sum(total_worker_time) DESC
 	) t
+	print ''
 
 
-
-
+	--import in SQLNexus
 	print '-- top 10 logical reads by query_hash --'
 	select getdate() as runtime, *  --into tbl_QueryHashByLogicalReads
 	from
@@ -366,8 +463,9 @@ begin
 	group by query_hash
 	ORDER BY sum(total_logical_reads) DESC
 	) t
+print ''
 
-
+	--import in SQLNexus
 	print '-- top 10 elapsed time by query_hash --'
 	select getdate() as runtime, * -- into tbl_QueryHashByElapsedTime
 	from
@@ -387,11 +485,11 @@ begin
 	group by query_hash
 	ORDER BY sum(total_elapsed_time) DESC
 	) t
+print ''
 
-
-
+	--import in SQLNexus
 	print '-- top 10 CPU by query_plan_hash and query_hash --'
-	SELECT TOP 10 query_plan_hash, query_hash, 
+	SELECT TOP 10 getdate() as runtime, query_plan_hash, query_hash, 
 	COUNT (distinct query_plan_hash) as 'distinct query_plan_hash count',
 	sum(execution_count) as 'execution_count', 
 		 sum(total_worker_time) as 'total_worker_time',
@@ -405,12 +503,12 @@ begin
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
 	group by query_plan_hash, query_hash
 	ORDER BY sum(total_worker_time) DESC;
+print ''
 
 
-
-
+	--import in SQLNexus
 	print '-- top 10 logical reads by query_plan_hash and query_hash --'
-	SELECT TOP 10 query_plan_hash, query_hash, sum(execution_count) as 'execution_count', 
+	SELECT TOP 10 getdate() as runtime, query_plan_hash, query_hash, sum(execution_count) as 'execution_count', 
 		 sum(total_worker_time) as 'total_worker_time',
 		 SUM(total_elapsed_time) as 'total_elapsed_time',
 		 SUM (total_logical_reads) as 'total_logical_reads',
@@ -422,12 +520,11 @@ begin
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
 	group by query_plan_hash, query_hash
 	ORDER BY sum(total_logical_reads) DESC;
+print ''
 
-
-
-
+	--import in SQLNexus
 	print '-- top 10 elapsed time  by query_plan_hash and query_hash --'
-	SELECT TOP 10 query_plan_hash, query_hash, sum(execution_count) as 'execution_count', 
+	SELECT TOP 10 getdate() as runtime, query_plan_hash, query_hash, sum(execution_count) as 'execution_count', 
 		 sum(total_worker_time) as 'total_worker_time',
 		 SUM(total_elapsed_time) as 'total_elapsed_time',
 		 SUM (total_logical_reads) as 'total_logical_reads',
@@ -439,7 +536,7 @@ begin
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
 	group by query_plan_hash, query_hash
 	ORDER BY sum(total_elapsed_time) DESC;
-
+print ''
 
 
 	PRINT ''
@@ -477,8 +574,11 @@ as
 begin
 	exec #sp_perf_stats_snapshot10
 
-	print '--hadron replica info--'
+	print ''
+
+	print '-- hadron replica info --'
 	SELECT 
+		  getdate() as runtime, 
 		  ag.name AS ag_name, 
 		  ar.replica_server_name  ,
 		  ar_state.is_local AS is_ag_replica_local, 
@@ -510,26 +610,89 @@ begin
  
 	JOIN sys.dm_hadr_availability_replica_states AS ar_state 
 	ON  ar.replica_id = ar_state.replica_id;
-
+	print ''
 
 	print '-- sys.availability_groups --'
-	select * from sys.availability_groups
-
+	select 
+		getdate() as runtime, 
+		group_id,
+		[name],
+		resource_id,
+		resource_group_id,
+		[failure_condition_level],
+		[health_check_timeout],
+		[automated_backup_preference],
+		automated_backup_preference_desc,
+		[version],
+		basic_features,
+		[dtc_support],
+		[db_failover],
+		is_distributed --,
+	from sys.availability_groups
+	print ''
 
 	print '-- sys.dm_hadr_cluster --'
-	select * from sys.dm_hadr_cluster
-
-
+	select 
+		getdate() as runtime, 
+		cluster_name,
+		quorum_type,
+		quorum_type_desc,
+		quorum_state,
+		quorum_state_desc
+	from sys.dm_hadr_cluster
+	print ''
+	
 	print '-- sys.dm_hadr_cluster_members --'
-	select * from sys.dm_hadr_cluster_members
-
+	select 
+		getdate() as runtime, 
+		member_name,
+		member_type,
+		member_type_desc,
+		member_state,
+		member_state_desc
+		number_of_quorum_votes
+	from sys.dm_hadr_cluster_members
+	print ''
 
 	print '-- sys.dm_hadr_cluster_networks --'
-	select * from sys.dm_hadr_cluster_networks
+	select 
+		getdate() as runtime, 
+		member_name,
+		network_subnet_ip,
+		network_subnet_ipv4_mask,
+		network_subnet_prefix_length,
+		is_public,
+		is_ipv4
+	from sys.dm_hadr_cluster_networks
+	print ''
 
 	print '-- sys.availability_replicas --'
-	select * from sys.availability_replicas
-
+	select 
+		getdate() as runtime, 
+		replica_id,
+		group_id,
+		replica_metadata_id,
+		replica_server_name,
+		owner_sid,
+		[endpoint_url],
+		[availability_mode],
+		availability_mode_desc,
+		[failover_mode],
+		failover_mode_desc,
+		[session_timeout],
+		primary_role_allow_connections,
+		primary_role_allow_connections_desc,
+		secondary_role_allow_connections,
+		secondary_role_allow_connections_desc,
+		create_date,
+		modify_date,
+		[backup_priority],
+		[read_only_routing_url],
+		[seeding_mode],
+		seeding_mode_desc --,
+		--read_write_routing_url   --  -- Not exist in Lower SQL Version
+	from sys.availability_replicas
+	print ''
 end 
 go
 

@@ -9,14 +9,15 @@ PRINT '---------------------------------------'
 PRINT ''
 PRINT 'Start Time: ' + CONVERT (varchar(30), GETDATE(), 121)
 GO
-sp_configure 'show advanced', 1
-go
-reconfigure with override
-go
-sp_configure 'xp_cmdshell', 1
-go
-reconfigure with override
-go
+-- Lines bellow commented due to SQL LogScout item #260
+-- sp_configure 'show advanced', 1
+-- go
+-- reconfigure with override
+-- go
+-- sp_configure 'xp_cmdshell', 1
+-- go
+-- reconfigure with override
+-- go
 PRINT ''
 PRINT '==== SELECT GETDATE()'
 SELECT GETDATE()
@@ -107,15 +108,16 @@ END
 CLOSE curs
 DEALLOCATE curs
 GO
-PRINT '==== ODBC DSN info'
-PRINT 'EXEC master.dbo.xp_cmdshell ''regedit /e %tmp%\odbc_pss.txt HKEY_LOCAL_MACHINE\SOFTWARE\ODBC'''
-EXEC master.dbo.xp_cmdshell 'regedit /e %tmp%\odbc_pss.txt HKEY_LOCAL_MACHINE\SOFTWARE\ODBC'
-PRINT 'EXEC master.dbo.xp_cmdshell ''dir  %tmp%\odbc_pss.txt '''
-EXEC master.dbo.xp_cmdshell 'dir  %tmp%\odbc_pss.txt '
-PRINT 'EXEC master.dbo.xp_cmdshell ''type %tmp%\odbc_pss.txt'''
-EXEC master.dbo.xp_cmdshell 'type %tmp%\odbc_pss.txt'
-PRINT 'EXEC master.dbo.xp_cmdshell ''del %tmp%\odbc_pss.txt'''
-EXEC master.dbo.xp_cmdshell 'del %tmp%\odbc_pss.txt'
+-- Lines bellow commented due to SQL LogScout item #260
+-- PRINT '==== ODBC DSN info'
+-- PRINT 'EXEC master.dbo.xp_cmdshell ''regedit /e %tmp%\odbc_pss.txt HKEY_LOCAL_MACHINE\SOFTWARE\ODBC'''
+-- EXEC master.dbo.xp_cmdshell 'regedit /e %tmp%\odbc_pss.txt HKEY_LOCAL_MACHINE\SOFTWARE\ODBC'
+-- PRINT 'EXEC master.dbo.xp_cmdshell ''dir  %tmp%\odbc_pss.txt '''
+-- EXEC master.dbo.xp_cmdshell 'dir  %tmp%\odbc_pss.txt '
+-- PRINT 'EXEC master.dbo.xp_cmdshell ''type %tmp%\odbc_pss.txt'''
+-- EXEC master.dbo.xp_cmdshell 'type %tmp%\odbc_pss.txt'
+-- PRINT 'EXEC master.dbo.xp_cmdshell ''del %tmp%\odbc_pss.txt'''
+-- EXEC master.dbo.xp_cmdshell 'del %tmp%\odbc_pss.txt'
 GO
 PRINT ''
 PRINT '==== SELECT GETDATE()'
