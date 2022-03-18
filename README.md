@@ -17,8 +17,6 @@
 1. [Sample output](#sample-output)
 1. [Test Suite](#test-suite)
 
-# Important Note
-   > SQL LogScout development team is aware that some third-party tools are flagging both the ZIP package and individual files of ***`version 4.1.1`*** as a malicious threat. **The development team conducted extensive review of the source files and found no malicious code in it.** In addition, the development teams is improving the software to avoid this annoyance in the future. **We have discovered that if we break up the main file into several files - smaller and less complex scripts - then this issue is no longer reported.** We wanted to remind you that all of the SQL LogScout files are digitally signed which ensures that they cannot be modified or tampered with – for more details around the security measures see section [SQL LogScout - Security](https://github.com/microsoft/SQL_LogScout#Security).
 
 # Introduction
 
