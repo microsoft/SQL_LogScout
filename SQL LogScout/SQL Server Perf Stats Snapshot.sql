@@ -11,10 +11,6 @@ SET QUOTED_IDENTIFIER ON
 SET NUMERIC_ROUNDABORT OFF
 GO
 
-
-
-go
-
 /*******************************************************************
 perf stats snapshot
 
@@ -25,7 +21,7 @@ IF OBJECT_ID ('#sp_perf_stats_snapshot','P') IS NOT NULL
    DROP PROCEDURE #sp_perf_stats_snapshot
 GO
 
-CREATE PROCEDURE #sp_perf_stats_snapshot 
+CREATE PROCEDURE #sp_perf_stats_snapshot  
 as
 begin
 	PRINT 'Starting SQL Server Perf Stats Snapshot Script...'
@@ -90,6 +86,7 @@ begin
 	WHERE (PlanStats.CpuRank < 50 OR PlanStats.PhysicalReadsRank < 50 OR PlanStats.DurationRank < 50)
 	  AND pa.attribute = 'dbid' 
 	ORDER BY tot_cpu_ms DESC
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
 
 	SET @rowcount = @@ROWCOUNT
 	SET @queryduration = DATEDIFF (ms, @querystarttime, GETDATE())
@@ -127,10 +124,12 @@ begin
 	INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
 	WHERE CONVERT (decimal (28,1), migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) > 10
 	ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+
 	PRINT ''
 	PRINT ''
 
-	PRINT '-- Current database options --'  
+	PRINT '-- Current database options --'
 	SELECT LEFT ([name], 128) AS [name], 
 	  dbid, cmptlevel, 
 	  CONVERT (int, (SELECT SUM (CONVERT (bigint, [size])) * 8192 / 1024 / 1024 FROM master.sys.master_files f WHERE f.database_id = d.dbid)) AS db_size_in_mb, 
@@ -168,22 +167,46 @@ begin
 	
 
 	print '-- sys.dm_database_encryption_keys TDE --'
-	select DB_NAME(database_id) as 'database_name', 
-	   [database_id]
-      ,[encryption_state]
-      ,[create_date]
-      ,[regenerate_date]
-      ,[modify_date]
-      ,[set_date]
-      ,[opened_date]
-      ,[key_algorithm]
-      ,[key_length]
-      ,[encryptor_thumbprint]
-      ,[encryptor_type]
-      ,[percent_complete]
-	from sys.dm_database_encryption_keys 
-	PRINT ''
+
+	declare @sql_major_version INT, @sql_major_build INT, @sql nvarchar (max)
+
+	SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 4) AS INT)), 
+	       @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 2) AS INT)) 
+
+	set @sql = 'select DB_NAME(database_id) as ''database_name'', 
+	              [database_id]
+                 ,[encryption_state]
+                 ,[create_date]
+                 ,[regenerate_date]
+                 ,[modify_date]
+                 ,[set_date]
+                 ,[opened_date]
+                 ,[key_algorithm]
+                 ,[key_length]
+                 ,[encryptor_thumbprint]
+				 ,[percent_complete]'
+
+	 IF (@sql_major_version >=11)
+	BEGIN	   
+      set @sql = @sql + ',[encryptor_type]'
+	END
 	
+	IF (@sql_major_version >=15)
+	BEGIN	   
+      set @sql = @sql + '[encryption_state_desc]
+                        ,[encryption_scan_state]
+                        ,[encryption_scan_state_desc]
+                        ,[encryption_scan_modify_date]'
+	END
+
+	set @sql = @sql + ' from sys.dm_database_encryption_keys '
+    
+	--print @sql
+	exec (@sql)
+      
+	
+	PRINT ''
+
 
 	print '-- sys.dm_os_loaded_modules --'
 	select base_address      , 
@@ -200,7 +223,7 @@ begin
            [name]
     from sys.dm_os_loaded_modules
 	PRINT ''
-	
+
 
 	print '-- sys.dm_server_audit_status --'
 	select  
@@ -230,51 +253,115 @@ begin
 	--new stats DMV
 	set nocount on
 	declare @dbname sysname, @dbid int
+
+	SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 4) AS INT)), 
+	       @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 2) AS INT)) 
+     
+	
 	DECLARE dbCursor CURSOR FOR 
-	select name, database_id from sys.databases where state_desc='ONLINE' and database_id > 4 order by name
+	select name, database_id from sys.databases where state_desc='ONLINE' and name not in ('model','tempdb') order by name
 	OPEN dbCursor
 
 	FETCH NEXT FROM dbCursor  INTO @dbname, @dbid
-	select @dbid 'Database_Id', @dbname 'Database_Name',  Object_name(st.object_id) 'Object_Name',  st.* into #tmpStats from sys.dm_db_index_usage_stats usg cross apply sys.dm_db_stats_properties (usg.object_id, index_id) st where database_id is null
-	WHILE @@FETCH_STATUS = 0
-	begin
 	
-		declare @sql nvarchar (max)
-		set @sql = 'USE [' + @dbname + ']'
-	
-		set @sql = @sql + '	insert into #tmpStats	select ' + cast( @dbid as nvarchar(20)) +   ' ''Database_Id''' + ',''' +  @dbname  + ''' Database_Name,  Object_name(st.object_id) ''Object_Name'',  st.* from sys.dm_db_index_usage_stats usg cross apply sys.dm_db_stats_properties (usg.object_id, index_id) st where database_id  = ' + cast( @dbid as nvarchar(20)) 
+	  --replaced sys.dm_db_index_usage_stats  by sys.stat since the first doesn't return anything in case the table or index was not accessed since last SQL restart
+      select @dbid 'Database_Id', @dbname 'Database_Name',  Object_name(st.object_id) 'Object_Name', SCHEMA_NAME(schema_id) 'Schema_Name', ss.name 'Statistics_Name', 
+	         st.object_id, st.stats_id, st.last_updated, st.rows, st.rows_sampled, st.steps, st.unfiltered_rows, st.modification_counter
+	  into #tmpStats 
+	  from sys.stats ss cross apply sys.dm_db_stats_properties (ss.object_id, ss.stats_id) st inner join sys.objects so ON (ss.object_id = so.object_id) where 1=0
+	  
+	  --column st.persisted_sample_percent was only introduced on sys.dm_db_stats_properties on SQL Server 2016 (13.x) SP1 CU4 -- 13.0.4446.0 and 2017 CU1 14.0.3006.16	 
+	  IF (@sql_major_version >14 OR (@sql_major_version=13 AND @sql_major_build>=4446) OR (@sql_major_version=14 AND @sql_major_build>=3006))
+	  BEGIN
+	    ALTER TABLE #tmpStats ADD persisted_sample_percent FLOAT
+	  END
 
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+	
+		set @sql = 'USE [' + @dbname + ']'
+	    --replaced sys.dm_db_index_usage_stats  by sys.stat since the first doesn't return anything in case the table or index was not accessed since last SQL restart
+		IF (@sql_major_version >14 OR (@sql_major_version=13 AND @sql_major_build>=4446) OR (@sql_major_version=14 AND @sql_major_build>=3006))
+		BEGIN
+		      set @sql = @sql + '	insert into #tmpStats	select ' + cast( @dbid as nvarchar(20)) +   ' ''Database_Id''' + ',''' +  @dbname  + ''' Database_Name,  Object_name(st.object_id) ''Object_Name'', SCHEMA_NAME(schema_id) ''Schema_Name'', ss.name ''Statistics_Name'', 
+		                                                           st.object_id, st.stats_id, st.last_updated, st.rows, st.rows_sampled, st.steps, st.unfiltered_rows, st.modification_counter, st.persisted_sample_percent
+		      											from sys.stats ss 
+		                                                    cross apply sys.dm_db_stats_properties (ss.object_id, ss.stats_id) st 
+		                                                    inner join sys.objects so ON (ss.object_id = so.object_id)
+		      											where so.type_desc not in (''SYSTEM_TABLE'', ''INTERNAL_TABLE'')'
+		END
+		ELSE
+		BEGIN
+
+		  set @sql = @sql + '	insert into #tmpStats	select ' + cast( @dbid as nvarchar(20)) +   ' ''Database_Id''' + ',''' +  @dbname  + ''' Database_Name,  Object_name(st.object_id) ''Object_Name'', SCHEMA_NAME(schema_id) ''Schema_Name'', ss.name ''Statistics_Name'', 
+		                                                         st.object_id, st.stats_id, st.last_updated, st.rows, st.rows_sampled, st.steps, st.unfiltered_rows, st.modification_counter
+		    											from sys.stats ss 
+		                                                  cross apply sys.dm_db_stats_properties (ss.object_id, ss.stats_id) st 
+		                                                  inner join sys.objects so ON (ss.object_id = so.object_id)
+		    											where so.type_desc not in (''SYSTEM_TABLE'', ''INTERNAL_TABLE'')'
+		  
+		END
+		
 		-- added this check to prevent script from failing on principals with restricted access
 		if HAS_PERMS_BY_NAME(@dbname, 'DATABASE', 'CONNECT') = 1
+			
 			exec (@sql)
 		else
 			PRINT 'Skipped index usage and stats properties check. Principal ' + SUSER_SNAME() + ' does not have CONNECT permission on database ' + @dbname
 		--print @sql
 		FETCH NEXT FROM dbCursor  INTO @dbname, @dbid
 
-	end
+	END
 	close  dbCursor
 	deallocate dbCursor
 	print ''
-	print '--sys.dm_db_stats_properties--'
-	select --*
-		Database_Id,
-		[Database_Name],
-		[Object_Name],
-		[object_id],
-		stats_id,
-		last_updated,
-		[rows],
-		rows_sampled,
-		steps,
-		unfiltered_rows,
-		modification_counter,
-		persisted_sample_percent
-	from #tmpStats 
-		order by [database_name]
+	print '-- sys.dm_db_stats_properties --'
+	declare @sql2 nvarchar (max)
+
+	IF (@sql_major_version >14 OR (@sql_major_version=13 AND @sql_major_build>=4446) OR (@sql_major_version=14 AND @sql_major_build>=3006))
+	BEGIN
+	    set @sql2 = 'select --*
+	                 	Database_Id,
+	                 	[Database_Name],
+	                 	[Schema_Name],
+	                 	[Object_Name],
+	                 	[object_id],
+	                 	[stats_id],
+	                 	[Statistics_Name],
+	                 	[last_updated],
+	                 	[rows],
+	                 	rows_sampled,
+	                 	steps,
+	                 	unfiltered_rows,
+	                 	modification_counter,
+	                 	persisted_sample_percent
+	                 from #tmpStats 
+	                 order by [database_name]'
+	  
+	END
+	ELSE
+	BEGIN
+	  set @sql2 = 'select --*
+	               	Database_Id,
+	               	[Database_Name],
+	               	[Schema_Name],
+	               	[Object_Name],
+	               	[object_id],
+	               	[stats_id],
+	               	[Statistics_Name],
+	               	[last_updated],
+	               	[rows],
+	               	rows_sampled,
+	               	steps,
+	               	unfiltered_rows,
+	               	modification_counter
+	               from #tmpStats 
+	               order by [database_name]'
+	END
+
+	exec (@sql2)
 	drop table #tmpStats
 	print ''
-
 
 	--get disabled indexes
 	--import in SQLNexus
@@ -333,7 +420,7 @@ begin
 	print '-- server_times --'
 	select CONVERT (varchar(30), getdate(), 126) as server_time, CONVERT (varchar(30), getutcdate(), 126)  utc_time, DATEDIFF(hh, getdate(), getutcdate()) time_delta_hours
 
-	
+
 	/*
 	this takes too long for large machines
 		PRINT '-- High Compile Queries --';
@@ -379,48 +466,83 @@ begin
 	print ''
 	
 	print '-- sys.resource_governor_configuration --'
-	select --* 
-		classifier_function_id,
-		is_enabled,
-		[max_outstanding_io_per_volume]
-	from sys.resource_governor_configuration
+	declare @sql_major_version INT, @sql_major_build INT, @sql nvarchar (max)
+
+    SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 4) AS INT)), 
+           @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 2) AS INT)) 
+    
+    BEGIN
+      SET @sql = 'select --* 
+                    classifier_function_id,
+                    is_enabled'
+      
+      IF (@sql_major_version >12)
+      BEGIN
+        SET @sql = @sql + ',[max_outstanding_io_per_volume]'
+      END
+    
+      SET @sql = @sql + ' from sys.resource_governor_configuration;'
+    
+      --print @sql
+      
+      exec (@sql)
+    
+    END
 	print ''
 	
 	print '-- sys.resource_governor_resource_pools --'
-	select --* 
-		pool_id,
-		[name],
-		min_cpu_percent,
-		max_cpu_percent,
-		min_memory_percent,
-		max_memory_percent,
-		cap_cpu_percent,
-		min_iops_per_volume,
-		max_iops_per_volume
-	from sys.resource_governor_resource_pools
+	SET @sql ='select --* 
+		         pool_id,
+           		 [name],
+           		 min_cpu_percent,
+           		 max_cpu_percent,
+           		 min_memory_percent,
+           		 max_memory_percent'
+	IF (@sql_major_version >=11)
+	BEGIN
+      SET @sql = @sql + ',cap_cpu_percent'
+	END
+	IF (@sql_major_version >=12)
+	BEGIN
+      SET @sql = @sql + ',min_iops_per_volume, max_iops_per_volume'
+	END
+
+	SET @sql = @sql + ' from sys.resource_governor_resource_pools;'
+
+	--print @sql
+      
+    exec (@sql)    		 
+	           
 	print ''
 	
 	print '-- sys.resource_governor_workload_groups --'
-	select --* 
-		group_id,
-		[name],
-		importance,
-		request_max_memory_grant_percent,
-		request_max_cpu_time_sec,
-		request_memory_grant_timeout_sec,
-		max_dop,
-		group_max_requests,
-		pool_id,
-		external_pool_id --,
-		-- -- Not exist in Lower SQL Version
-		--request_max_memory_grant_percent_numeric
-	from sys.resource_governor_workload_groups
+	SET @sql ='select --* 
+	        	group_id,
+	        	[name],
+	        	importance,
+	        	request_max_memory_grant_percent,
+	        	request_max_cpu_time_sec,
+	        	request_memory_grant_timeout_sec,
+	        	max_dop,
+	        	group_max_requests,
+	        	pool_id'
+	IF (@sql_major_version >=13)
+	BEGIN
+	  SET @sql = @sql + ',external_pool_id'
+	END
+
+	SET @sql = @sql + ' from sys.resource_governor_workload_groups'
+	
+	--print @sql
+      
+    exec (@sql)    		 
+
 	print ''
 	
 	print 'Query and plan hash capture '
 
 
-	--import in SQLNexus
+	--import in SQLNexus	
 	print '-- top 10 CPU by query_hash --'
 	select getdate() as runtime, *  --into tbl_QueryHashByCPU
 	from
@@ -440,10 +562,12 @@ begin
 	group by query_hash
 	ORDER BY sum(total_worker_time) DESC
 	) t
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+
 	print ''
 
 
-	--import in SQLNexus
+    --import in SQLNexus
 	print '-- top 10 logical reads by query_hash --'
 	select getdate() as runtime, *  --into tbl_QueryHashByLogicalReads
 	from
@@ -463,9 +587,10 @@ begin
 	group by query_hash
 	ORDER BY sum(total_logical_reads) DESC
 	) t
-print ''
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+	print ''
 
-	--import in SQLNexus
+    --import in SQLNexus
 	print '-- top 10 elapsed time by query_hash --'
 	select getdate() as runtime, * -- into tbl_QueryHashByElapsedTime
 	from
@@ -482,10 +607,11 @@ print ''
 		  END), CHAR(13), ' '), CHAR(10), ' '))  AS sample_statement_text
 	FROM sys.dm_exec_query_stats AS qs
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
-	group by query_hash
+	GROUP BY query_hash
 	ORDER BY sum(total_elapsed_time) DESC
 	) t
-print ''
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+	print ''
 
 	--import in SQLNexus
 	print '-- top 10 CPU by query_plan_hash and query_hash --'
@@ -501,14 +627,15 @@ print ''
 		  END), CHAR(13), ' '), CHAR(10), ' '))  AS sample_statement_text
 	FROM sys.dm_exec_query_stats AS qs
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
-	group by query_plan_hash, query_hash
-	ORDER BY sum(total_worker_time) DESC;
-print ''
+	GROUP BY query_plan_hash, query_hash
+	ORDER BY sum(total_worker_time) DESC
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+	print ''
 
 
 	--import in SQLNexus
 	print '-- top 10 logical reads by query_plan_hash and query_hash --'
-	SELECT TOP 10 getdate() as runtime, query_plan_hash, query_hash, sum(execution_count) as 'execution_count', 
+	SELECT TOP 10 getdate() as runtime, query_plan_hash, query_hash, sum(execution_count) as 'execution_count',  
 		 sum(total_worker_time) as 'total_worker_time',
 		 SUM(total_elapsed_time) as 'total_elapsed_time',
 		 SUM (total_logical_reads) as 'total_logical_reads',
@@ -519,8 +646,9 @@ print ''
 	FROM sys.dm_exec_query_stats AS qs
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
 	group by query_plan_hash, query_hash
-	ORDER BY sum(total_logical_reads) DESC;
-print ''
+	ORDER BY sum(total_logical_reads) DESC
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+	print ''
 
 	--import in SQLNexus
 	print '-- top 10 elapsed time  by query_plan_hash and query_hash --'
@@ -535,29 +663,9 @@ print ''
 	FROM sys.dm_exec_query_stats AS qs
 	CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) AS st
 	group by query_plan_hash, query_hash
-	ORDER BY sum(total_elapsed_time) DESC;
+	ORDER BY sum(total_elapsed_time) DESC
+	OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
 print ''
-
-
-	PRINT ''
-	RAISERROR ('-- new row modification counter --', 0, 1) WITH NOWAIT;
-	--this only is available after SQL 2008 R2 SP2 and SQL 2012 SP1 and SQL 2014
-	if (@@MICROSOFTVERSION >= 171052960 and @@MICROSOFTVERSION < 184551476) OR  (@@MICROSOFTVERSION >= 184551476 )
-	begin
-
-		EXEC master..sp_MSforeachdb @command1 = '
-		PRINT ''''
-		PRINT ''-- sys.dm_db_stats_properties for database name [?]  database id: '' + cast (db_id (''?'') as varchar(20))  + '' --''', 
-		  @command2 = '
-		use [?]
-		SELECT db_name() ''database_name'', 
-		object_name (stat.object_id) ''Object_Name'', stat.object_id,
-			sp.stats_id, name, filter_definition, cast(last_updated as datetime) ''last_updated'', rows, rows_sampled, steps, unfiltered_rows, modification_counter 
-		FROM sys.stats AS stat 
-		CROSS APPLY sys.dm_db_stats_properties(stat.object_id, stat.stats_id) AS sp
-		'
-
-	end
 
 end
 
@@ -574,125 +682,6 @@ as
 begin
 	exec #sp_perf_stats_snapshot10
 
-	print ''
-
-	print '-- hadron replica info --'
-	SELECT 
-		  getdate() as runtime, 
-		  ag.name AS ag_name, 
-		  ar.replica_server_name  ,
-		  ar_state.is_local AS is_ag_replica_local, 
-		  ag_replica_role_desc = 
-				CASE 
-					  WHEN ar_state.role_desc IS NULL THEN N'<unknown>'
-					  ELSE ar_state.role_desc 
-				END, 
-		  ag_replica_operational_state_desc = 
-				CASE 
-					  WHEN ar_state.operational_state_desc IS NULL THEN N'<unknown>'
-					  ELSE ar_state.operational_state_desc 
-				END, 
-		  ag_replica_connected_state_desc = 
-				CASE 
-					  WHEN ar_state.connected_state_desc IS NULL THEN 
-							CASE 
-								  WHEN ar_state.is_local = 1 THEN N'CONNECTED'
-								  ELSE N'<unknown>'
-							END
-					  ELSE ar_state.connected_state_desc 
-				END
-     
-	FROM 
-
-		  sys.availability_groups AS ag 
-		  JOIN sys.availability_replicas AS ar 
-		  ON ag.group_id = ar.group_id
- 
-	JOIN sys.dm_hadr_availability_replica_states AS ar_state 
-	ON  ar.replica_id = ar_state.replica_id;
-	print ''
-
-	print '-- sys.availability_groups --'
-	select 
-		getdate() as runtime, 
-		group_id,
-		[name],
-		resource_id,
-		resource_group_id,
-		[failure_condition_level],
-		[health_check_timeout],
-		[automated_backup_preference],
-		automated_backup_preference_desc,
-		[version],
-		basic_features,
-		[dtc_support],
-		[db_failover],
-		is_distributed --,
-	from sys.availability_groups
-	print ''
-
-	print '-- sys.dm_hadr_cluster --'
-	select 
-		getdate() as runtime, 
-		cluster_name,
-		quorum_type,
-		quorum_type_desc,
-		quorum_state,
-		quorum_state_desc
-	from sys.dm_hadr_cluster
-	print ''
-	
-	print '-- sys.dm_hadr_cluster_members --'
-	select 
-		getdate() as runtime, 
-		member_name,
-		member_type,
-		member_type_desc,
-		member_state,
-		member_state_desc
-		number_of_quorum_votes
-	from sys.dm_hadr_cluster_members
-	print ''
-
-	print '-- sys.dm_hadr_cluster_networks --'
-	select 
-		getdate() as runtime, 
-		member_name,
-		network_subnet_ip,
-		network_subnet_ipv4_mask,
-		network_subnet_prefix_length,
-		is_public,
-		is_ipv4
-	from sys.dm_hadr_cluster_networks
-	print ''
-
-	print '-- sys.availability_replicas --'
-	select 
-		getdate() as runtime, 
-		replica_id,
-		group_id,
-		replica_metadata_id,
-		replica_server_name,
-		owner_sid,
-		[endpoint_url],
-		[availability_mode],
-		availability_mode_desc,
-		[failover_mode],
-		failover_mode_desc,
-		[session_timeout],
-		primary_role_allow_connections,
-		primary_role_allow_connections_desc,
-		secondary_role_allow_connections,
-		secondary_role_allow_connections_desc,
-		create_date,
-		modify_date,
-		[backup_priority],
-		[read_only_routing_url],
-		[seeding_mode],
-		seeding_mode_desc --,
-		--read_write_routing_url   --  -- Not exist in Lower SQL Version
-	from sys.availability_replicas
-	print ''
 end 
 go
 
@@ -717,6 +706,70 @@ CREATE PROCEDURE #sp_perf_stats_snapshot13
 as
 begin
 	exec #sp_perf_stats_snapshot12
+
+	PRINT '-- sys.database_scoped_configurations --'
+
+    DECLARE @database_id INT
+    DECLARE @dbname SYSNAME
+    DECLARE @cont INT
+    DECLARE @maxcont INT
+	DECLARE @sql_major_version INT
+	DECLARE @sql_major_build INT
+	DECLARE @sql nvarchar (max)
+        
+    DECLARE @dbtable TABLE (
+      id INT IDENTITY (1,1) PRIMARY KEY,
+      database_id INT,
+      dbname SYSNAME
+    )
+    
+    SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) AS INT)), 
+    	   @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) AS INT)) 
+    
+    INSERT INTO @dbtable
+    SELECT database_id, name FROM sys.databases WHERE state_desc='ONLINE' AND name NOT IN ('model','tempdb') ORDER BY name
+    
+    SET @cont = 1
+    SET @maxcont = (SELECT MAX(id) FROM @dbtable)
+    
+    SELECT  @database_id as database_id , @dbname as dbname, configuration_id, name, value, value_for_secondary--, is_value_default 
+    INTO #temp
+    FROM sys.database_scoped_configurations
+    WHERE 1=0
+    
+    IF (@sql_major_version >13)
+    BEGIN
+      ALTER TABLE #temp ADD is_value_default BIT
+    END
+    
+    WHILE (@cont<=@maxcont)
+    BEGIN
+    
+      SELECT @database_id = database_id,
+             @dbname = dbname 
+      FROM @dbtable
+      WHERE id = @cont
+    
+      SET @sql = 'USE [' + @dbname + ']'
+      IF (@sql_major_version >13)
+      BEGIN
+        SET @sql = ' INSERT INTO #temp SELECT ' + CONVERT(SYSNAME,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, is_value_default FROM sys.database_scoped_configurations'
+      END
+      ELSE
+      BEGIN
+        SET @sql = ' INSERT INTO #temp SELECT ' + CONVERT(SYSNAME,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary FROM sys.database_scoped_configurations'
+      END
+    
+      --PRINT @sql
+      EXEC (@sql)
+    
+      SET @cont = @cont + 1
+    
+    END
+    
+    SELECT database_id, CONVERT(VARCHAR(48), dbname) AS dbname, configuration_id, name, CONVERT(VARCHAR(256), value) AS value, CONVERT(VARCHAR(256),value_for_secondary) AS value_for_secondary FROM #temp
+    
+    PRINT ''
 end
 
 
@@ -740,9 +793,26 @@ GO
 
 CREATE PROCEDURE #sp_perf_stats_snapshot15
 as
-begin
+BEGIN
 	exec #sp_perf_stats_snapshot14
-end
+	
+	declare @sql_major_version INT
+	SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 4) AS INT))	
+	-- Check the MS Version
+	IF (@sql_major_version >=15)
+	BEGIN
+		-- Add identifier
+		print '-- sys.index_resumable_operations --'
+		SELECT object_id, OBJECT_NAME(object_id) [object_name], index_id, name [index_name],
+		sql_text,last_max_dop_used,	partition_number, state, state_desc, start_time, 
+		last_pause_time, total_execution_time, percent_complete, page_count 
+		FROM sys.index_resumable_operations
+		
+		PRINT ''
+		RAISERROR ('', 0, 1) WITH NOWAIT
+	END
+END
+
 
 go
 

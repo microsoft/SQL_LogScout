@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+	<Scenario>
+		<GeneralPerf Value="0" />
+		<DetailedPerf Value="0" />
+		<LightPerf Value="0" />
+		<ReplicationPerf Value="0" />
+		<alwaysOnPerf Value="0" />
+		<networkTrace Value="0" />
+		<memory Value="0" />
+		<dumpMemory Value="0" />
+		<WPR Value="0" />
+		<Setup Value="0" />
+		<BackupRestore Value="0" />
+		<IO Value="0" />
+	</Scenario>
+</root>
