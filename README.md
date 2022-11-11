@@ -16,9 +16,8 @@
 1. [Security](#security)
 1. [Sample output](#sample-output)
 1. [Test Suite](#test-suite)
-
-# Important Note
-   > SQL LogScout development team is aware that some third-party tools are flagging both the ZIP package and individual files of ***`version 4.1.1`*** as a malicious threat. **The development team conducted extensive review of the source files and found no malicious code in it.** In addition, the development teams is improving the software to avoid this annoyance in the future. **We have discovered that if we break up the main file into several files - smaller and less complex scripts - then this issue is no longer reported.** We wanted to remind you that all of the SQL LogScout files are digitally signed which ensures that they cannot be modified or tampered with – for more details around the security measures see section [SQL LogScout - Security](https://github.com/microsoft/SQL_LogScout#Security).
+1. [Script to cleanup an incomplete shutdown of SQL LogScout](#script-to-cleanup-an-incomplete-shutdown-of-sql-logscout)
+1. [SQL LogScout as a scheduled task in Windows Task Scheduler](#schedule-sql-logscout-as-a-task-to-automate-execution)
 
 # Introduction
 
@@ -29,13 +28,55 @@ SQL LogScout is developed and maintained by members of the Microsoft SQL Server 
 # Minimum requirements
 
 - Windows 2012 or later
-- Powershell version 4.0, 5.0, or 6.0 
+- Powershell version 4.0, 5.0, or 6.0
+- Powershell execution policy `RemoteSigned` or less restrictive
 
-# Download location
+  If you have never run Powershell scripts before on your system, you must ensure that execution policy allows you to run scripts. Otherwise, you will get UnauthorizedAccess error "sqllogscoutps.ps1 cannot be loaded because running scripts is disabled on this system". To check the execution policy, open PowerShell and run this command:
 
-Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](https://aka.ms/get-sqllogscout). 
+   ```Powershell
+   Get-ExecutionPolicy
+   ```
+
+   If the result is "Restricted", reset it to RemoteSigned or Unrestricted for your user
+
+   ```PowerShell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+- Full Language Mode (For more information see [about_Language_Modes](https://docs.microsoft.com/powershell/module/microsoft.powershell.core/about/about_language_modes)
+  To check the language mode, execute this in PowerShell:
+
+  ```powershell
+  $ExecutionContext.SessionState.LanguageMode
+  ```
+
+
+  If your lanuage mode is not FullLanguage or you received an error like this when executing SQL LogScout : `Method invocation is supported only on core types in this language mode` you need to enable FullLanguage mode. To do so, run this in PowerShell
+
+   ```powershell
+   $ExecutionContext.SessionState.LanguageMode = "FullLanguage"
+   ```
+
+
+# How get get SQL LogScout
+
+## Download location
+
+Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](https://aka.ms/get-sqllogscout).
+
+## Get inside an Azure SQL Server VM image
+
+If you create a SQL Server VM on Windows resource on Azure, you will get SQL LogScout as part of the image. You can locate it under `C:\SQLServerTools` folder on the image. For example, the "SQL Server 2019 on Windows Server 2022" or "SQL Server 2019 on Windows Server 2019" resources will include SQL LogScout. BYOL (bring your own license) resources do not include the tool by default and it has to be downloaded.
 
 # How to use
+
+There are 3 possible ways to run and interact with SQL LogScout:
+
+- Batch file
+- GUI
+- PowerShell file
+
+## Use batch file
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 
@@ -43,11 +84,84 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
    |:---------------------------|
    | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
 
-1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside
-1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring. You can use [parameters](#parameters) to automate the execution and bypass interactive menus.
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+
+   ```command prompt
+   cd d:\sqllogscout
+   ```
+
+
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring and follow the menus
+
+   ```command prompt
+   SQL_LogScout.cmd
+   ```
+
 1. Pick one or more [Scenarios](#scenarios) from a menu list (based on the issue under investigation). Scenario names can optionally be passed as parameters to the main script (see [Parameters](#parameters))
 1. Select from which SQL instance you want to diagnose
 1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically when it finishes collecting static logs
+
+   NOTE: You can use [parameters](#parameters) to automate the execution and bypass interactive menus. For example:
+
+   ```command prompt
+   SQL_LogScout.cmd GeneralPerf+Memory server_name
+   ```
+
+   For more information see [Examples](#examples)
+
+## Use graphical user interface (GUI)
+
+1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
+
+   | :warning: WARNING          |
+   |:---------------------------|
+   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
+
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+
+   ```command prompt
+   cd d:\sqllogscout
+   ```
+
+1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring and follow the menus
+
+   ```command prompt
+   SQL_LogScout.cmd
+   ```
+1. When prompted `Would you like to use GUI mode ?> (Y/N):` type 'y' and you will be presented with a GUI
+1. Pick one or more [Scenarios](#scenarios) from a list (based on the issue under investigation). 
+1. Select from which SQL instance you want to diagnose
+1. Select whether to overwrite an existing folder with data or let it default to creating a new folder
+1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically when it finishes collecting static logs
+
+
+## Use PowerShell script
+
+1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
+
+   | :warning: WARNING          |
+   |:---------------------------|
+   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
+
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+
+   ```command prompt
+   cd d:\sqllogscout
+   ```
+
+1. Start PowerShell (PS). For example you can run
+
+
+   ```command prompt
+   powershell.exe
+   ```
+
+1. Run the following PS script by itself or by using [parameters](#parameters). For example:
+
+
+   ```powershell
+   PS > .\SQLLogScoutPs.ps1 -Scenario Basic -ServerName "Win2022machine\inst2022" -DiagStopTime "10-27-2022 19:15"
+   ```
 
 ## Automate data collection
 
@@ -69,7 +183,6 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 |:---------------------------|
 | Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
-
 ## Parameters
 
 SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
@@ -88,7 +201,8 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
     - BackupRestore
     - IO
     - LightPerf
-    - MenuChoice - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with the tool. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
+    - ProcessMonitor
+    - MenuChoice - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with SQL_LogScout.cmd. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
     - NoBasic - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
 
 
@@ -98,7 +212,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 
    *Note:* Scenario parameter is only required when parameters are used for automation. An empty string "" is equivalent to MenuChoice and will cause the Menu to be displayed. Specifying a string with spaces " " will trigger an incorrect parameter message. In summary, if Scenario contains only "MenuChoice" or only "NoBasic" or is empty (no parameters passed), or MenuChoice+NoBasic is passed, then the Menu will be displayed.
 
-1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN). You can use period "." to connect to a local default instance. If you do so, tt will be converted to the local host name.
+1. **ServerName** - specify the SQL Server to collect data from by using the following format "Server\Instance". For clustered instances (FCI) or Always On, use the virtual network name (VNN). You can use period "." to connect to a local default instance. If you do so, the dot will be converted to the local host name. You can also use a combination of "ServerName,Port" or "IPAddress,Port" (with quotes around). For example "DbServer,1445" or "192.168.100.154,1433".
 
 1. **CustomOutputPath** - specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
     - PromptForCustomDir - will cause the user to be prompted whether to specify a custom path
@@ -116,6 +230,18 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 1. **InteractivePrompts** - possible values are:
      - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
      - Noisy - (default) shows prompts requesting user input where necessary
+
+## Graphical User Interface (GUI)
+
+The GUI is a feature added in version 5.0 of SQL LogScout. It allows the user to make many of the selections in a single user interface, if they prefer it over the menu options in command prompt. You can do the following in the GUI:
+
+- Select the scenario(s) you would like to collect data for
+- Select the target SQL Server instace
+- Select the destination log output folder. The default option here is to create a new folder under the Log location you choose. The new folder is of the format \Output_datetime. See **-DeleteFolderOrNew** parameter and  `NewCustomFolder` value as a reference. If you check the `Overwrite Existing Logs` option, an \Output folder will be created or overwritten if another copy existed before.
+- Perfmon counters and SQL Server Extended events. Certain scenarios allow you to collect Perfmon counters and Xevent data (see [Scenarios](#scenarios) for more information). As you select scenarios these options will be enabled or disabled. You can also uncheck certain counters or Xevents if you want avoid collecting them, though it is recommended to go with the full set of counters and events that the sceanario uses.
+- The NoBasic checkbox corresponds to the NoBasic scenario switch. Essentially it collects logs for the specific scenario selected but excludes collecting basic logs, which is a default option for many of the scenarios. For more information, see [Parameters](#parameters) -> Scenarios.
+
+If you do not select any option in the GUI (e.g. scenario or server name) and click OK, you would be prompted to do so in the command prompt menu options that follow the GUI. If you click the Cancel button in the GUI, SQL LogScout will clean up and exit.
 
 ## Examples
 
@@ -165,6 +291,8 @@ SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefault
 
 
 # Scenarios
+
+Scenarios are sets of log collections for specific issues that you may encounter. For example, the IO scenario captures I/O-related information on SQL Server and the OS, the GeneralPerf scenario captures performance related statistics for SQL Server, the Setup scenario gets SQL Server installation/setup logs, and so on.
 
 0. **Basic scenario** collects snapshot logs. It captures information:
    - Running drivers on the system
@@ -253,11 +381,36 @@ SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefault
 
 1. **LightPerf** - collects everything that the GeneralPerf scenario does, _except_ the Extended Event traces. This is intended to capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
 
+1.  **ProcessMonitor** - collects a [Process Monitor](https://docs.microsoft.com/en-us/sysinternals/downloads/procmon) (Procmon) log to help with troubleshooting specific file or registry related issues. This collector requires that you have Procmon downloaded and unzipped in a folder of your choice. SQL LogScout will prompt you to provide the path to that folder. You don't need to wrap the path in quotes even if there are spaces in the path name. 
+
 # Output folders
 
 **Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. By default this folder is created in the same location where SQL LogScout files reside (present directory). However a user can choose to collect data on a different disk volume and folder. This can be done by following the prompt for a non-default drive and directory or by using the CustomOutputPath parameter ([Parameters](#parameters))
 
 **Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). If a collector fails, then an error will be logged in the corresponding error file in this folder, as well as the error text will be displayed during execution as warning. The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
+
+## Schedule SQL LogScout as a task to automate execution
+
+SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows you to run SQL LogScout at a defined time even if you are not physically present to do this manually. You can schedule the task to execute once or daily at the same time. To schedule a task use the `ScheduleSQLLogScoutAsTask.ps1` script. The script accepts the following parameters:
+
+- **-LogScoutPath** - this is the executable path to the `SQL_LogScout.cmd` file. It defaults to the current path you are running the script from.
+- **-Scenario** - you can input the scenario (s) you want to collect data for. Examples include "Basic", "GeneralPerf" or "Basic+Replication". For more information see [Scenarios](#scenarios)
+- **-SQLInstance** - this is the name of the SQL Server instance to connect to. Please provide correct name (for example: "MACHINE1\SQLINST1")
+- **-OutputPath** - you specify whether you want a custom output path by providing the path itself, or specify 'UsePresentDir' to use the current folder as a base under which an output folder will be created. This corresponds to `CustomOutputPath` in SQL LogScout [Parameters](#parameters). Do NOT use `PromptForCustomDir` for a scheduled task, because you have to present to accept this on the screen.
+- **-CmdTaskName** - this is the name of the task as it appears in Windows Task Scheduler. This is an optional parameter that allows you to create multiple scheduled tasks. If you pass a value which already exists, you will be prompted to overwrite or keep original task. Default value is "SQL LogScout Task".
+- **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. Options for it are `DeleteDefaultFolder`, which causes the default \output folder to be deleted and recreated or `NewCustomFolder` which causes the creation of a new folder in the format \output_ddMMyyhhmmss. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters).
+- **-StartTime** - this is the start time of the scheduled task in Windows Task Scheduler. If the `-Once` parameter is used together with this, only a single execution will occur on the specified date and time. If `-Daily` parameter is used, then the task will execute daily on the specified hour. Valid format for this parameter is  "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00"
+- **-DurationInMins** - this specifies how long, in minutes, the SQL LogScout will run before it stops. Specify an integer value for example "10". This will calculate the stop time for SQL LogScout and pass it as a parameter to `DiagStopTime`.
+- **-Once** - you can request the scheduled task to run a single time at the specified `-StartTime`. Use either this parameter or `-Daily` but not both.
+- **-Daily** - you can request the scheduled task to run daily  at the specified `-StartTime` (the date part will be ignored for daily executions, after the very first one, only the time is honored). Use either this parameter or `-Once` but not both.
+
+Here is an example of how to schedule
+
+```powershell
+.\ScheduleSQLLogScoutAsTask.ps1  -StartTime "2022-08-30 10:55" -Scenario GeneralPerf -SQLInstance SQLmachine\sql2017 -DeleteFolderOrNew DeleteDefaultFolder -Once -DurationInMins 3
+```
+
+If the scheduled task with the same name already exists, you will get the option to overwrite it with a new one.
 
 # Logging
 
@@ -275,7 +428,7 @@ This file contains everything the ##SQLLOGSCOUT.LOG contains, but also adds many
 
 - **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
 
-- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data.
+- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. If you are using the Replication scenario, the account running SQLLogScout will need the `db_datareader` permission on the distribution database(s).
 
 # Targeted SQL instances
 
@@ -491,11 +644,31 @@ Removed .\##STDERR.LOG which was 0 bytes
 
 # Test Suite
 
-The test suite is intended for confirm existence of output logs from SQL LogScout (smoke tests) currently. The set of tests will grow over time. To run the test, simply execute the RunTests.bat under the \TestingInfrastructure folder in command prompt.
+The test suite is intended to be used by developers. The set of tests will grow over time. To run a test, simply execute the `RunTests.bat` under the \TestingInfrastructure folder in command prompt. To execute overall testing you can call `powershell -File ConsistentQualityTests.ps1`
 
-## Examples:
+ - RunTests.bat invokes individual tests after a single SQL LogScout run.
+ - FileCountAndTypeValidation.ps1 - confirm existence of output logs from SQL LogScout (smoke tests)
+ - ConsistentQualityTests.ps1 - this runs an overall test that excercises all scenarios individually and with some combinations. To run this you have to pass below parameters.  
+- Scenarios_Test.ps1 - a file used by ConsistentQualityTests.ps1 to call invidual tests
+ 
+    #### Execute all Tests Example
 
-## Execute SQL LogScout Tests
+    ```Powershell
+    cd TestingInfrastructure 
+    .\ConsistentQualityTests.ps1 -ServerName <SQL Instance Name> -sqlnexuspath <Path of SQLNexus exe> -sqlnexusDB <SQLNEXUS Database Name> -DoProcmonTest <True/False>
+    ``` 
+     Parameters details used in above command:
+    - serverName - This is optional parameter for pass the SQL Instance name for which you want to collect the log. It is recomended to pass the Server Name for collecting the logs related to that SQL Instance else it will collect the logs except related to SQL Instance.
+    - sqlnexuspath - This is optional parameter and need to pass if you want to verify the collected log is good for the SQLNexus import process , so this parameter is path of SQLNexus.exe , this use to import the collected log on the server you selected as 1st parameter.
+    - sqlnexusdb - This is optional parameter and need to pass if you passed the parameter <sqlnexuspath> for SQLNexus Database name, so this parameter is database name that will create on the server you selected for importing the collected log.
+    - DoProcmonTest - This is an optional parameter and need to pass in case you want to run the scenario "ProcessMonitor". You must have [ProcessMonitor](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon) installed on your system and you will be prompted to provide a folder location of where the tool is installed. The test will therefore not be fully automated, but will wait on tester input
+
+    Once you ran the command it will take some time may be couple of hours to run and test all the scenarios.
+    
+    In case you want to Cancel execution hit CLTR+C - you may have to do that multiple times to catch in the right spot in the process. Don't close the window or you may orphan some processes.
+
+
+## Examples of SQL LogScout Tests:
 
 ```bash
 cd TestingInfrastructure 
@@ -520,3 +693,49 @@ Summary: You executed "General Performance" Scenario. Expected File count of 25 
 Testing has been completed , reports are at: C:\temp\Test 2\TestingInfrastructure\output\
 
 ```
+
+# Script to cleanup an incomplete shutdown of SQL LogScout
+
+SQL LogScout was designed to shutdown and clean-up any processes that it launched during its execution. There are 3 levels of clean-up: regular shutdown, a cleanup action upon exit and ensuring any processes launched during collection are terminated as part of the clean up. However, on rare occasions you may be left with processes stil running. One such occasion is if you closed the Commmand Prompt window before SQL LogScout completes. 
+
+| :warning: WARNING          |
+|:---------------------------|
+| Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
+
+If you end up in a situation where this took place, you can use the `CleanupIncompleteShutdown.ps1` to terminate any left-over processes, as long as you specify the correct SQL Server instance that was used by SQL LogScout.
+
+To execute the script, do the following:
+
+```powershell
+powershell -File CleanupIncompleteShutdown.ps1
+```
+
+Here is a sample output:
+
+```output
+======================================================================================
+This script is designed to clean up SQL LogScout processes that may have be left behind if SQL LogScout was closed incorrectly
+
+======================================================================================
+
+Discovered the following SQL Server instance(s)
+
+
+ID      SQL Instance Name
+--      ----------------
+0        DbServerMachine\SQL2016
+1        DbServerMachine\SQL2017
+2        DbServerMachine
+
+Please select the ID for SQL instance.: 2
+
+Launching cleanup routine... please wait
+Executing STOP_SQLLogScout_Xevent session. It will stop the Xevent trace in case it was found to be running ...
+Executing STOP_SQLLogScout_AlwaysOn_Data_Movement. It will stop the Xevent trace in case it was found to be running ...
+Executing Disable_BackupRestore_Trace_Flags It will disable the trace flags they were found to be enabled...
+Executing PerfmonStop. It will stop Perfmon started by SQL LogScout in case it was found to be running ...
+Executing NettraceStop. It will stop the network trace in case it was found to be running...
+Executing WPR -cancel. This will stop all WPR traces in case any was found running...
+Executing STOP storport. It will stop a stoport trace if it was found to be running...
+```
+
