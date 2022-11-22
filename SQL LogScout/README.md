@@ -228,12 +228,7 @@ SQL_LogScout.cmd accepts several optional parameters. Because this is a batch fi
 1. **DiagStopTime** - specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).
 
 1. **InteractivePrompts** - possible values are:
-     - Quiet - suppresses possible prompts for data input.
-     
-       | :warning: WARNING          |
-       |:---------------------------|
-       | Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed|
-     
+     - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
      - Noisy - (default) shows prompts requesting user input where necessary
 
 ## Graphical User Interface (GUI)

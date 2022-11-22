@@ -18,13 +18,13 @@ GO
 perf mem stats snapshot
 
 ********************************************************************/
-IF OBJECT_ID ('sp_mem_stats_grants','P') IS NOT NULL
-   DROP PROCEDURE sp_mem_stats_grants
+IF OBJECT_ID ('sp_mem_stats_grants_mem_script','P') IS NOT NULL
+   DROP PROCEDURE sp_mem_stats_grants_mem_script
 GO
 --2017-01-10 changed query text be at statement level
-CREATE PROCEDURE sp_mem_stats_grants @runtime datetime , @lastruntime datetime =null
+CREATE PROCEDURE sp_mem_stats_grants_mem_script @runtime datetime , @lastruntime datetime =null
 as
-print '-- query execution memory --'
+print '-- query execution memory mem_script--'
 SELECT    CONVERT (varchar(30), @runtime, 121) as runtime, 
 		r.session_id
          , r.blocking_session_id
@@ -107,6 +107,8 @@ FROM     sys.dm_exec_requests r
            ON mg.resource_semaphore_id = rs.resource_semaphore_id
          CROSS APPLY sys.dm_exec_sql_text (r.sql_handle ) AS q
 ORDER BY wait_time DESC
+OPTION (max_grant_percent = 3, MAXDOP 1)
+
 RAISERROR ('', 0, 1) WITH NOWAIT
 
 
@@ -235,13 +237,13 @@ begin
 end
 else
 begin
-  set @sqlmemobj =
+	set @sqlmemobj =
 	'SELECT CONVERT (varchar(30), @runtime, 121) as runtime,  ' + 
-	  'SUM (pages_in_bytes) AS ''total_bytes_used'', type  ' + 
+	  'SUM (CONVERT(bigint, pages_in_bytes)) AS ''total_bytes_used'', type  ' + 
 	'FROM sys.dm_os_memory_objects ' + 
 	'GROUP BY type  ' + 
-	'HAVING SUM (pages_in_bytes) >= (1024*1024) ' + 
-	'ORDER BY SUM (pages_in_bytes) DESC '
+	'HAVING SUM (CONVERT(bigint,pages_in_bytes)) >= (1024*1024) ' + 
+	'ORDER BY SUM (CONVERT(bigint,pages_in_bytes)) DESC '
 	
 end
 exec sp_executesql @sqlmemobj, N'@runtime datetime', @runtime
@@ -267,7 +269,9 @@ sys.ms_ticks AS [Current Time]
 	x.value('(//Record/MemoryNode/CommittedMemory)[1]', 'bigint') AS [SQL_CommittedMemory_KB], 
 	x.value('(//Record/@id)[1]', 'bigint') AS [Record Id], 
 	x.value('(//Record/@type)[1]', 'varchar(30)') AS [Type], 
-	x.value('(//Record/ResourceMonitor/Indicators)[1]', 'int') AS [Indicators], 
+	x.value('(//Record/ResourceMonitor/IndicatorsProcess)[1]', 'int') AS [IndicatorsProcess], 
+	x.value('(//Record/ResourceMonitor/IndicatorsSystem)[1]', 'int') AS [IndicatorsSystem], 
+	x.value('(//Record/ResourceMonitor/IndicatorsPool)[1]', 'int') AS [IndicatorsPool], 
 	x.value('(//Record/@time)[1]', 'bigint') AS [Record Time]
 	FROM (SELECT CAST (record as xml) FROM sys.dm_os_ring_buffers 
 	WHERE ring_buffer_type = 'RING_BUFFER_RESOURCE_MONITOR') AS R(x)) a 
@@ -298,7 +302,7 @@ go
 CREATE PROCEDURE sp_mem_stats9  @runtime datetime , @lastruntime datetime =null
 AS 
 begin
-	exec sp_mem_stats_grants @runtime, @lastruntime
+	exec sp_mem_stats_grants_mem_script @runtime, @lastruntime
 	exec sp_mem_stats_proccache @runtime, @lastruntime
 	exec sp_mem_stats_general @runtime, @lastruntime
 end
