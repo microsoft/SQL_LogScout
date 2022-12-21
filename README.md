@@ -68,6 +68,10 @@ Download the latest version of SQL LogScout at [https://aka.ms/get-sqllogscout](
 
 If you create a SQL Server VM on Windows resource on Azure, you will get SQL LogScout as part of the image. You can locate it under `C:\SQLServerTools` folder on the image. For example, the "SQL Server 2019 on Windows Server 2022" or "SQL Server 2019 on Windows Server 2019" resources will include SQL LogScout. BYOL (bring your own license) resources do not include the tool by default and it has to be downloaded.
 
+## Where to place and run SQL LogScout
+
+You can place the downloaded SQL_LogScout_*.zip file in any folder of your choice. However it is critical that the output folder where data is collected is on a fast -performing disk volume, not a network share or a network-mapped drive. SQL LogScout collects various logs (Xevent traces, Perfmon logs, event logs, cluster logs, etc) and the writing speed of the disk they are placed on is crucial in order to minimize performance impact on the system. The faster the I/O response, the smaller the impact of log collection will be on performance. We recommend you can place SQL LogScout on disk drive different from the where databases reside and preferably a dedicated volume.
+
 # How to use
 
 There are 3 possible ways to run and interact with SQL LogScout:
