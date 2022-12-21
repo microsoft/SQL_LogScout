@@ -189,7 +189,7 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 
 ## Parameters
 
-SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify DebugLevel and Scenario parameters before it.
+SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify the Scenario parameter before it.
 
 1. **Scenario** - possible values are:
     - Basic
