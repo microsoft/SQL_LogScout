@@ -705,13 +705,13 @@ Testing has been completed , reports are at: C:\temp\Test 2\TestingInfrastructur
 
 # Script to cleanup an incomplete shutdown of SQL LogScout
 
-SQL LogScout was designed to shutdown and clean-up any processes that it launched during its execution. There are 3 levels of clean-up: regular shutdown, a cleanup action upon exit and ensuring any processes launched during collection are terminated as part of the clean up. However, on rare occasions you may be left with processes stil running. One such occasion is if you closed the Commmand Prompt window before SQL LogScout completes. 
+SQL LogScout was designed to shutdown and clean-up any processes that it launched during its execution. There are 3 levels of clean-up: regular shutdown, a cleanup action upon exit, and a final process termination of any processes launched by SQL LogScout during collection. However, on rare occasions you may be left with processes still running. One such occasion is if you closed the Commmand Prompt window before SQL LogScout completed.
 
 | :warning: WARNING          |
 |:---------------------------|
 | Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
-If you end up in a situation where this took place, you can use the `CleanupIncompleteShutdown.ps1` to terminate any left-over processes, as long as you specify the correct SQL Server instance that was used by SQL LogScout.
+If you end up in this situation, you can use the `CleanupIncompleteShutdown.ps1` to terminate any left-over processes, as long as you specify the correct SQL Server instance that was used by SQL LogScout.
 
 To execute the script, do the following:
 
