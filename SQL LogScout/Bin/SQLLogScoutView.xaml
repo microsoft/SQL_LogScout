@@ -4,7 +4,7 @@
         Title="SQL_LogScout " Height="608" Width="750"  >
 	<Window.Resources>
 		<XmlDataProvider x:Key="xmlData" x:Name="XmlDataProviderName" />
-		
+
 		<ControlTemplate x:Key="CheckBoxItemTemplate" >
 			<StackPanel Orientation="Horizontal">
 				<CheckBox VerticalAlignment="Center"  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor,
@@ -12,7 +12,7 @@
                            AncestorLevel=1}, Path=IsChecked}" />
 			</StackPanel>
 		</ControlTemplate>
-		
+
 	</Window.Resources>
 	<Grid Margin="20" DataContext="xmlData"  >
 		<Grid.ColumnDefinitions>
@@ -35,18 +35,29 @@
 					<RowDefinition ></RowDefinition>
 					<RowDefinition ></RowDefinition>
 				</Grid.RowDefinitions>
-				
+
 				<StackPanel Orientation="Horizontal" Margin="2.5" Grid.Row="0" Grid.Column="0" >
 					<Label FontWeight="Bold" VerticalAlignment="Center" Width="96" >Log Location:</Label>
 					<TextBox x:Name="txtPresentDirectory" Width="150" Height="23"></TextBox>
 					<Button x:Name="ButtonPresentDirectory" Width="83" Height="23" Margin="5">Browse</Button>
 				</StackPanel>
-				
+
 				<StackPanel Orientation="Horizontal" Margin="10" Grid.Row="0" Grid.Column="1" >
-					<CheckBox Margin="2.5" VerticalAlignment="Center" x:Name="overrideExistingCheckBox" Content="Overwrite Existing Logs"/>
+					<CheckBox Margin="2.5" VerticalAlignment="Center" Visibility ="hidden" x:Name="overrideExistingCheckBox" Content="Overwrite Existing Logs">
+						<CheckBox.ToolTip>
+							<ToolTip>
+								<TextBlock Foreground="CadetBlue">
+									Folder \output already exists in the Log Location.
+									<LineBreak />
+									Check the box to overwrite it. Uncheck the box to create a new folder"
+									<Bold> \output_ddMMyyhhmmss </Bold>
+								</TextBlock>
+							</ToolTip>
+						</CheckBox.ToolTip>
+					</CheckBox>
 					<CheckBox x:Name="CheckBox1" Visibility ="hidden" Margin="2.5" VerticalAlignment="Center" Content="Auto Start/Stop" HorizontalAlignment="Right" />
 				</StackPanel>
-				
+
 				<Border Visibility ="Collapsed"  Grid.RowSpan="2" Grid.Column="1" Margin="6,42,5,5" BorderThickness="2" CornerRadius="10" BorderBrush="DarkGray" >
 					<Border.Style>
 						<Style TargetType="Border">
@@ -70,7 +81,7 @@
 						</StackPanel>
 					</StackPanel>
 				</Border>
-				
+
 				<StackPanel Margin="2.5"  Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan="2" >
 					<Label Height="25" FontWeight="Bold" HorizontalAlignment="Left" Width="96" >SQL Instance :</Label>
 					<ComboBox Width="236" Height="23" x:Name="ComboBoxInstanceName"/>
@@ -385,8 +396,14 @@
 				<TabItem Header="XEvent"  >
 					<StackPanel >
 						<TreeView VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Height="350">
-							
-							<TreeViewItem Header="xevent_general" x:Name="TVI_xevent_general">
+
+							<TreeViewItem x:Name="TVI_xevent_general" IsEnabled="False">
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventGeneral_CheckBox" />
+										<TextBlock Text="xevent_general" />
+									</StackPanel>
+								</TreeViewItem.Header>
 								<ListView x:Name="listXevnets" ItemsSource="{Binding}" Height ="200" Width="200" >
 									<ListView.ItemTemplate>
 										<DataTemplate>
@@ -406,8 +423,14 @@
 									</ListView.ItemTemplate>
 								</ListView>
 							</TreeViewItem>
-							
-							<TreeViewItem Header="xevent_detailed" x:Name="TVI_xevent_detailed"  >
+
+							<TreeViewItem x:Name="TVI_xevent_detailed" IsEnabled="False"  >
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventDetailed_CheckBox" />
+										<TextBlock Text="xevent_detailed" />
+									</StackPanel>
+								</TreeViewItem.Header>
 								<ListView x:Name="list_xevent_detailed" ItemsSource="{Binding}" Height ="200" Width="200" >
 									<ListView.ItemTemplate>
 										<DataTemplate>
@@ -427,8 +450,14 @@
 									</ListView.ItemTemplate>
 								</ListView>
 							</TreeViewItem>
-							
-							<TreeViewItem Header="xevent_core" x:Name="TVI_xevent_core" >
+
+							<TreeViewItem x:Name="TVI_xevent_core" IsEnabled="False">
+							<TreeViewItem.Header>
+								<StackPanel Orientation="Horizontal">
+									<CheckBox x:Name="xeventcore_CheckBox" />
+									<TextBlock Text="xevent_core" />
+								</StackPanel>
+							</TreeViewItem.Header>
 								<ListView x:Name="list_xevent_core" ItemsSource="{Binding}" Height ="150" Width="200" >
 									<ListView.ItemTemplate>
 										<DataTemplate>
@@ -448,8 +477,14 @@
 									</ListView.ItemTemplate>
 								</ListView>
 							</TreeViewItem>
-							
-							<TreeViewItem Header="xevent_AlwaysOn_Data_Movement" IsEnabled="False" x:Name="TVI_xevent_AlwaysOn">
+
+							<TreeViewItem IsEnabled="False" x:Name="TVI_xevent_AlwaysOn">
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventAlwaysOn_CheckBox" />
+										<TextBlock Text="xevent_AlwaysOn_Data_Movement" />
+									</StackPanel>
+								</TreeViewItem.Header>
 								<ListView x:Name="list_xevent_AlwaysOn" ItemsSource="{Binding}" Height ="200" Width="200" >
 									<ListView.ItemTemplate>
 										<DataTemplate>
@@ -459,7 +494,7 @@
 												</CheckBox.Content>
 											</CheckBox>
 										</DataTemplate>
-										
+
 									</ListView.ItemTemplate>
 								</ListView>
 							</TreeViewItem>

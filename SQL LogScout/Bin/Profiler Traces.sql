@@ -1,8 +1,9 @@
+SET NOCOUNT ON;
 
 print '--profiler trace summary--'
 SELECT traceid, property, CONVERT (varchar(1024), value) AS value FROM :: fn_trace_getinfo(default)
-
 go
+print ''
 print '--trace event details--'
       select trace_id,
             status,
@@ -57,12 +58,30 @@ print ''
 print '--XEvent Session Details--'
 SELECT convert(nvarchar(128), sess.NAME) as 'session_name', convert(nvarchar(128), event_name) as event_name,
 CASE
- WHEN xemap.trace_event_id IN ( 23, 24, 40, 41,44, 45, 51, 52,54, 68, 96, 97,98, 113, 114, 122,146, 180 )
+ WHEN evt.event_name IN ( 'lock_released'
+                         ,'lock_acquired'
+                         ,'sql_statement_starting'
+                         ,'sql_statement_completed'
+                         ,'sp_statement_starting'
+                         ,'sp_statement_completed'
+                         ,'scan_started'
+                         ,'scan_stopped'
+                         ,'transaction_log'
+                         ,'query_pre_execution_showplan'
+                         ,'query_pre_execution_showplan'
+                         ,'query_pre_execution_showplan'
+                         ,'query_post_execution_showplan'
+                         ,'query_pre_execution_showplan'
+                         ,'query_post_execution_showplan'
+                         ,'wait_info_external'
+                         ,'wait_info'
+                         ,'wait_completed'
+                         ,'latch_released'
+                         ,'latch_acquired'
+                        )
  THEN Cast(1 AS BIT) ELSE Cast(0 AS BIT)
 END AS expensive_event
 FROM sys.dm_xe_sessions sess
  INNER JOIN sys.dm_xe_session_events evt
-ON sess.address = evt.event_session_address
- INNER JOIN sys.trace_xe_event_map xemap
- ON evt.event_name = xemap.xe_event_name
+ON sess.address = evt.event_session_address 
 print ''

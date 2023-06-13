@@ -61,12 +61,16 @@ function Set-OutputPath()
         Write-LogDebug "inside" $MyInvocation.MyCommand
         
         #default final directory to present directory (.)
-        [string] $final_directory  = $global:present_directory
+
+        #parent of \Bin folder
+        $parent_directory = (Get-Item $global:present_directory).Parent.FullName
+
+        [string] $final_directory  = $parent_directory
 
         # if "UsePresentDir" is passed as a param value, then create where SQL LogScout runs
         if ($global:custom_user_directory -eq "UsePresentDir")
         {
-            $final_directory  = $global:present_directory
+            $final_directory  = $parent_directory
         }
         #if a custom directory is passed as a parameter to the script. Parameter validation also runs Test-Path on $CustomOutputPath
         elseif (Test-Path -Path $global:custom_user_directory)
@@ -167,7 +171,7 @@ function CreatePartialOutputFilename ([string]$server)
         if ($global:output_folder -ne "")
         {
             $server_based_file_name = $server -replace "\\", "_"
-            $output_file_name = $global:output_folder + $server_based_file_name + "_" + @(Get-Date -Format FileDateTime)
+            $output_file_name = $global:output_folder + $server_based_file_name + "_" + @(Get-Date -Format "yyyyMMddTHHmmssffff")
         }
         Write-LogDebug "The server_based_file_name: " $server_based_file_name -DebugLogLevel 3
         Write-LogDebug "The output_path_filename is: " $output_file_name -DebugLogLevel 2
@@ -195,7 +199,7 @@ function CreatePartialErrorOutputFilename ([string]$server)
         $error_folder = $global:internal_output_folder 
         
         $server_based_file_name = $server -replace "\\", "_"
-        $error_output_file_name = $error_folder + $server_based_file_name + "_" + @(Get-Date -Format FileDateTime)
+        $error_output_file_name = $error_folder + $server_based_file_name + "_" + @(Get-Date -Format "yyyyMMddTHHmmssffff")
         
         Write-LogDebug "The error_output_path_filename is: " $error_output_file_name -DebugLogLevel 2
         
@@ -463,12 +467,18 @@ function StartNewProcess()
         $pn = $p.ProcessName
         $sh = $p.SafeHandle
         $st = $p.StartTime
+        $prid = $p.Id
+
+        Write-LogDebug "Process started: name = '$pn', id ='$prid', starttime = '$($st.ToString("yyyy-MM-dd HH:mm:ss.fff"))' " -DebugLogLevel 1
 
         # add the process object to the array of started processes (if it has not exited already)
         if($false -eq $p.HasExited)   
         {
             [void]$global:processes.Add($p)
         }
+
+        # this is equivalent to a return - but used in PS to send the value to the pipeline 
+        return $p
 
     }
     catch 
@@ -534,10 +544,18 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
             $argument_list += " -o" + $output_file
         }
 
-        #Depending on the script executed, we may need to increase the result length. Logically we should only care about this parameter if we are writing an output file. Originally implemented for replication collector.
-        if (([string]::IsNullOrEmpty($setsqlcmddisplaywidth) -eq $false) -And ($has_output_results -eq $true))
+        #Depending on the script executed, we may need to increase the result length. Logically we should only care about this parameter if we are writing an output file.
+        
+        #If $setsqlcmddisplaywidth is passed to Start-SQLCmdProcess explicitly, then use that explicit
+        if (([string]::IsNullOrEmpty($setsqlcmddisplaywidth) -eq $false) -and ($has_output_results -eq $true))
         {
             $argument_list += " -y" + $setsqlcmddisplaywidth
+        }
+
+        #If $setsqlcmddisplaywidth is NOT passed to Start-SQLCmdProcess explicitly, then pass it by default with 512 hardcoded value.
+        if (([string]::IsNullOrEmpty($setsqlcmddisplaywidth) -eq $true) -and ($has_output_results -eq $true))
+        {
+            $argument_list += " -y" + "512"
         }
 
 
@@ -551,7 +569,7 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
         $stdoutput_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name ($collector_name+"_stdout") -needExtraQuotes $false 
 
         Write-LogInformation "Executing Collector: $collector_name"
-        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -RedirectStandardOutput $stdoutput_file -Wait $wait_sync
+        StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -RedirectStandardOutput $stdoutput_file -Wait $wait_sync | Out-Null
         
     }
     catch 
@@ -594,7 +612,6 @@ function IsClustered()
         if (($clusRegKeyExists -eq $true) -and ($clusServiceisRunning -eq $true ))
         {
             Write-LogDebug 'This is a Windows Cluster for sure!' -DebugLogLevel 2
-            Write-LogInformation 'This is a Windows Cluster'
             return $true
         }
         else 
@@ -627,6 +644,27 @@ function Get-InstanceNameOnly([string]$NetnamePlusInstance)
 
 }
 
+# use this to look up Windows version
+function GetWindowsVersion
+{
+   #Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+   try {
+       $winver = [Environment]::OSVersion.Version.Major  
+   }
+   catch
+   {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return
+   }
+   
+   
+   #Write-Debug "Windows version is: $winver" -DebugLogLevel 3
+
+   return $winver;
+}
+
+
 
 #used in Catch blocks throughout
 function HandleCatchBlock ([string] $function_name, [System.Management.Automation.ErrorRecord] $err_rec, [bool]$exit_logscout = $false)
@@ -644,4 +682,166 @@ function HandleCatchBlock ([string] $function_name, [System.Management.Automatio
     }
 }
 
+Function GetRegistryKeys
+{
+<#
+    .SYNOPSIS
+        This function is the Powershell equivalent of reg.exe        
+    .DESCRIPTION
+        This function writes the registry extract to an output file. It takes three parameters:
+        $RegPath - This is a mandatory input paramter that accepts the registry key value
+        $RegOutputFilename - This is a mandatory input parameter that takes the output file name with path to write the registry information into
+        $Recurse - This is a mandatory boolean input parameter that indicates whether to recurse the given registry key to include subkeys.
+
+    .EXAMPLE
+        GetRegistryKeys -RegPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer" -RegOutputFilename "C:\temp\RegistryKeys\HKLM_CV_Installer_PS.txt" -Recurse $true
+        Reg.exe equivalent
+        reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer" /s > C:\temp\RegistryKeys\HKLM_CV_Installer_Reg.txt
+
+        GetRegistryKeys -RegPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer" -RegOutputFilename "C:\temp\RegistryKeys\HKLM_CV_Installer_PS.txt"
+        Reg.exe equivalent
+        reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer" > C:\temp\RegistryKeys\HKLM_CV_Installer_Reg.txt
+#>
+    Param
+    (
+        [Parameter(Mandatory=$true)]
+        [string]$RegPath, #Registry Key Location
+        [string]$RegOutputFilename, #Output file name
+        [bool]$Recurse = $true #Get the nested subkeys for the given registry key if $recurse = true
+    )
+    
+    try
+    {
+        # String used to hold the output buffer before writing to file. Introduced for performance so that disk writes can be reduced. 
+        [System.Text.StringBuilder]$str_InstallerRegistryKeys = New-Object -TypeName System.Text.StringBuilder
+
+        #Gets the registry key and only the properties of the registry keys
+        Get-Item -Path  $RegPath | Out-File  -FilePath $RegOutputFilename -Encoding utf8
+
+        #Get all nested subkeys of the given registry key and assosicated properties if $recurse = true. Only gets the first level of nested keys if $recurse = false
+        if ($Recurse -eq $true)
+        {
+            $Keys = Get-ChildItem -recurse $RegPath
+        }
+        else
+        {
+            $Keys = Get-ChildItem $RegPath
+        }
+        
+        # This counter is incremented with every foreach loop. Once the counter evaluates to 0 with mod 50, the flush to the output file on disk is performed from the string str_InstallerRegistryKeys that holds the contents in memory. The value of 50 was chosen imprecisely to batch entries in memory before flushing to improve performance.
+        [bigint]$FlushToDisk = 0
+
+        # This variable is used to hold the PowerShell Major version for calling the appropriate cmdlet that is compatible with the PS Version
+        [int]$CurrentPSMajorVer = ($PSVersionTable.PSVersion).Major
+
+
+        # This variable is used to hold the PowerShell Major version for calling the appropriate cmdlet that is compatible with the PS Version
+        [int]$CurrentPSMajorVer = ($PSVersionTable.PSVersion).Major
+
+
+        # for each nested key perform an iteration to get all the properties for writing to the output file
+        foreach ($k in $keys)
+        {
+            if ($null -eq $k)
+            {
+                continue
+            }
+       
+            # Appends the key's information to in-memory stringbuilder string str_InstallerRegistryKeys
+            [void]$str_InstallerRegistryKeys.Append("`n" + $k.Name.tostring() + "`n" + "`n")
+
+  
+            #When the FlushToDisk counter evalues to 0 with modulo 50, flush the contents ofthe string to the output file on disk
+            if ($FlushToDisk % 50 -eq 0)
+            {
+                Add-Content -Path ($regoutputfilename) -Value ($str_InstallerRegistryKeys.ToString())
+                $str_InstallerRegistryKeys = ""
+            }
+
+            # Get all properties of the given registry key
+            $props = (Get-Item -Path $k.pspath).property
+
+            # Loop through the properties, and for each property , write the details into the stringbuilder in memory. 
+            foreach ($p in $props) 
+            {
+                # Fetches the value of the property ; Get-ItemPropertyValue cmdlet only works with PS Major Version 5 and above. For PS 4 and below, we need to use a workaround.
+                # Fetches the value of the property ; Get-ItemPropertyValue cmdlet only works with PS Major Version 5 and above. For PS 4 and below, we need to use a workaround.
+                $v = ""
+                if ($CurrentPSMajorVer -lt 5)
+                {
+                    $v = $((Get-ItemProperty -Path $k.pspath).$p) 
+                }
+                else
+                {
+                    $v = Get-ItemPropertyvalue -Path $k.pspath -name  $p 
+                }
+        
+                # Fethes the type of property. For default property that has a non-null value, GetValueKind has a bug due to which it cannot fetch the type. This check is to 
+                # define type as null if the property is default. 
+                try
+                {           
+                     if ( ($p -ne "(default)") -or ( ( ( $p -eq "(default)" ) -and ($null -eq $v) ) ) )
+                     {
+                        $t = $k.GetValueKind($p)
+                     }
+                    else 
+                    {
+                        $t = ""
+                    }
+                }
+                catch
+                {
+                    HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+                }
+                
+                # Reg.exe displays the Windows API registry data type, whereas PowerShell displays the data type in a different format. This switch statement converts the 
+                # PS data type to the Windows API registry data type using the table on this MS Docs article as reference: https://learn.microsoft.com/en-us/dotnet/api/microsoft.win32.registryvaluekind?view=net-7.0
+                switch($t)
+                {
+                    "DWord" {$t = "REG_DWORD"}
+                    "String" {$t = "REG_SZ"}
+                    "ExpandString" {$t = "REG_EXPAND_SZ"}
+                    "Binary" {$t = "REG_BINARY"}
+                    "QWord" {$t = "REG_QWORD"}
+                    "MultiString" {$t = "REG_MULTI_SZ"}
+                }
+                
+                # This if statement formats the REG_DWORD and REG_BINARY to the right values
+                if ($t -eq "REG_DWORD")
+                {
+                    [void]$str_InstallerRegistryKeys.Append("`t$p`t$t`t" + '0x'+ '{0:X}' -f $v + " ($v)" + "`n")
+                }
+                elseif ($t -eq "REG_BINARY")
+                {
+                    $hexv = ([System.BitConverter]::ToString([byte[]]$v)).Replace('-','')
+                    [void]$str_InstallerRegistryKeys.Append("`t$p`t$t`t$hexv"  + "`n")
+                }
+                else
+                {
+                    [void]$str_InstallerRegistryKeys.Append("`t$p`t$t`t$v"  + "`n" )
+                }
+
+                # If FLushToDisk value evaluates to 0 when modul0 50 is performed, the contents in memory are flushed to the output file on disk. 
+                if ($FlushToDisk % 50 -eq 0)
+                {
+                    Add-Content -Path ($RegOutputFilename) -Value ($str_InstallerRegistryKeys.ToString())
+                    $str_InstallerRegistryKeys = ""
+                }
+        
+                $FlushToDisk = $FlushToDisk + 1
+        
+            } # End of property loop
+       
+        $FlushToDisk = $FlushToDisk + 1
+        } # End of key loop
+        
+        # Flush any remaining contents in stringbuilder to disk.
+        Add-Content -Path ($RegOutputFilename) -Value ($str_InstallerRegistryKeys.ToString())
+        $str_InstallerRegistryKeys = ""
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+} #End of GetRegistryKeys
 

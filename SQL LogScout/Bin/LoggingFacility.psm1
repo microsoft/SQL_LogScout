@@ -389,7 +389,7 @@ param(
             }
 
             # determine the name of the long-term debug log
-            $LogFileName = ($LogFileName -replace "_DEBUG_\*.LOG", ("_DEBUG_" + @(Get-Date -Format FileDateTime) + ".LOG"))
+            $LogFileName = ($LogFileName -replace "_DEBUG_\*.LOG", ("_DEBUG_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".LOG"))
             
             # create the long-term debug log and keep a reference to it
             $full_log_file_path = $env:TEMP + "\" + $LogFileName

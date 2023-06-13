@@ -57,10 +57,6 @@ PRINT '-- sys.tcp_endpoints --'
 select * from sys.tcp_endpoints
 PRINT ''
 
-PRINT '-- sys.certificates --' 
-select * from sys.certificates
-PRINT ''
-
 PRINT '-- sys.database_mirroring --' 
 select * from sys.database_mirroring where mirroring_guid is not null
 PRINT ''
@@ -138,8 +134,27 @@ BEGIN
 		
 		PRINT ''
 		PRINT '-- sys.certificates --' 
-		EXEC ('SELECT * FROM ' + @dbname + '.sys.certificates');
-		
+		EXEC ('SELECT ''' +
+			@dbname + ''' AS [database_name], 
+			name,
+			certificate_id,
+			principal_id,
+			pvt_key_encryption_type,
+			CONVERT(VARCHAR(32), pvt_key_encryption_type_desc) AS pvt_key_encryption_type_desc,
+			is_active_for_begin_dialog,
+			CONVERT(VARCHAR(512), issuer_name) AS issuer_name,
+			cert_serial_number,
+			sid,
+			string_sid,
+			CONVERT(VARCHAR(512),subject) AS subject,
+			expiry_date,
+			start_date,
+			''0x'' + CONVERT(VARCHAR(64),thumbprint,2) AS thumbprint,
+			CONVERT(VARCHAR(256), attested_by) AS attested_by,
+			pvt_key_last_backup_date,
+			key_length
+		FROM ' + @dbname + '.sys.certificates');
+
 		PRINT ''
 		PRINT '-- sys.dm_qn_subscriptions --' 
 		EXEC ('SELECT * FROM ' + @dbname + '.sys.dm_qn_subscriptions');

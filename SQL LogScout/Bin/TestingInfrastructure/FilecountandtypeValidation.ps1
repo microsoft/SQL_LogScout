@@ -1,1112 +1,966 @@
-﻿<#
-1 - This module validate the all the expected log files are generated , In case if any of the log files not found in output folder 
-    it will display the message of the file name in red for each scenario.
-2 - To validate a files is there or not we need to add file name in the array of scenario list.
-3 - We are checking the scenarion with the text "Scenario Console input:" , so if we make any changes in ##SQLLOGSCOUT.LOG we have to update here as well. 
-4 - This module works for multiple scenario validation as well
+﻿param
+(
+    [Parameter(Position=0)]
+    [string]    $SummaryOutputFile,
+
+    [Parameter(Position=1)]
+    [switch]    $DebugOn
+
+)
+
+$DebugOn = $false
+
+<#
+1 - This module validates if all the expected log files are generated for the given scenario.
+2 - In the case of expected files not being found in the output folder, a message is displayed with the missing file name in red for each scenario.
+3 - An array is maintained for each scenario with the list of expected files. If a new log file is collected for a scenario, the corresponding array needs to be updated to include that file in the array.
+4 - Execution of the scenario is obtained from ##SQLLOGSCOUT.LOG  by scanning for this text pattern "Scenario Console input:" , so if any changes are made to the  ##SQLLOGSCOUT.LOG file, the logic here needs to be updated here as well.
+5 - This module works for validating a single scenario or  multiple scenarios
 #>
 
 Import-Module -Name ..\CommonFunctions.psm1
 Import-Module -Name ..\LoggingFacility.psm1
 
-
-
+# Declaration of global variables
 $global:sqllogscout_log = "##SQLLOGSCOUT.LOG"
 $global:sqllogscoutdebug_log = "##SQLLOGSCOUT_DEBUG.LOG"
-$global:filterPatter = @("*.txt", "*.out", "*.csv", "*.xel", "*.blg", "*.sqlplan", "*.trc", "*.LOG","*.etl","*.NGENPDB","*.mdmp", "*.pml")
-#------------------------------------------------------------------------------------------------------------------------
-function Get-RootDirectory() {
-    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
-    $present_directory = Convert-Path -Path ".\..\"   #this goes to the SQL LogScout source code directory
-    return $present_directory
-}
-function Get-OutputPathLatest() {
-    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
-        
-    $present_directory = Get-RootDirectory
-    $filter="output*"
-    $latest = Get-ChildItem -Path $present_directory -Filter $filter | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    $output_folder = ($present_directory + "\"+ $latest + "\")
+$global:filter_pattern = @("*.txt", "*.out", "*.csv", "*.xel", "*.blg", "*.sqlplan", "*.trc", "*.LOG","*.etl","*.NGENPDB","*.mdmp", "*.pml")
+$global:sqllogscout_latest_output_folder = ""
+$global:sqllogscout_root_directory = Convert-Path -Path ".\..\..\"   #this goes to the SQL LogScout root directory
+$global:sqllogscout_latest_internal_folder = ""
+$global:sqllogscout_testing_infrastructure_output_folder = ""
+$global:sqllogscout_latest_output_internal_logpath = ""
+$global:sqllogscout_latest_output_internal_debuglogpath = ""
+$global:DetailFile = ""
 
-    return $output_folder
-}
-function Get-InternalPath() {
-    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
-        
-    $output_folder = Get-OutputPathLatest
-    $internal_output_folder = ($output_folder + "internal\")
+[System.Collections.ArrayList]$global:BasicFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:GeneralPerfFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:DetailedPerfFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:ReplicationFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:AlwaysOnFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:NetworkTraceFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:MemoryFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:DumpMemoryFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:WPRFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:SetupFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:BackupRestoreFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:IOFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:LightPerfFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:ProcessMonitorFiles = New-Object -TypeName System.Collections.ArrayList
 
-    return $internal_output_folder
-}
-
-function Get-InternalLogPath() {
-    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
-        
-    $internal_output_folder = Get-InternalPath
-    $internal_output_log = ($internal_output_folder + $global:sqllogscout_log)
-   
-    return $internal_output_log
+function CopyArray([System.Collections.ArrayList]$Source, [System.Collections.ArrayList]$Destination)
+{
+    foreach ($file in $Source)
+    {
+        [void]$Destination.Add($file)
+    }
 }
 
 
 
+#Function for inclusions to search the logs (debug and regular) for a string and add to array if found as we expect the file to be written.
+function ModifyArray()
+{
+    param
+        (
+            [Parameter(Position=0, Mandatory=$true)]
+            [string] $ActionType,
 
-function TestingInfrastructure-Dir() {
-    Write-LogDebug "inside" $MyInvocation.MyCommand -DebugLogLevel 2
+            [Parameter(Position=1, Mandatory=$true)]
+            [string] $TextToFind,
 
-    $present_directory = Convert-Path -Path "."   #this gets the current directory called \TestingInfrastructure
-    $TestingInfrastructure_folder = $present_directory + "\output\"
-    New-Item -Path $TestingInfrastructure_folder -ItemType Directory -Force | out-null 
+            [Parameter(Position=2, Mandatory=$true)]
+            [System.Collections.ArrayList] $ArrayToEdit,
+
+            [Parameter(Position=3, Mandatory=$true)]
+            [string] $ReferencedLog
+        )
+
+    if ($ActionType -eq 'Add')
+    {
+        #Check the default log first as there less records than debug log.
+        if (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind)
+        {
+            [void]$ArrayToEdit.Add($ReferencedLog)
+        }
+
+        #If we didn't find in default log, then check debug log for the provided string.
+        elseif (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
+        {
+            [void]$ArrayToEdit.Add($ReferencedLog)
+        }
+    }
+
+    elseif ($ActionType -eq 'Remove')
+    {
+        #Check the default log first as there less records than debug log.
+        if (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind)
+        {
+            [void]$ArrayToEdit.Remove($ReferencedLog)
+        }
+
+        #If we didn't find in default log, then check debug log for the provided string.
+        elseif (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
+        {
+            [void]$ArrayToEdit.Remove($ReferencedLog)
+        }
+    }
+
+    #We didn't find the provided text so don't add to array. We don't expect the file.
+    else
+    {
+        WriteToConsoleAndFile -Message "Improper use of ModifyArray(). Value passed: $ModifyArray" -ForegroundColor Red
+    }
+
     
-    return $TestingInfrastructure_folder
 }
+
+
+function BuildBasicFileArray([bool]$IsNoBasic)
+{
+    $global:BasicFiles =
+	@(
+		'ERRORLOG',
+		'SQLAGENT',
+		'system_health',
+		'RunningDrivers.csv',
+		'RunningDrivers.txt',
+		'SystemInfo_Summary.out',
+		'MiscPssdiagInfo.out',
+		'TaskListServices.out',
+		'TaskListVerbose.out',
+		'PowerPlan.out',
+		'WindowsHotfixes.out',
+        'WindowsDiskInfo.out',
+		'FLTMC_Filters.out',
+		'FLTMC_Instances.out',
+		'EventLog_Application.csv',
+		'EventLog_System.csv',
+        'EventLog_System.out',
+        'EventLog_Application.out',
+		'UserRights.out',	
+		'Fsutil_SectorInfo.out',
+        'Perfmon.out',
+        'DNSClientInfo.out',
+        'IPConfig.out',
+        'NetTCPandUDPConnections.out'
+	)
+
+	# inclusions and exclusions to the array
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "_SQLDIAG"
+    ModifyArray -ActionType "Remove" -TextToFind "Azcmagent not found" -ArrayToEdit $global:BasicFiles -ReferencedLog "azcmagent-logs"
+    ModifyArray -ActionType "Remove" -TextToFind "Will not collect SQLAssessmentAPI" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLAssessmentAPI"
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:BasicFiles
+    return $ExpectedFiles
+
+}
+
+function BuildGeneralPerfFileArray([bool]$IsNoBasic)
+{
+    $global:GeneralPerfFiles =
+	@(
+        'Perfmon.out',
+        'xevent_LogScout_target',
+        'ExistingProfilerXeventTraces.out',
+        'HighCPU_perfstats.out',
+        'PerfStats.out',
+        'PerfStatsSnapshotStartup.out',
+        'Query Store.out',
+        'TempDB_and_Tran_Analysis.out',
+        'linked_server_config.out',
+        'SSB_diag.out'
+        'PerfStatsSnapshotShutdown.out',
+        'Top_CPU_QueryPlansXml_Shutdown_'
+	)
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:GeneralPerfFiles
+    }
+
+	# inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:GeneralPerfFiles
+    return $ExpectedFiles
+
+}
+
+function BuildDetailedPerfFileArray([bool]$IsNoBasic)
+{
+
+    $global:DetailedPerfFiles =
+	@(
+        'Perfmon.out',
+        'xevent_LogScout_target',
+        'ExistingProfilerXeventTraces.out',
+        'HighCPU_perfstats.out',
+        'PerfStats.out',
+        'PerfStatsSnapshotStartup.out',
+        'Query Store.out',
+        'TempDB_and_Tran_Analysis.out',
+        'linked_server_config.out',
+        'SSB_diag.out'
+        'PerfStatsSnapshotShutdown.out',
+        'Top_CPU_QueryPlansXml_Shutdown_'
+     )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:DetailedPerfFiles
+    }
+
+	# inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:DetailedPerfFiles
+    return $ExpectedFiles
+}
+
+
+function BuildReplicationFileArray([bool]$IsNoBasic)
+{
+
+    $global:ReplicationFiles =
+	@(
+        'ChangeDataCaptureStartup.out',
+        'Change_TrackingStartup.out',
+        'ChangeDataCaptureShutdown.out',
+        'Change_TrackingShutdown.out'
+     )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:ReplicationFiles
+    }
+
+	# inclusions and exclusions to the array
+    ModifyArray -ActionType "Add" -TextToFind "Collecting Replication Metadata"  -ArrayToEdit $global:ReplicationFiles -ReferencedLog "Repl_Metadata_CollectorShutdown"
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:ReplicationFiles
+    return $ExpectedFiles
+
+}
+
+function BuildAlwaysOnFileArray([bool]$IsNoBasic)
+{
+
+    $global:AlwaysOnFiles =
+	@(
+        'AlwaysOnDiagScript.out',
+        'AlwaysOn_Data_Movement_target',
+        'xevent_LogScout_target',
+        'Perfmon.out',
+        'cluster.log',
+        'GetAGTopology.xml'
+     )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:AlwaysOnFiles
+	}
+
+    # inclusions and exclusions to the array
+    ModifyArray -ActionType "Remove" -TextToFind "AlwaysOn_Data_Movement Xevents is not supported on SQL Server version"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_Data_Movement_target"
+    ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "cluster.log"
+    
+    #calculate count of expected files
+    $ExpectedFiles = $global:AlwaysOnFiles
+    return $ExpectedFiles
+}
+
+
+function BuildNetworkTraceFileArray([bool]$IsNoBasic)
+{
+
+    $global:NetworkTraceFiles =
+	@(
+        'delete.me',
+        'NetworkTrace_LogmanStart1.etl'
+     )
+
+    #network trace does not collect basic scenario logs with it
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:NetworkTraceFiles
+    return $ExpectedFiles
+}
+
+
+function BuildMemoryFileArray([bool]$IsNoBasic)
+{
+
+    $global:MemoryFiles =
+	@(
+        'SQL_Server_Mem_Stats.out',
+        'Perfmon.out'
+    )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:MemoryFiles
+	}
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:MemoryFiles
+    return $ExpectedFiles
+}
+
+
+function BuildDumpMemoryFileArray([bool]$IsNoBasic)
+{
+
+    $global:DumpMemoryFiles =
+	@(
+        'SQLDmpr',
+        'SQLDUMPER_ERRORLOG.log'
+    )
+
+    #dumpmemory does not collect basic scenario logs with it
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:DumpMemoryFiles
+    return $ExpectedFiles
+}
+
+function BuildWPRFileArray([bool]$IsNoBasic)
+{
+
+    $global:WPRFiles = 	@()
+
+    #WPR does not collect basic scenario logs with it
+
+    # inclusions and exclusions to the array
+    #...
+
+    #cpu scenario
+    $WPRCollected = Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern "WPR_CPU_Stop"
+
+    if ([string]::IsNullOrEmpty($WPRCollected) -eq $false)
+    {
+        [void]$global:WPRFiles.Add("WPR_CPU_Stop.etl")
+    }
+
+    #heap and virtual memory
+    $WPRCollected = Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern "WPR_HeapAndVirtualMemory_Stop "
+
+    if ([string]::IsNullOrEmpty($WPRCollected) -eq $false)
+    {
+        [void]$global:WPRFiles.Add("WPR_HeapAndVirtualMemory_Stop.etl")
+    }
+
+    #disk and file I/O
+    $WPRCollected = Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern "WPR_DiskIO_FileIO_Stop"
+
+    if ([string]::IsNullOrEmpty($WPRCollected) -eq $false)
+    {
+        [void]$global:WPRFiles.Add("WPR_DiskIO_FileIO_Stop.etl")
+    }
+
+    #filter drivers scenario
+    $WPRCollected = Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern "WPR_MiniFilters_Stop"
+
+    if ([string]::IsNullOrEmpty($WPRCollected) -eq $false)
+    {
+        [void]$global:WPRFiles.Add("WPR_MiniFilters_Stop.etl")
+    }
+
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:WPRFiles
+    return $ExpectedFiles
+}
+
+function BuildSetupFileArray([bool]$IsNoBasic)
+{
+
+    $global:SetupFiles =
+	@(
+        'Setup_Bootstrap',
+        '_HKLM_CurVer_Uninstall.txt',
+        '_HKLM_MicrosoftSQLServer.txt'
+    )
+
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:SetupFiles
+	}
+
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:SetupFiles
+    return $ExpectedFiles
+}
+
+function BuildBackupRestoreFileArray([bool]$IsNoBasic)
+{
+
+    $global:BackupRestoreFiles =
+	@(
+        'xevent_LogScout_target',
+        'Perfmon.out_000001.blg',
+        'VSSAdmin_Providers.out',
+        'VSSAdmin_Shadows.out',
+        'VSSAdmin_Shadowstorage.out',
+        'VSSAdmin_Writers.out',
+        'SqlWriterLogger.txt'
+    )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:BackupRestoreFiles
+	}
+
+    # inclusions and exclusions to the array
+    ModifyArray -ActionType "Remove" -TextToFind "Not collecting SQL VSS log"  -ArrayToEdit $global:BackupRestoreFiles -ReferencedLog "SqlWriterLogger.txt"
+    ModifyArray -ActionType "Remove" -TextToFind "Backup_restore_progress_trace XEvent exists in SQL Server 2016 and higher and cannot be collected for instance"  -ArrayToEdit $global:BackupRestoreFiles -ReferencedLog "xevent_LogScout_target"
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:BackupRestoreFiles
+    return $ExpectedFiles
+}
+
+function BuildIOFileArray([bool]$IsNoBasic)
+{
+
+    $global:IOFiles =
+	@(
+        'StorPort.etl',
+        'High_IO_Perfstats.out',
+        'Perfmon.out'
+    )
+
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:IOFiles
+	}
+
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:IOFiles
+    return $ExpectedFiles
+}
+
+function BuildLightPerfFileArray([bool]$IsNoBasic)
+{
+    $global:LightPerfFiles =
+	@(
+        'Perfmon.out',
+        'ExistingProfilerXeventTraces.out',
+        'HighCPU_perfstats.out',
+        'PerfStats.out',
+        'PerfStatsSnapshotStartup.out',
+        'Query Store.out',
+        'TempDB_and_Tran_Analysis.out',
+        'linked_server_config.out',
+        'SSB_diag.out',
+        'PerfStatsSnapshotShutdown.out',
+        'Top_CPU_QueryPlansXml_Shutdown_'
+    )
+
+    if ($IsNoBasic -ne $true)
+    {
+        #add the basic array files
+        CopyArray -Source $global:BasicFiles -Destination $global:LightPerfFiles
+	}
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:LightPerfFiles
+    return $ExpectedFiles
+}
+function BuildProcessMonitorFileArray([bool]$IsNoBasic)
+{
+
+    $global:ProcessMonitorFiles =
+	@(
+        'ProcessMonitor.pml'
+     )
+
+
+    #ProcessMonitor does not collect basic scenario logs with it
+
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:ProcessMonitorFiles
+    return $ExpectedFiles
+}
+
+function WriteToSummaryFile ([string]$SummaryOutputString)
+{
+    if ([string]::IsNullOrWhiteSpace($SummaryOutputFile) -ne $true)
+    {
+        Write-Output $SummaryOutputString |Out-File $SummaryOutputFile -Append
+    }
+
+}
+
+function WriteToConsoleAndFile ([string]$Message, [string]$ForegroundColor = "")
+{
+    if ($ForegroundColor -ne "")
+    {
+        Write-Host $Message -ForegroundColor $ForegroundColor
+    }
+    else
+    {
+        Write-Host $Message
+    }
+
+    if ($true -eq (Test-Path $global:DetailFile))
+    {
+        Write-Output $Message | Out-File -FilePath $global:DetailFile -Append
+    }
+}
+
+function DiscoverScenarios ([string]$SqlLogscoutLog)
+{
+    #find the line in the log file that says "The scenarios selected are: 'GeneralPerf Basic' " It contains the scenarios being executed
+    #then strip out just the scenario names and use those to find if all the files for them are present
+
+    [String] $ScenSelStr = (Select-String -Path $SqlLogscoutLog -Pattern "The scenarios selected are:" |Select-Object -First 1 Line).Line
+
+    if ($DebugOn)
+    {
+        Write-Host "ScenSelStr: $ScenSelStr"
+    }
+
+
+    # this section parses out the scenario names from the string extracted from the log
+    # NoBasic may also be there and will be used later
+
+    $colon_position = $ScenSelStr.LastIndexOf(":")
+    $colon_position = $colon_position + 1
+    $ScenSelStr = ($ScenSelStr.Substring($colon_position).TrimEnd()).TrimStart()
+    $ScenSelStr = $ScenSelStr.Replace('''','')
+    $ScenSelStr = $ScenSelStr.Replace(' ','+')
+
+    #popluate an array with the scenarios
+    [string[]]$scenStrArray = $ScenSelStr.Split('+')
+
+    #remove any blank elements in the array
+    $scenStrArray = $scenStrArray.Where({ "" -ne $_ })
+
+
+    return $scenStrArray
+
+}
+
+
+function CreateTestResultsFile ([string[]]$ScenarioArray)
+{
+
+    $fileScenString =""
+
+    foreach($scenario in $ScenarioArray)
+    {
+        switch ($scenario)
+        {
+            "NoBasic"       {$fileScenString +="NoB"}
+            "Basic"         {$fileScenString +="Bas"}
+            "GeneralPerf"   {$fileScenString +="GPf"}
+            "DetailedPerf"  {$fileScenString +="DPf"}
+            "Replication"   {$fileScenString +="Rep"}
+            "AlwaysOn"      {$fileScenString +="AO"}
+            "NetworkTrace"  {$fileScenString +="Net"}
+            "Memory"        {$fileScenString +="Mem"}
+            "DumpMemory"    {$fileScenString +="Dmp"}
+            "WPR"           {$fileScenString +="Wpr"}
+            "Setup"         {$fileScenString +="Set"}
+            "BackupRestore" {$fileScenString +="Bkp"}
+            "IO"            {$fileScenString +="IO"}
+            "LightPerf"     {$fileScenString +="LPf"}
+            "ProcessMonitor"{$fileScenString +="PrM"}
+        }
+
+        $fileScenString +="_"
+
+    }
+
+    # create the file validation log
+    if (!(Test-Path -Path $global:sqllogscout_testing_infrastructure_output_folder))
+    {
+        Write-Host "Folder '$global:sqllogscout_testing_infrastructure_output_folder' does not exist. Cannot create text output file"
+    }
+    else
+    {
+        $FileName = "FileValidation_" + $fileScenString + (Get-Date -Format "MMddyyyyHHmmss").ToString() + ".txt"
+        $global:DetailFile = $global:sqllogscout_testing_infrastructure_output_folder + "\" + $FileName
+
+        New-Item -ItemType File -Path  $global:sqllogscout_testing_infrastructure_output_folder -Name $FileName | Out-Null
+    }
+
+}
+
+function CreateLogFilesMissingLog
+{
+    $PathToFileMissingLogFile =  $global:sqllogscout_testing_infrastructure_output_folder + 'LogFileMissing.LOG'
+
+    # this creates the LogFileMissing.log if output and/or internal folders/files are missing
+    if (!(Test-Path -Path $global:sqllogscout_latest_output_folder ))
+    {
+        $OutputFolderCheckLogMessage = "Files are missing or folder " + $global:sqllogscout_latest_output_folder + " does not exist"
+        $OutputFolderCheckLogMessage = $OutputFolderCheckLogMessage.replace("`n", " ")
+        Write-Host $OutputFolderCheckLogMessage -ForegroundColor Red
+
+        Write-Output $OutputFolderCheckLogMessage  | Out-File -FilePath $PathToFileMissingLogFile -Append
+
+        return $false
+    }
+
+    if (!(Test-Path -Path $global:sqllogscout_latest_internal_folder ))
+    {
+        $OutputInternalFolderCheckLogMessage = "Files are missing or folder " + $global:sqllogscout_latest_internal_folder + " does not exist"
+        $OutputInternalFolderCheckLogMessage = $OutputInternalFolderCheckLogMessage.replace("`n", " ")
+
+        Write-Host $OutputInternalFolderCheckLogMessage -ForegroundColor Red
+        Write-Output $OutputInternalFolderCheckLogMessage | Out-File -FilePath $PathToFileMissingLogFile -Append
+
+        return $false
+    }
+
+    return $true
+}
+
+function Set-TestInfraOutputFolder()
+{
+    # get the latest output folder that contains SQL LogScout logs
+    $latest = Get-ChildItem -Path $global:sqllogscout_root_directory -Filter "output*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $global:sqllogscout_latest_output_folder = ($global:sqllogscout_root_directory + "\"+ $latest + "\")
+    $global:sqllogscout_latest_internal_folder = ($global:sqllogscout_latest_output_folder + "internal\")
+	$global:sqllogscout_latest_output_internal_logpath = ($global:sqllogscout_latest_internal_folder + $global:sqllogscout_log)
+    $global:sqllogscout_latest_output_internal_debuglogpath = ($global:sqllogscout_latest_internal_folder + $global:sqllogscoutdebug_log)
+    $present_directory = Convert-Path -Path "."   #this gets the current directory called \TestingInfrastructure
+
+	#create the testing infrastructure output folder
+    $folder = New-Item -Path $present_directory -Name "Output" -ItemType Directory -Force
+    $global:sqllogscout_testing_infrastructure_output_folder = $folder.FullName
+}
+
 #--------------------------------------------------------Scenario check Start ------------------------------------------------------------
 
-function FileCountAndFileTypeValidation([Int]$console_input)
+function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBasic)
 {
-    try {         
-            $clusterInstance    = Get-Content -Path $debugLog | Select-String -pattern "This is a Windows Cluster for sure!" |select -First 1 | select -Last 1| Select-Object Line | Where-Object { $_ -ne "" }
-            $versioncheckvsslog = Get-Content -Path $debugLog | Select-String -pattern "Not collecting SQL VSS log" |select -First 1 | select -Last 1| Select-Object Line | Where-Object { $_ -ne "" }
-            
-            $output_folder = Get-OutputPathLatest
-            $msg = ''
-            if ($console_input -eq 0 )
+    $summary_out_string = ""
+
+    try
+    {
+
+        $msg = ''
+
+        #build the array of expected files for the respective scenario
+        switch ($scenario_string)
+        {
+            "Basic"
             {
-                $nobasic = $false
-                $ScenarioName = "Basic"
+                $ExpectedFiles = BuildBasicFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:BasicFiles.Count
             }
-            # Basic collector refrence iscin each section so initialize on each call
-            $basic_collectors = 
-                @(
-                'ERRORLOG',
-                'SQLAGENT',
-                'system_health',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',                                                                    
-                'SystemInfo_Summary.out',                                                                
-                'MiscPssdiagInfo.out',                                                                   
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out',                                                                   
-                'PowerPlan.out',                                                                          
-                'WindowsHotfixes.out',                                                                  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out',                                                                     
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv',                                                
-                'UserRights.out',
-                'SQLAGENT.OUT'
-                'Fsutil_SectorInfo.out'
-                )
-                if ($clusterInstance.Length -ne 0) 
-                {
-                    $collectors +="_SQLDIAG" 
-                }
-
-            if (($console_input -eq 0) -and ($nobasic -eq $false))
+            "GeneralPerf"
             {
-                $ScenarioName = "Basic"
-                
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_Basic_CollectedFiles_Validation.txt'
-
-                $collectors = $basic_collectors
-
-                $ExpectedFileCount = $basic_collectors.Count
+                $ExpectedFiles = BuildGeneralPerfFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:GeneralPerfFiles.Count
             }
-            
-            if ($console_input -eq 1)
+            "DetailedPerf"
             {
-                $ScenarioName = "GeneralPerf"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_GeneralPerf_CollectedFiles_Validation.txt'
-
-                $GeneralPerf_collectors = 
-                @(
-                'ERRORLOG',
-                'Perfmon.out',
-                'xevent_LogScout_target',
-                'ExistingProfilerXeventTraces.out',
-                'HighCPU_perfstats.out',
-                'PerfStats.out',
-                'PerfStatsSnapshotStartup.out',
-                'Query Store.out',
-                'TempDB_and_Tran_Analysis.out',
-                'linked_server_config.out',
-                'SSB_diag.out'
-                'TaskListServices.out', 
-                'TaskListVerbose.out',  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',    
-                'PowerPlan.out', 
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'PerfStatsSnapshotShutdown.out',                                                   
-                'SQLAGENT',                                                               
-                'SQLAGENT.OUT',                                                                
-                'system_health'
-                )
-
-                if ($nobasic -eq $true)
-                {
-                    if ($GeneralPerf_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $GeneralPerf_collectors.Count - $basic_collectors.Count
-                        $collectors  = $GeneralPerf_collectors | where {$basic_collectors -notcontains $_}
-                        
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $GeneralPerf_collectors.Count
-                        $collectors = $GeneralPerf_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $GeneralPerf_collectors.Count
-                    $collectors = $GeneralPerf_collectors
-                }
-                
+                $ExpectedFiles = BuildDetailedPerfFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:DetailedPerfFiles.Count
+            }
+            "Replication"
+            {
+                $ExpectedFiles = BuildReplicationFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:ReplicationFiles.Count
+            }
+            "AlwaysOn"
+            {
+                $ExpectedFiles = BuildAlwaysOnFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:AlwaysOnFiles.Count
+            }
+            "NetworkTrace"
+            {
+                $ExpectedFiles = BuildNetworkTraceFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:NetworkTraceFiles.Count
+            }
+            "Memory"
+            {
+                $ExpectedFiles = BuildMemoryFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:MemoryFiles.Count
+            }
+            "DumpMemory"
+            {
+                $ExpectedFiles = BuildDumpMemoryFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:DumpMemoryFiles.Count
+            }
+            "WPR"
+            {
+                $ExpectedFiles = BuildWPRFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:WPRFiles.Count
+            }
+            "Setup"
+            {
+                $ExpectedFiles = BuildSetupFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:SetupFiles.Count
+            }
+            "BackupRestore"
+            {
+                $ExpectedFiles = BuildBackupRestoreFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:BackupRestoreFiles.Count
+            }
+            "IO"
+            {
+                $ExpectedFiles = BuildIOFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:IOFiles.Count
             }
 
-            if ($console_input -eq 2)
+            "LightPerf"
             {
-                $ScenarioName = "DetailedPerf"
-
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_DetailedPerf_CollectedFiles_Validation.txt'
-
-                $DetailedPerf_collectors = 
-                @(
-                'ERRORLOG',
-                'Perfmon.out',
-                'xevent_LogScout_target',
-                'ExistingProfilerXeventTraces.out',
-                'HighCPU_perfstats.out',
-                'PerfStats.out',
-                'PerfStatsSnapshotStartup.out',
-                'Query Store.out',
-                'TempDB_and_Tran_Analysis.out',
-                'linked_server_config.out',
-                'SSB_diag.out'
-                'TaskListServices.out', 
-                'TaskListVerbose.out',  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',    
-                'PowerPlan.out', 
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'PerfStatsSnapshotShutdown.out',                                                   
-                'SQLAGENT',                                                               
-                'SQLAGENT.OUT',                                                                
-                'system_health'
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($DetailedPerf_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $DetailedPerf_collectors.Count - $basic_collectors.Count
-                        $collectors  = $DetailedPerf_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $DetailedPerf_collectors.Count
-                        $collectors = $DetailedPerf_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $DetailedPerf_collectors.Count
-                    $collectors = $DetailedPerf_collectors
-                }
-                
-                
+                $ExpectedFiles = BuildLightPerfFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:LightPerfFiles.Count
             }
-            if ($console_input -eq 3)
+            "ProcessMonitor"
             {
-                $ScenarioName = "Replication"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_Replication_CollectedFiles_Validation.txt'
-
-                $Replication_collectors = 
-                @(
-                'ERRORLOG',
-                'ChangeDataCaptureStartup.out',
-                'Change_TrackingStartup.out',
-                'TaskListServices.out', 
-                'TaskListVerbose.out',  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',    
-                'PowerPlan.out', 
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'ChangeDataCaptureShutdown.out',
-                'Change_TrackingShutdown.out', 
-                'SQLAGENT',                                                               
-                'SQLAGENT.OUT',                                                                
-                'system_health'
-                )
-                
-                #The logic of replication script is that if it cannot collect data, we don't even write the file. For that reason, we have to dynamically choose whether to look 
-                #for it is in the list of files. We search through the logscout.log file for the string that is logged if we collect data to know to look for the file in validation.
-                $LogFile = Get-InternalLogPath
-                $ReplicationCollected = Get-Content -Path $LogFile | Select-String -Pattern "Collecting Replication Metadata"
-                if (                   
-                    [string]::IsNullOrEmpty($ReplicationCollected) -eq $false
-                    )
-
-                    {
-                        $Replication_collectors += "Repl_Metadata_CollectorShutdown.out"
-
-                    }
-
-                If ($versioncheckvsslog.Length -eq 0) 
-                {
-                    $collectors +="SqlWriterLogger.txt"
-                }
-                if ($nobasic -eq $true)
-                {
-                    if ($Replication_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $Replication_collectors.Count - $basic_collectors.Count
-                        $collectors  = $Replication_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $Replication_collectors.Count
-                        $collectors = $Replication_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $Replication_collectors.Count
-                    $collectors = $Replication_collectors
-                }
-                
-                
+                $ExpectedFiles = BuildProcessMonitorFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:ProcessMonitorFiles.Count
             }
-            if ($console_input -eq 4)
+        }
+
+
+        #print this if Debug is enabled
+        if ($DebugOn)
+        {
+            Write-Host "******** IsNoBasic: " $IsNoBasic
+            Write-Host "******** ScenarioName: " $scenario_string
+        }
+
+        WriteToConsoleAndFile -Message "" 
+        WriteToConsoleAndFile -Message ("Expected files list: " + $ExpectedFiles)
+        WriteToConsoleAndFile -Message ("Expected File Count: " + $ExpectedFileCount)
+        
+
+
+        #-------------------------------------next section does the specific file type validation ------------------------------
+        #get a list of all the files in the \Output folder and exclude the \internal folder
+        $LogsCollected = Get-ChildItem -Path $global:sqllogscout_latest_output_folder -Exclude "internal"
+
+        $summary_out_string = "File validation test for '$scenario_string':"
+
+        $msg = "-- File validation result for '$scenario_string' scenario --"
+        WriteToConsoleAndFile -Message ""
+        WriteToConsoleAndFile -Message $msg
+
+        $missing_files_count = 0
+
+        #loop through the expected files array
+        foreach ($expFile in $ExpectedFiles)
+        {
+            $file_found = $false
+
+            #loop through array of actual files found
+            foreach ($actFile in $LogsCollected)
             {
-                $ScenarioName = "AlwaysOn"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_AlwaysOn_CollectedFiles_Validation.txt'
-
-                $AlwaysOn_collectors = 
-                @(
-                'ERRORLOG',
-                'AlwaysOnDiagScript.out',
-                'AlwaysOn_Data_Movement_target',
-                'xevent_LogScout_target',
-                'Perfmon.out',
-                'TaskListServices.out', 
-                'TaskListVerbose.out',  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',    
-                'PowerPlan.out', 
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'SQLAGENT',                                                               
-                'SQLAGENT.OUT',
-                'system_health'
-                )
-                if ($nobasic -eq $true)
+                # if a file is found , set the flag
+                if ($actFile.Name -like ("*" + $expFile + "*"))
                 {
-                    if ($AlwaysOn_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $AlwaysOn_collectors.Count - $basic_collectors.Count
-                        $collectors  = $AlwaysOn_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $AlwaysOn_collectors.Count
-                        $collectors = $AlwaysOn_collectors
-                    }
+                    $file_found = $true
                 }
-                else
-                {
-                    $ExpectedFileCount = $AlwaysOn_collectors.Count
-                    $collectors = $AlwaysOn_collectors
-                }
-                
-                
-            }
-            if ($console_input -eq 5)
-            {
-                $ScenarioName = "NetworkTrace"
-
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_NetworkTrace_CollectedFiles_Validation.txt' 
-                              
-                $NetworkTrace_collectors = 
-                @(
-                'ERRORLOG',
-                'delete.cab',
-                'delete.me',
-                'NetworkTrace_1.etl',
-                'TaskListServices.out', 
-                'TaskListVerbose.out',  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',    
-                'PowerPlan.out', 
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'SQLAGENT',                                                               
-                'SQLAGENT.OUT',                                                                
-                'system_health'
-                )
-                if ($nobasic.Length -eq 0)
-                {
-                   $nobasic = $true 
-                }
-                if ($nobasic -eq $true)
-                {
-                    if ($NetworkTrace_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $NetworkTrace_collectors.Count - $basic_collectors.Count
-                        $collectors  = $NetworkTrace_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $NetworkTrace_collectors.Count
-                        $collectors = $NetworkTrace_collectors
-                    }
-                }
-                else 
-                {
-                    $ExpectedFileCount = $NetworkTrace_collectors.Count
-                    $collectors = $NetworkTrace_collectors
-                }
-                
-                
             }
 
-            if ($console_input -eq 6)
+            if ($false -eq $file_found)
             {
-                $ScenarioName = "Memory"
- 
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_Memory_CollectedFiles_Validation.txt'
-                
-                $Memory_collectors = 
-                @(
-                'ERRORLOG',
-                'SQLAGENT',
-                'SQL_Server_Mem_Stats.out',
-                'Perfmon.out',
-                'TaskListServices.out', 
-                'TaskListVerbose.out', 
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out',
-                'SystemInfo_Summary.out',                                                                
-                'MiscPssdiagInfo.out', 
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt', 
-                'PowerPlan.out', 
-                'WindowsHotfixes.out',
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv',
-                'SQLAGENT.OUT',
-                'system_health'               
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($Memory_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $Memory_collectors.Count - $basic_collectors.Count
-                        $collectors  = $Memory_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $Memory_collectors.Count
-                        $collectors = $Memory_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $Memory_collectors.Count
-                    $collectors = $Memory_collectors
-                }
-                
-                
+                $missing_files_count++
+                WriteToConsoleAndFile -Message ("File '$expFile' not found!") -ForegroundColor Red
             }
+        } #end of outer loop
+
+        if ($missing_files_count -gt 0)
+        {
+            WriteToConsoleAndFile -Message ""
+            WriteToConsoleAndFile -Message ("Missing file count = $missing_files_count")
+
+            WriteToConsoleAndFile -Message ("Status: FAILED") -ForegroundColor Red
+
+            $summary_out_string =  ($summary_out_string + " "*(60 - $summary_out_string.Length) +"FAILED!!! (See '$global:DetailFile' for more details)")
+        }
+        else
+        {
+            WriteToConsoleAndFile -Message ""
+
+            WriteToConsoleAndFile -Message "Status: SUCCESS" -ForegroundColor Green
+            WriteToConsoleAndFile -Message ("Summary: All expected log files for scenario '$scenario_string' are present in your latest output folder!!")
+
+            $summary_out_string =  ($summary_out_string + " "*(60 - $summary_out_string.Length) +"SUCCESS")
+        }
+
+        #write to Summary.txt if ConsistenQualityTests has been executed
+        if ([string]::IsNullOrWhiteSpace($SummaryOutputFile ) -ne $true)
+        {
+            Write-Output $summary_out_string |Out-File $SummaryOutputFile -Append
+        }
+
+        
 
 
-            if ($console_input -eq 7)
-            {
-                $ScenarioName = "DumpMemory"
+        #-------------------------------------next section does an overall file count  ------------------------------
 
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_DumpMemory_CollectedFiles_Validation.txt'
+        #count the number of files
+        $collectCount = ($LogsCollected | Measure-Object).Count
 
-                $DumpMemory_collectors = 
-                @(
-                'ERRORLOG',
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out', 
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out',
-                'SystemInfo_Summary.out',                                                                
-                'MiscPssdiagInfo.out', 
-                'UserRights.out',                               
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',                             
-                'PowerPlan.out',                                                                          
-                'WindowsHotfixes.out',                                                                  
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv',                                                
-                'SQLAGENT',
-                'SQLAGENT.OUT'               
-                'SQLDmpr',
-                'SQLDUMPER_ERRORLOG.log'
-                'system_health'
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($DumpMemory_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $DumpMemory_collectors.Count - $basic_collectors.Count
-                        $collectors  = $DumpMemory_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $DumpMemory_collectors.Count
-                        $collectors = $DumpMemory_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $DumpMemory_collectors.Count
-                    $collectors = $DumpMemory_collectors
-                }
-                
-                
-            }
-            if ($console_input -eq 8)
-            {
-                $ScenarioName = "WPR"
+        #first check a simple file count
 
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_WPR_CollectedFiles_Validation.txt'
+        $msg = "Total file count in the \Output folder is : " + $collectCount
+        
+        WriteToConsoleAndFile -Message ""
+        WriteToConsoleAndFile -Message $msg
+        WriteToConsoleAndFile -Message "`n************************************************************************************************`n"
 
-                $WPR_collectors = 
-                @(
-                'ERRORLOG',
-                'WPR_CPU.etl',
-                'WPR_CPU.etl.NGENPDB',
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out', 
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out',
-                'MiscPssdiagInfo.out', 
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',
-                'PowerPlan.out',
-                'WindowsHotfixes.out', 
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'SQLAGENT',  
-                'SQLAGENT.OUT',           
-                'system_health'
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($WPR_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $WPR_collectors.Count - $basic_collectors.Count
-                        $collectors  = $WPR_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $WPR_collectors.Count
-                        $collectors = $WPR_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $WPR_collectors.Count
-                    $collectors = $WPR_collectors
-                }
-                
-                
-            }
-            if ($console_input -eq 9)
-            {
-                $ScenarioName = "Setup"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_Setup_CollectedFiles_Validation.txt'
-
-                $Setup_collectors = 
-                @(
-                'Setup_Bootstrap'
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($Setup_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $Setup_collectors.Count - $basic_collectors.Count
-                        $collectors  = $Setup_collectors | where {$basic_collectors -notcontains $_}
-                        
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $Setup_collectors.Count
-                        $collectors = $Setup_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $Setup_collectors.Count
-                    $collectors = $Setup_collectors
-                }
-                
-                
-            }
-            if ($console_input -eq 10)
-            {
-                $ScenarioName = "BackupRestore"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_BackupRestore_CollectedFiles_Validation.txt'
-
-                $BackupRestore_collectors = 
-                @(
-                'ERRORLOG',
-                'xevent_LogScout_target',
-                'Perfmon.out_000001.blg',
-                'VSSAdmin_Providers.out',
-                'VSSAdmin_Shadows.out',
-                'VSSAdmin_Shadowstorage.out',
-                'VSSAdmin_Writers.out',
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out',
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out',
-                'SystemInfo_Summary.out',
-                'MiscPssdiagInfo.out', 
-                'UserRights.out',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',                                              
-                'PowerPlan.out',                                                                          
-                'WindowsHotfixes.out',                                                                  
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv', 
-                'SQLAGENT',
-                'SQLAGENT.OUT',
-                'system_health'
-                )
-
-                if ($nobasic -eq $true)
-                {
-                    if ($BackupRestore_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $BackupRestore_collectors.Count - $basic_collectors.Count
-                        $collectors  = $BackupRestore_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $BackupRestore_collectors.Count
-                        $collectors = $BackupRestore_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $BackupRestore_collectors.Count
-                    $collectors = $BackupRestore_collectors
-                }
-
-                
-                
-            }
-            if ($console_input -eq 11)
-            {
-                $ScenarioName = "IO"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_IO_CollectedFiles_Validation.txt'
-
-                $IO_collectors = 
-                @(
-                'ERRORLOG',
-                'StorPort.etl',
-                'High_IO_Perfstats.out',
-                'Perfmon.out',
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out', 
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out', 
-                'SystemInfo_Summary.out', 
-                'MiscPssdiagInfo.out',
-                'UserRights.out',                
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',                             
-                'PowerPlan.out',                                                                          
-                'WindowsHotfixes.out',                                                             
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv',
-                'SQLAGENT',
-                'SQLAGENT.OUT',
-                'system_health'
-                )
-                if ($nobasic -eq $true)
-                {
-                    if ($IO_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $IO_collectors.Count - $basic_collectors.Count
-                        $collectors  = $IO_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $IO_collectors.Count
-                        $collectors = $IO_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $IO_collectors.Count
-                    $collectors = $IO_collectors
-                }
-                
-                
-            }
-            if ($console_input -eq 12)
-            {
-                $ScenarioName = "LightPerf"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_LightPerf_CollectedFiles_Validation.txt'
-
-                $LightPerf_collectors = 
-                @(
-                'ERRORLOG',
-                'SQLAGENT',
-                'system_health',
-                'RunningDrivers.csv',                                                                     
-                'RunningDrivers.txt',                                                                    
-                'SystemInfo_Summary.out',                                                                
-                'MiscPssdiagInfo.out',                                                                   
-                'TaskListServices.out',                                                                   
-                'TaskListVerbose.out',                                                                   
-                'PowerPlan.out',                                                                          
-                'WindowsHotfixes.out',                                                                  
-                'FLTMC_Filters.out',
-                'FLTMC_Instances.out',                                                                     
-                'Instances.out',                                                                   
-                'EventLog_Application.csv',                                                                        
-                'EventLog_System.csv',                                                
-                'UserRights.out',
-                'SQLAGENT.OUT'
-                )
-                
-                if ($nobasic -eq $true)
-                {
-                    if ($LightPerf_collectors.Count - $basic_collectors.Count -gt 0)
-                    {
-                        $ExpectedFileCount = $LightPerf_collectors.Count - $basic_collectors.Count
-                        $collectors  = $LightPerf_collectors | where {$basic_collectors -notcontains $_}
-                    }
-                    else
-                    {
-                        $ExpectedFileCount = $LightPerf_collectors.Count
-                        $collectors = $LightPerf_collectors
-                    }
-                }
-                else
-                {
-                    $ExpectedFileCount = $LightPerf_collectors.Count
-                    $collectors = $LightPerf_collectors
-                }
-                
-            }
-
-            if ($console_input -eq 13)
-            {
-                $ScenarioName = "ProcessMonitor"
-
-                $ReportPathInternal = $TestingInfrastructure_folder + $date + '_ProcessMonitor_CollectedFiles_Validation.txt'
-
-                $Procmon_collectors = 
-                @(
-                'ProcessMonitor.pml'
-                )
-                
-                $ExpectedFileCount = $Procmon_collectors.Count
-                $collectors = $Procmon_collectors
-                
-            }
-
-
-                $fileContent  | Select-object @{Name = $file.Name ; Expression = 
-                {
-                    if ($_.Name -eq "Executing Collector") 
-                    {    
-                        "Total Collector Files found: "  + ($_.Count)
-
-                        #Write-Host 'The Total Executing Collectors and Generated output file count validation Report:' 
-                        $collecCount =  ($_.Count)
-
-                        Write-Host "`n"
-                        Write-Host "`n"
-                        Write-Host "TEST: Executing Collectors count Validation for '$ScenarioName' Scenario"
-
-                        $collecCount = (Get-ChildItem -Path $output_folder | Measure-Object).Count  
-
-                        If  ($collecCount -ge $ExpectedFileCount)
-                        {
-
-                            $msg = "You executed '$ScenarioName' scenario. Minimum expected count is $ExpectedFileCount. Current file count is : " + $collecCount + "  "
-                            $msg = $msg.replace("`n", " ")
-                                            
-                            Write-Host "`n`n------ File Count Validation Result ------"
-                            Write-Host 'Status:	 SUCCESS' -ForegroundColor Green
-                            Write-Host "Summary: $msg "
-                            Write-Host "`n`n------ File type Validation Result ------"
-
-                            
-                                
-                            $missedfilescount = 0
-                            For ($i=0; $i -lt $collectors.Length; $i++) 
-                            {
-                                $blnfileexist =  '0'
-
-                                Foreach ($filefound in Get-ChildItem $output_folder | Where-Object {$_.Name -like "*" + $collectors[$i] + "*" }| select FullName)
-                                {
-                                    $blnfileexist =  '1'
-                                }
-                                if ($blnfileexist -eq  '0')
-                                {
-                                    $missedfilescount = $missedfilescount +1
-
-                                    if ($ScenarioName -eq "DumpMemory")
-                                    {
-                                        if ($collectors[$i] -eq "SQLDmpr")
-                                        {
-                                            $collectors[$i] = $collectors[$i] + 'xxxn.mdmp ' +  ' ( n is series number, there will multiple files like SQLDmpr0001.mdmp ,SQLDmpr0002.mdmp,... based on your input'
-                                        }
-
-                                    }
-                                    Write-Host 'File not found with name like -> '$collectors[$i] -ForegroundColor red
-                                    $msg = $msg + ',' + 'File not found with name like '+ $collectors[$i]
-                                }
-                            }
-                            if ($missedfilescount -ne '0')
-                            {
-                                Write-Host "`n"
-                                Write-Host "Missing file count is -> $missedfilescount"
-                                Write-Host "`n"
-                                Write-Host 'Status:    FAILED' -ForegroundColor Red
-                                $summarymsg = $summarymsg  +  'Test result of Scenario  $ScenarioName  - Status FAILED' 
-                                $summarymsg = $summarymsg  + "`n"
-                                $summarymsg = $summarymsg  + "`n"
-                                echo "Test '$ScenarioName'  FAILED!!!" >> $SummaryFile
-                            }
-                            else
-                            {
-								Write-Host "Status:  SUCCESS" -ForegroundColor Green
-                                Write-Host "Summary: All expected log files for scenario '$ScenarioName' are present in your latest output folder!!"
-                                $msg = $msg + ',' + 'All expected log files are there in your latest output folder!!' #+ ','+ ','
-                                $summarymsg = $summarymsg  +   'Test result of Scenario  $ScenarioName  - Status Success' 
-                                $summarymsg = $summarymsg  + "`n"
-                                $summarymsg = $summarymsg  + "`n"
-                                echo "Test '$ScenarioName'  SUCCESS" >> $SummaryFile
-								
-                            }
-
-                            $msg = $msg.replace(",","`n")
-                            Write-Host $ReportPathInternal
-                            echo $msg >>  $ReportPathInternal
-                            
-
-                        }
-                        else
-                        {
-                            $msg = "You executed '$ScenarioName' scenario; mimimum collector count should be $ExpectedFileCount. Actual collector count is : " + $collecCount
-                            $msg = $msg.replace("`n", " ")
-                            Write-Host 'Status:  FAILED' -ForegroundColor Red
-                            Write-Host 'Summary: ' $msg
-                            Write-Host "`n************************************************************************************************`n"
-                            echo $msg >>  $ReportPathInternal
-                            echo "Test '$ScenarioName' FAILED!!!" >> $SummaryFile
-                        }
-                    }
-           }
-       } 
-    } 
-    catch {
+    } # end of try
+    catch
+    {
         $mycommand = $MyInvocation.MyCommand
-        $error_msg = $PSItem.Exception.Message 
+        $error_msg = $PSItem.Exception.Message
         Write-Host $_.Exception.Message
         $error_linenum = $PSItem.InvocationInfo.ScriptLineNumber
         $error_offset = $PSItem.InvocationInfo.OffsetInLine
         Write-LogError "Function $mycommand failed with error:  $error_msg (line: $error_linenum, $error_offset)"
         return
     }
+
 }
-function getscenarioname([int] $scenarioID) 
-{
-    if ($scenarioID -eq 0 )
-    {$scenarioname = "Basic"}
-    ElseIf($scenarioID -eq 1)
-    {$scenarioname = "GeneralPerf"}
-    ElseIf($scenarioID -eq 2)
-    {$scenarioname = "DetailedPerf"}
-    ElseIf($scenarioID -eq 3)
-    {$scenarioname = "Replication"}
-    ElseIf($scenarioID -eq 4)
-    {$scenarioname = "AlwaysOn"}
-    ElseIf($scenarioID -eq 5)
-    {$scenarioname = "NetworkTrace"}
-    ElseIf($scenarioID -eq 6)
-    {$scenarioname = "Memory"}
-    ElseIf($scenarioID -eq 7)
-    {$scenarioname = "DumpMemory"}
-    ElseIf($scenarioID -eq 8)
-    {$scenarioname = "WPR"}
-    ElseIf($scenarioID -eq 9)
-    {$scenarioname = "Setup"}
-    ElseIf($scenarioID -eq 10)
-    {$scenarioname = "BackupRestore"}
-    ElseIf($scenarioID -eq 11)
-    {$scenarioname = "IO"}
-    ElseIf($scenarioID -eq 12)
-    {$scenarioname = "LightPerf"}
-    ElseIf($scenarioID -eq 12)
-    {$scenarioname = "ProcessMonitor"}
-    return $scenarioname;
-}
+
 #--------------------------------------------------------Scenario check end ------------------------------------------------------------
 
-function main() {
+function main()
+{
 
-    $date = ( get-date ).ToString('yyyyMMddhhmmss');
-    $currentDate = [DateTime]::Now.AddDays(-1)
-    $output_folder = Get-OutputPathLatest
-    $error_folder = Get-InternalPath
-    $TestingInfrastructure_folder = TestingInfrastructure-Dir 
+    # Call Function to set global variables that represent the various SQLLogScout output folder structures like debug, internal, output, testinginfra etc.
+    Set-TestInfraOutputFolder
 
-    $consolpath = $TestingInfrastructure_folder + 'consoloutput.txt'
+    #if SQL LogScout has been run longer than 2 days ago, prompt to re-run
+    $currentDate = [DateTime]::Now.AddDays(-2)
 
-    #$ReportPathInternal = $TestingInfrastructure_folder + $date + '_CollectedFiles_Validation.txt'
-    $SummaryFile = $TestingInfrastructure_folder + 'Summary.txt'
 
-    if (!(Test-Path -Path $SummaryFile))
+    try
     {
-        New-Item -itemType File -Path  $TestingInfrastructure_folder -Name 'Summary.txt'
-    }
+        #in case SQLLogScout collected logs are missing
+        if (!(CreateLogFilesMissingLog))
+        {
+            return
+        }
 
-    $error1 = 0
+        # get the latest sqllogscoutlog file and full path
+        $sqllogscoutlog = Get-Childitem -Path $global:sqllogscout_latest_output_internal_logpath -Filter $global:sqllogscout_log
 
-    try {
-            $count = 0
-            if (!(Test-Path -Path $output_folder ))
+        # if check for the file $SqlLogScoutLog
+        if (!(Test-Path -Path $sqllogscoutlog))
+        {
+            throw "SQLLogScoutLog file or path are invalid. Exiting..."
+        }
+
+        if ($sqllogscoutlog.LastWriteTime -gt $currentDate)
+        {
+
+            # discover scenarios
+			[string[]]$scenStrArray = DiscoverScenarios -SqlLogscoutLog $SqlLogscoutLog
+
+            #crate the test results output file
+            CreateTestResultsFile -ScenarioArray $scenStrArray
+
+            #write a first line to output file
+            $filemsg = "Executing file validation test from output folder: '$global:sqllogscout_latest_output_folder'`n"
+            WriteToConsoleAndFile -Message $filemsg
+            WriteToConsoleAndFile -Message "`n************************************************************************************************`n"
+
+            #if there are scenarios let's validate the files
+			if ($scenStrArray.Count -gt 0)
             {
-                $message1 = "Files are missing or folder " + $output_folder + " not exist"
-                            $message1 = $message1.replace("`n", " ")
-                Write-LogDebug $message1
-                $TestingInfrastructure_folder1 =  $TestingInfrastructure_folder + 'FileMissing.LOG'
-                echo $message1 > $TestingInfrastructure_folder1 
-            }
-            if (!(Test-Path -Path $error_folder ))
-            {
-                $message1 = "Files are missing or folder " + $error_folder + " not exist"
-                                $message1 = $message1.replace("`n", " ")
-                echo $message1 >> $TestingInfrastructure_folder1
-                break;
-            }
-           #---------------------------------------------------Pulling the data from $global:sqllogscoutdebug_log
-            $debugLog =  Get-Childitem -Path $error_folder -Include $global:filterPatter -Recurse -Filter $global:sqllogscoutdebug_log
+                $nobasic = $false
 
-            Foreach ($file in Get-Childitem -Path $error_folder -Include $global:filterPatter -Recurse -Filter $global:sqllogscout_log ) 
-            {
-                
-                if ($file.LastWriteTime -gt $currentDate) 
-                {            
-                    $selectoutputfile =  2
-                    $present_directory = Get-RootDirectory
-                    $filter="output*"
-                    $latest = Get-ChildItem -Path $present_directory -Filter $filter | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                    
-                    if ($latest.Name -eq "output")
-                    {
-                        $selectoutputfile =  2
-                    }
-                    elseif ((Get-Content -Path $file | Select-String -pattern "Console input: D" | Select-Object Line | Where-Object { $_ -ne "" }) -ne "" )
-                    {
-                        $selectoutputfile =  3
-                    }
-                    else
-                    {
-                        $selectoutputfile =  3
-                    }
-                    
-                    Get-Content -Path $file | Select-String -pattern "Scenario Console input:" |select -First $selectoutputfile | select -Last 1| Select-Object Line | Where-Object { $_ -ne "" } > $consolpath
-                    [String] $t = '';Get-Content $consolpath | % {$t += " $_"};[Regex]::Match($t, '(\w+)[^\w]*$').Groups[2].Value
-                    
-                    $lostcolon = $t.LastIndexOf(":")
-                    $lostcolon = $lostcolon +1
-                    $len = $t.Length 
-                    $console_input = ($t.Substring($lostcolon,$len - $lostcolon).TrimEnd()).TrimStart()
-                    
-                    If ($console_input -eq "")
-                    {
-                        
-                        [String] $commandlineinput = Get-Content -Path $file | Select-String -pattern "The scenarios selected are:" > $consolpath
-                        [String] $t = '';Get-Content $consolpath | % {$t += " $_"};[Regex]::Match($t, '(\w+)[^\w]*$').Groups[2].Value
-                        $nobasic = Get-Content $consolpath | Select-String -pattern "NoBasic"
-                        if ($nobasic -ne "")
-                        {
-                            $nobasic = $true
-                        }
-                        $t = $t.Replace('NoBasic','')
-                        #$t = $t.Replace(' ','')
-                        $lostcolon = $t.LastIndexOf(":")
-                        $lostcolon = $lostcolon+1
-                        $len = $t.Length
-                        $t = ($t.Substring($lostcolon,$len - $lostcolon-1).TrimEnd()).TrimStart()
-                        $t = $t.Replace('''','')
-                        $t = $t.Replace(' ','+')
-                        $t = $t.Replace('NoBasic','')
-                        $t = $t.Replace('Basic','0')
-                        $t = $t.Replace('GeneralPerf','1')
-                        $t = $t.Replace('DetailedPerf','2')
-                        $t = $t.Replace('Replication','3')
-                        $t = $t.Replace('AlwaysOn','4')
-                        $t = $t.Replace('NetworkTrace','5')
-                        $t = $t.Replace('Memory','6')
-                        $t = $t.Replace('DumpMemory','7')
-                        $t = $t.Replace('WPR','8')
-                        $t = $t.Replace('Setup','9')
-                        $t = $t.Replace('BackupRestore','10')
-                        $t = $t.Replace('IO','11')
-                        $t = $t.Replace('LightPerf','12')
-                        $t = $t.Replace('ProcessMonitor','13')
-                        $console_input = $t
-                    }
-                    #---------------------------------------For User ran the single Scenario-------------------------
-                    $checkmupluscenario = $console_input.IndexOf("+")
-                    
-                    If ($console_input.IndexOf("+") -ne 1)
-                    {
-                        try 
-                        {
-                            $scenarioID = [convert]::ToInt32($console_input)
-                            $scenarioID = $console_input
-                            if (Test-Path $consolpath) {
-                              Remove-Item $consolpath
-                            }                            
-                            $scenarioname1 = getscenarioname($scenarioID)
-                            if ($scenarioname1 -eq "") {break;}
-                            $ReportPath = $TestingInfrastructure_folder + $date + '_' + $scenarioname1 + '_ExecutingCollector_CountValidation.txt'
-                            $filemsg = "Executing Log File validation test from Source Folder: '" + $error_folder + $global:sqllogscout_log + "'" + " and cross verifying 'executing collector' info with output folder '" +  $output_folder +"'"
-                            Write-Host $filemsg
-                            echo $filemsg > $ReportPath
-                            echo 'The collectors files are are below.......' >> $ReportPath
-                            Get-Content -Path $file | Select-String -pattern "Executing Collector" | Select-Object Line | Where-Object { $_ -ne "" } >>$ReportPath
-                            $fileContent = Get-Content -Path $file | Select-String "Executing Collector" | Group-Object -property Pattern
-                            FileCountAndFileTypeValidation($scenarioID)
-
-                        }
-                        catch [FormatException] {
-                            Write-LogDebug "The scenario ID is '", $scenarioID, "' is not an integer"
-                            continue 
-                        }
-                    } 
-                    #---------------------------------------For User ran the multiple Scenario-------------------------
-                    elseif ($console_input.IndexOf("+") -eq 1)
-                    {
-                        $scenarioname1 = ""
-                        [string[]]$scenStrArray = $console_input.Split('+')
-                        Get-Content -Path $file | Select-String -pattern "Executing Collector" | Select-Object Line | Where-Object { $_ -ne "" } >>$ReportPath
-                        $fileContent = Get-Content -Path $file | Select-String "Executing Collector" | Group-Object -property Pattern
-                        $totalprint = $false
-
-
-                        #remove any blank elements in the array 
-                        $scenStrArray = $scenStrArray.Where({ "" -ne $_ })
-
-                        foreach($str_scn in $scenStrArray) 
-                        {
-                            try 
-                            {
-                                $scenarioID = [convert]::ToInt32($str_scn.trim()) 
-                                
-                                 if ($scenarioID -eq 0)
-                                 {
-                                    $nobasic = $false
-                                 }
-                                 
-                                 if (Test-Path $consolpath) {
-                                 Remove-Item $consolpath
-                                 } 
-                                Write-Host "Scenario: $scenarioname1"
-                                $scenarioname1 = getscenarioname($scenarioID)
-                                $ReportPath = $TestingInfrastructure_folder + $date + '_' + $scenarioname1 + '_ExecutingCollector_CountValidation.txt'
-                                $filemsg = "Executing Log File validation test from Source Folder: '" + $error_folder + $global:sqllogscout_log + "'" + " and cross verifying 'executing collector' info with output folder '" +  $output_folder +"'"
-                                Write-Host $filemsg
-                                echo $filemsg > $ReportPath
-                                echo 'The collectors files are are below.......' >> $ReportPath
-                                Get-Content -Path $file | Select-String -pattern "Executing Collector" | Select-Object Line | Where-Object { $_ -ne "" } >>$ReportPath
-                                $fileContent = Get-Content -Path $file | Select-String "Executing Collector" | Group-Object -property Pattern
-                                FileCountAndFileTypeValidation($scenarioID)
-
-                            }
-                            catch 
-                            {
-                                Write-LogError "$($PSItem.Exception.Message)"
-                                $scenStrArray =@()
-                                $int_scn = $false
-                            }
-                        }
-                    } 
-                }
-                else 
+				# check for NoBasic and set flag
+				foreach($str_scn in $scenStrArray)
                 {
-                    echo 'The collectors files are old.......' >> $ReportPath
-                    Write-Host 'The collectors files are old, Please re-run the tool and collect lataest logs.......' -ForegroundColor Red
-                }            
+                    if ($str_scn -eq "NoBasic")
+                    {
+                        $nobasic = $true
+                    }
+                }
+
+                #iterates through the array of scenarios and executes file validation for each of them
+                foreach($str_scn in $scenStrArray)
+                {
+                    WriteToConsoleAndFile -Message ("Scenario: '$str_scn'")
+
+                    if ($str_scn -eq "NoBasic")
+                    {
+                        WriteToConsoleAndFile -Message "`n************************************************************************************************`n"
+                        continue
+                    }
+
+                    #validate the file
+                    FileCountAndFileTypeValidation -scenario_string $str_scn -IsNoBasic $nobasic
+                }
             }
-            Write-Host "`n`n"
-            $msg2 = "Testing has been completed, the reports are at: " + $TestingInfrastructure_folder 
-            Write-Host $msg2
-            
-            if (Test-Path $consolpath) {
-            Remove-Item $consolpath
-            }    
+            else
+            {
+                WriteToConsoleAndFile -Message "No valid Scenario found to process. Exiting"
+                return
+
+            }
+        }
+        else
+        {
+            "The collected files are old......." | Out-File -FilePath $global:DetailFile -Append
+            Write-Host 'The collected files are old. Please re-run the SQL LogScout and collect more recent logs.......' -ForegroundColor Red
+        }
+
+        Write-Host "`n`n"
+        $msg = "Testing has been completed, the reports are at: " + $global:sqllogscout_testing_infrastructure_output_folder
+        Write-Host $msg
 
 
-        }
-        catch {
-            $mycommand = $MyInvocation.MyCommand
-            $error_msg = $PSItem.Exception.Message 
-            Write-Host $_.Exception.Message
-            $error_linenum = $PSItem.InvocationInfo.ScriptLineNumber
-            $error_offset = $PSItem.InvocationInfo.OffsetInLine
-            Write-LogError "Function $mycommand failed with error:  $error_msg (line: $error_linenum, $error_offset)"
-        }
+    }
+    catch
+    {
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.Message
+        Write-Host $_.Exception.Message
+        $error_linenum = $PSItem.InvocationInfo.ScriptLineNumber
+        $error_offset = $PSItem.InvocationInfo.OffsetInLine
+        Write-LogError "Function $mycommand failed with error:  $error_msg (line: $error_linenum, $error_offset)"
+    }
 }
-main 
 
+main

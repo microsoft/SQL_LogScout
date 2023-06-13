@@ -20,6 +20,11 @@ PRINT 'Script Begin Time        ' + CONVERT (varchar(30), GETDATE(), 126)
 PRINT 'Current Database         ' + DB_NAME()
 PRINT ''
 GO
+
+DECLARE @sql_major_version INT, @sql_major_build INT, @sql NVARCHAR(max)
+SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 4) AS INT)),
+       @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS varchar(20)), 2) AS INT)) 
+
 create table #summary (PropertyName nvarchar(50) primary key, PropertyValue nvarchar(256))
 insert into #summary values ('ProductVersion', cast (SERVERPROPERTY('ProductVersion') as nvarchar(max)))
 insert into #summary values ('MajorVersion', LEFT(CONVERT(SYSNAME,SERVERPROPERTY('ProductVersion')), CHARINDEX('.', CONVERT(SYSNAME,SERVERPROPERTY('ProductVersion')), 0)-1))
@@ -60,7 +65,7 @@ insert into #summary values ('cpu_ticks_per_sec', @cpu_ticks / 2 )
 
 PRINT ''
 
-go
+GO
 
 --removing xp_instance_regread calls & related variables as a part of issue #149
  
@@ -241,12 +246,11 @@ print ''
 go
 
 IF @@MICROSOFTVERSION >= 251658240 --15.0.2000
-begin
-
-print '-- sys.dm_tran_persistent_version_store_stats --'
-select * From sys.dm_tran_persistent_version_store_stats
-print ''
-end
+BEGIN
+	PRINT '-- sys.dm_tran_persistent_version_store_stats --'
+	SELECT * FROM sys.dm_tran_persistent_version_store_stats
+	PRINT ''
+END
 go
 
 /*
@@ -257,75 +261,186 @@ print substring(@@VERSION, @pos + 4, LEN(@@VERSION))
 */
 
 
-print '--profiler trace summary--'
-SELECT traceid, property, CONVERT (varchar(1024), value) AS value FROM :: fn_trace_getinfo(default)
 
-go
---we need the space for import
-print ''
-print '--trace event details--'
-      select trace_id,
-            status,
-            case when row_number = 1 then path else NULL end as path,
-            case when row_number = 1 then max_size else NULL end as max_size,
-            case when row_number = 1 then start_time else NULL end as start_time,
-            case when row_number = 1 then stop_time else NULL end as stop_time,
-            max_files, 
-            is_rowset, 
-            is_rollover,
-            is_shutdown,
-            is_default,
-            buffer_count,
-            buffer_size,
-            last_event_time,
-            event_count,
-            trace_event_id, 
-            trace_event_name, 
-            trace_column_id,
-            trace_column_name,
-            expensive_event   
-      from 
-            (SELECT t.id AS trace_id, 
-                  row_number() over (partition by t.id order by te.trace_event_id, tc.trace_column_id) as row_number, 
-                  t.status, 
-                  t.path, 
-                  t.max_size, 
-                  t.start_time,
-                  t.stop_time, 
-                  t.max_files, 
-                  t.is_rowset, 
-                  t.is_rollover,
-                  t.is_shutdown,
-                  t.is_default,
-                  t.buffer_count,
-                  t.buffer_size,
-                  t.last_event_time,
-                  t.event_count,
-                  te.trace_event_id, 
-                  te.name AS trace_event_name, 
-                  tc.trace_column_id,
-                  tc.name AS trace_column_name,
-                  case when te.trace_event_id in (23, 24, 40, 41, 44, 45, 51, 52, 54, 68, 96, 97, 98, 113, 114, 122, 146, 180) then cast(1 as bit) else cast(0 as bit) end as expensive_event
-            FROM sys.traces t 
-                  CROSS apply ::fn_trace_geteventinfo(t .id) AS e 
-                  JOIN sys.trace_events te ON te.trace_event_id = e.eventid 
-                  JOIN sys.trace_columns tc ON e.columnid = trace_column_id) as x
-
-go
+PRINT '-- sys.certificates --' 
+SELECT
+	CONVERT(VARCHAR(64),DB_NAME())  AS [database_name], 
+      name,
+	certificate_id,
+	principal_id,
+	pvt_key_encryption_type,
+	CONVERT(VARCHAR(32), pvt_key_encryption_type_desc) AS pvt_key_encryption_type_desc,
+	is_active_for_begin_dialog,
+	CONVERT(VARCHAR(512), issuer_name) AS issuer_name,
+	cert_serial_number,
+	sid,
+	string_sid,
+	CONVERT(VARCHAR(512),subject) AS subject,
+	expiry_date,
+	start_date,
+	'0x' + CONVERT(VARCHAR(64),thumbprint,2) AS thumbprint,
+	CONVERT(VARCHAR(256), attested_by) AS attested_by,
+	pvt_key_last_backup_date
+FROM master.sys.certificates 
+PRINT ''
 
 
-print ''
-print '--XEvent Session Details--'
-SELECT convert(nvarchar(128), sess.NAME) as 'session_name', convert(nvarchar(128), event_name) as event_name,
-CASE
- WHEN xemap.trace_event_id IN ( 23, 24, 40, 41,44, 45, 51, 52,54, 68, 96, 97,98, 113, 114, 122,146, 180 )
- THEN Cast(1 AS BIT) ELSE Cast(0 AS BIT)
-END AS expensive_event
-FROM sys.dm_xe_sessions sess
- INNER JOIN sys.dm_xe_session_events evt
-ON sess.address = evt.event_session_address
- INNER JOIN sys.trace_xe_event_map xemap
- ON evt.event_name = xemap.xe_event_name collate database_default
-OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
-print ''
-go
+--this proc is only present in SQL Server 2019 and later but seems not present in early builds
+IF OBJECT_ID('sys.sp_certificate_issuers') IS NOT NULL
+BEGIN
+
+	CREATE TABLE #certificate_issuers(
+			certificateid INT,
+			dnsname NVARCHAR(128) )
+
+	INSERT INTO #certificate_issuers
+	EXEC ('exec sys.sp_certificate_issuers')
+
+	PRINT '-- sys_sp_certificate_issuers --'
+	
+	SELECT certificateid, dnsname 
+	FROM #certificate_issuers
+
+	DROP TABLE #certificate_issuers
+END
+PRINT ''
+PRINT ''
+
+
+-- Collect db_log_info to check for VLF issues
+--this table to be used by older versions of SQL Server prior to 2016 SP2
+CREATE TABLE #dbcc_loginfo_cur_db
+(
+	RecoveryUnitId INT,
+	FileId      INT,
+	FileSize    BIGINT,
+	StartOffset  BIGINT,
+	FSeqNo      BIGINT,
+	Status      INT,
+	Parity		INT,
+	CreateLSN	NVARCHAR(48)
+)
+--this table contains all the results
+CREATE TABLE #loginfo_all_dbs
+(
+	database_id	INT,
+	[database_name] VARCHAR(64),
+	vlf_count INT,
+	vlf_avg_size_mb	DECIMAL(10,2),
+	vlf_min_size_mb DECIMAL(10,2),
+	vlf_max_size_mb DECIMAL(10,2),
+	vlf_status INT,
+	vlf_active BIT
+)
+
+DECLARE @dbname nvarchar(64), @dbid INT
+DECLARE @dbcc_log_info VARCHAR(MAX)
+DECLARE @sql_major_version INT
+DECLARE @sql_major_build INT
+
+--check the version of current SQL Server (use old style to support older SQL versions)
+SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) AS INT)), 
+	@sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) AS INT)) 
+		
+
+DECLARE Database_Cursor CURSOR FOR SELECT database_id, name FROM MASTER.sys.databases
+
+OPEN Database_Cursor;
+
+FETCH NEXT FROM Database_Cursor into @dbid, @dbname;
+
+WHILE @@FETCH_STATUS = 0
+	BEGIN
+
+		SET @dbcc_log_info = 'DBCC LOGINFO (''' + @dbname + ''') WITH NO_INFOMSGS'
+		
+		IF ((@sql_major_version >= 14) or (@sql_major_version >= 13) and (@sql_major_build >= 5026 ))
+		BEGIN
+		
+			INSERT INTO #loginfo_all_dbs(
+				database_id	,
+				database_name ,
+				vlf_count,
+				vlf_avg_size_mb	,
+				vlf_min_size_mb,
+				vlf_max_size_mb,
+				vlf_status ,
+				vlf_active)
+			SELECT 
+				database_id,
+				@dbname,
+				count(*) AS vlf_count,
+				AVG(vlf_size_mb) AS vlf_avg_size_mb,
+				MIN(vlf_size_mb) AS vlf_min_size_mb,
+				MAX(vlf_size_mb) AS vlf_max_size_mb,
+				vlf_status,
+				vlf_active
+			FROM sys.dm_db_log_info (db_id(@dbname))
+			GROUP BY database_id, vlf_status, vlf_active
+
+		END
+		ELSE
+		--if version is prior to SQL 2016 SP2, use DBCC LOGINFO to get the data
+		--but insert and format it into a table as if it came from sys.dm_db_log_info
+		BEGIN
+			INSERT INTO #dbcc_loginfo_cur_db (
+				RecoveryUnitId ,
+				FileId      ,
+				FileSize    ,
+				StartOffset ,
+				FSeqNo      ,
+				Status      ,
+				Parity		,
+				CreateLSN)
+			EXEC(@dbcc_log_info)
+
+			
+			INSERT INTO #loginfo_all_dbs(
+				database_id	,
+				database_name ,
+				vlf_count ,
+				vlf_avg_size_mb	,
+				vlf_min_size_mb,
+				vlf_max_size_mb,
+				vlf_status ,
+				vlf_active )
+		--do the formatting to match the sys.dm_db_log_info standard as much as possible	
+			SELECT 
+				@dbid, 
+				@dbname, 
+				COUNT(li.FSeqNo) AS vlf_count,
+				CONVERT(DECIMAL(10,2),AVG(li.FileSize/1024/1024.0)) AS vlf_avg_size_mb,
+				CONVERT(DECIMAL(10,2),MIN(li.FileSize/1024/1024.0)) AS vlf_min_size_mb,
+				CONVERT(DECIMAL(10,2),MAX(li.FileSize/1024/1024.0)) AS vlf_max_size_mb,
+				li.Status,
+				CASE WHEN li.Status = 2 THEN 1 ELSE 0 END AS Active
+			FROM #dbcc_loginfo_cur_db li
+			GROUP BY Status, CASE WHEN li.Status = 2 THEN 1 ELSE 0 END 
+
+			--clean up the temp table for next loop
+			TRUNCATE TABLE #dbcc_loginfo_cur_db
+		END
+
+		FETCH NEXT FROM Database_Cursor into @dbid, @dbname;
+
+	END;
+CLOSE Database_Cursor;
+DEALLOCATE Database_Cursor;
+
+PRINT '-- sys_dm_db_log_info --'
+SELECT 
+	database_id	,
+	database_name ,
+	vlf_count ,
+	vlf_avg_size_mb	,
+	vlf_min_size_mb	,
+	vlf_max_size_mb	,
+	vlf_status ,
+	vlf_active 
+FROM #loginfo_all_dbs
+ORDER BY database_name
+
+
+DROP TABLE #dbcc_loginfo_cur_db
+DROP TABLE #loginfo_all_dbs
+PRINT ''

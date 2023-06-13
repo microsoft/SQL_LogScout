@@ -56,11 +56,17 @@ param(
             [void]$detailedOutput.AppendLine($Match.LineNumber.ToString() + ": " + $Match.Line)
         }
 
-        if(0 -eq $AllMatches.Matches.Count){
-            $SummaryMsg = ("Total Error Pattern Match: " + $AllMatches.Matches.Count.ToString() + ", CLEAN LOGS!")
-        } else {
-            $SummaryMsg = ("Total Error Pattern Match: " + $AllMatches.Matches.Count.ToString() + ", ERRORS FOUND!")
+        $SummaryMsg = "Total Error Pattern Match: " + $AllMatches.Matches.Count.ToString()
+
+        if(0 -eq $AllMatches.Matches.Count)
+        {
+            $SummaryMsg = ($SummaryMsg + " "*(60 - $SummaryMsg.Length) + "SUCCESS")
+        } 
+        else 
+        {
+            $SummaryMsg = ($SummaryMsg + " "*(60 - $SummaryMsg.Length) + "ERRORS FOUND!")
         }
+        
         Write-Output ($SummaryMsg) | Out-File $SummaryFilename -Append
 
         if (-not([string]::IsNullOrWhiteSpace($detailedOutput.ToString()))){

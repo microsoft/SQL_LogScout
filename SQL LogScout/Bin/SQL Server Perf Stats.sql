@@ -599,25 +599,11 @@ CREATE PROCEDURE #sp_perf_stats_infrequent @runtime datetime, @prevruntime datet
 
 
   /* Resultset #4: SQL processor utilization */
-  PRINT ''
-  RAISERROR ('-- Recent SQL Processor Utilization (Health Records) --', 0, 1) WITH NOWAIT;
   SELECT @querystarttime = GETDATE(), @msticks = ms_ticks from sys.dm_os_sys_info
   SET @mstickstime = @querystarttime
-  
-  SELECT  /*qry4*/
-      CONVERT (varchar(30), @runtime, 126) AS 'runtime', 
-      record.value('(Record/@id)[1]', 'int') AS 'record_id',
-      CONVERT (varchar, DATEADD (ms, -1 * (@msticks - [timestamp]),@mstickstime), 126) AS 'EventTime', [timestamp], 
-      record.value('(Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS 'system_idle_cpu',
-      record.value('(Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS 'sql_cpu_utilization' 
-    FROM (
-      SELECT timestamp, CONVERT (xml, record) AS 'record' 
-      FROM sys.dm_os_ring_buffers 
-      WHERE ring_buffer_type = 'RING_BUFFER_SCHEDULER_MONITOR'
-        AND record LIKE '%<SystemHealth>%'
-		and [timestamp] > @lastmsticks) AS t
-    ORDER BY record.value('(Record/@id)[1]', 'int') 
-    OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+  /*
+  **03/29/2023 - Remove reference to dm_os_ring_buffers as DMV isn't supported
+  */
 
    RAISERROR (' ', 0, 1) WITH NOWAIT;
   SET @queryduration = DATEDIFF (ms, @querystarttime, GETDATE())
@@ -980,8 +966,7 @@ FROM     sys.dm_exec_requests r
          INNER JOIN sys.dm_exec_query_resource_semaphores rs
            ON mg.resource_semaphore_id = rs.resource_semaphore_id
          CROSS APPLY sys.dm_exec_sql_text (r.sql_handle ) AS q
-ORDER BY wait_time DESC
-OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+OPTION (MAXDOP 1, LOOP JOIN, FORCE ORDER)
 
 RAISERROR ('', 0, 1) WITH NOWAIT
 
@@ -1004,7 +989,7 @@ DECLARE @queryduration int
 DECLARE @querystarttime datetime
 
 
-exec #sp_mem_stats_grants @runtime
+EXEC #sp_mem_stats_grants @runtime
 
 RAISERROR (' ', 0, 1) WITH NOWAIT;
 SET @queryduration = DATEDIFF (ms, @querystarttime, GETDATE())
@@ -1023,9 +1008,9 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats10 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime, @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats @appname, @runtime, @prevruntime, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats @appname, @runtime, @prevruntime, @IsLite
+END
 
 go
 IF OBJECT_ID ('#sp_perf_stats11','P') IS NOT NULL
@@ -1034,9 +1019,9 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats11 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats10 @appname, @runtime, @prevruntime, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats10 @appname, @runtime, @prevruntime, @IsLite
+END
 
 go
 
@@ -1046,9 +1031,9 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats12 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats11 @appname, @runtime, @prevruntime, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats11 @appname, @runtime, @prevruntime, @IsLite
+END
 
 go
 
@@ -1058,9 +1043,9 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats13 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats12 @appname, @runtime, @prevruntime, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats12 @appname, @runtime, @prevruntime, @IsLite
+END
 go
 IF OBJECT_ID ('#sp_perf_stats14','P') IS NOT NULL
    DROP PROCEDURE #sp_perf_stats14
@@ -1068,9 +1053,9 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats14 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats13 @appname, @runtime, @prevruntime, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats13 @appname, @runtime, @prevruntime, @IsLite
+END
 go
 IF OBJECT_ID ('#sp_perf_stats15','P') IS NOT NULL
    DROP PROCEDURE #sp_perf_stats15
@@ -1078,19 +1063,29 @@ GO
 go
 CREATE PROCEDURE #sp_perf_stats15 @appname sysname='sqllogscout', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats14 @appname, @runtime, @prevruntime, @IsLite
-end
-go
+BEGIN
+	EXEC #sp_perf_stats14 @appname, @runtime, @prevruntime, @IsLite
+END
+GO
+IF OBJECT_ID ('#sp_perf_stats16','P') IS NOT NULL
+   DROP PROCEDURE #sp_perf_stats16
+GO
+CREATE PROCEDURE #sp_perf_stats16 @appname sysname='PSSDIAG', @runtime datetime, @prevruntime datetime , @IsLite bit =0 
+AS 
+BEGIN
+	EXEC #sp_perf_stats15 @appname, @runtime, @prevruntime, @IsLite
+END
+GO
+
 
 IF OBJECT_ID ('#sp_perf_stats_infrequent10','P') IS NOT NULL
    DROP PROCEDURE #sp_perf_stats_infrequent10
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent10 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent @runtime, @prevruntime, @firstrun, @IsLite
+END
 go
 
 IF OBJECT_ID ('#sp_perf_stats_infrequent11','P') IS NOT NULL
@@ -1098,9 +1093,9 @@ IF OBJECT_ID ('#sp_perf_stats_infrequent11','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent11 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent10 @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent10 @runtime, @prevruntime, @firstrun, @IsLite
+END
 
 go
 
@@ -1109,9 +1104,9 @@ IF OBJECT_ID ('#sp_perf_stats_infrequent12','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent12 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent11 @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent11 @runtime, @prevruntime, @firstrun, @IsLite
+END
 go
 
 IF OBJECT_ID ('#sp_perf_stats_infrequent13','P') IS NOT NULL
@@ -1119,9 +1114,9 @@ IF OBJECT_ID ('#sp_perf_stats_infrequent13','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent13 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent12 @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent12 @runtime, @prevruntime, @firstrun, @IsLite
+END
 
 go
 IF OBJECT_ID ('#sp_perf_stats_infrequent14','P') IS NOT NULL
@@ -1129,9 +1124,9 @@ IF OBJECT_ID ('#sp_perf_stats_infrequent14','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent14 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent13 @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent13 @runtime, @prevruntime, @firstrun, @IsLite
+END
 
 go
 IF OBJECT_ID ('#sp_perf_stats_infrequent15','P') IS NOT NULL
@@ -1139,11 +1134,21 @@ IF OBJECT_ID ('#sp_perf_stats_infrequent15','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_infrequent15 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
  AS 
-begin
-	exec #sp_perf_stats_infrequent14 @runtime, @prevruntime, @firstrun, @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_infrequent14 @runtime, @prevruntime, @firstrun, @IsLite
+END
 
-go
+GO
+IF OBJECT_ID ('#sp_perf_stats_infrequent16','P') IS NOT NULL
+   DROP PROCEDURE #sp_perf_stats_infrequent16
+GO
+CREATE PROCEDURE #sp_perf_stats_infrequent16 @runtime datetime, @prevruntime datetime, @lastmsticks bigint output, @firstrun tinyint = 0, @IsLite bit =0 
+AS 
+BEGIN
+	EXEC #sp_perf_stats_infrequent15 @runtime, @prevruntime, @lastmsticks output, @firstrun, @IsLite
+END
+GO
+
 
 
 
@@ -1152,9 +1157,9 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent10','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent10 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent @runtime, @firstrun , @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent @runtime, @firstrun , @IsLite
+END
 
 go
 
@@ -1164,9 +1169,9 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent11','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent11 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent10 @runtime, @firstrun , @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent10 @runtime, @firstrun , @IsLite
+END
 
 go
 
@@ -1176,9 +1181,9 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent12','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent12 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent11 @runtime, @firstrun , @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent11 @runtime, @firstrun , @IsLite
+END
 
 go
 
@@ -1187,9 +1192,9 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent13','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent13 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent12 @runtime, @firstrun , @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent12 @runtime, @firstrun , @IsLite
+END
 
 
 go
@@ -1199,9 +1204,9 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent14','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent14 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent13 @runtime, @firstrun , @IsLite
-end
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent13 @runtime, @firstrun , @IsLite
+END
 
 
 go
@@ -1211,13 +1216,20 @@ IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent15','P') IS NOT NULL
 GO
 CREATE PROCEDURE #sp_perf_stats_reallyinfrequent15 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
 AS 
-begin
-	exec #sp_perf_stats_reallyinfrequent14 @runtime, @firstrun , @IsLite
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent14 @runtime, @firstrun , @IsLite
+END
+GO
+
+IF OBJECT_ID ('#sp_perf_stats_reallyinfrequent16','P') IS NOT NULL
+   DROP PROCEDURE #sp_perf_stats_reallyinfrequent16
+GO
+CREATE PROCEDURE #sp_perf_stats_reallyinfrequent16 @runtime datetime, @firstrun int = 0 , @IsLite bit =0 
+AS 
+BEGIN
+	EXEC #sp_perf_stats_reallyinfrequent15 @runtime, @firstrun , @IsLite
 end
-
-
-go
-
+GO
 
 
 IF OBJECT_ID ('#sp_Run_PerfStats','P') IS NOT NULL
@@ -1280,7 +1292,7 @@ set @#sp_perf_stats_reallyinfrequent_ver = '#sp_perf_stats_reallyinfrequent' + @
   
     -- Collect #sp_perf_stats every 10 seconds
     --EXEC dbo.#sp_perf_stats @appname = 'sqllogscout', @runtime = @runtime, @prevruntime = @prevruntime
-	exec @#sp_perf_stats_ver 'sqllogscout', @runtime = @runtime, @prevruntime = @prevruntime, @IsLite=@IsLite
+	EXEC @#sp_perf_stats_ver 'sqllogscout', @runtime = @runtime, @prevruntime = @prevruntime, @IsLite=@IsLite
 
 		
     -- Collect #sp_perf_stats_infrequent approximately every minute
@@ -1306,4 +1318,4 @@ set @#sp_perf_stats_reallyinfrequent_ver = '#sp_perf_stats_reallyinfrequent' + @
 GO
 
 
-exec #sp_Run_PerfStats
+EXEC #sp_Run_PerfStats

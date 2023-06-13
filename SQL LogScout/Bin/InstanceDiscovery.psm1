@@ -148,15 +148,14 @@ function Get-InstanceNamesOnly()
     try 
     {
         
-        [string[]]$instnaceArray = @()
+        [string[]]$InstanceArray = @()
         $selectedSqlInstance = ""
 
 
         #find the actively running SQL Server services
-        $SqlTaskList = Tasklist /SVC /FI "imagename eq sqlservr*" /FO CSV | ConvertFrom-Csv
-
+        $sql_running_services = Get-Service | Where-Object {(($_.Name -match "MSSQL\$") -or ($_.Name -eq "MSSQLSERVER")) -and ($_.Status -eq "Running")} | Select-Object Name 
         
-        if ($SqlTaskList.Count -eq 0)
+        if ($sql_running_services.Count -eq 0)
         {
 
             Write-LogInformation "There are currently no running instances of SQL Server. Would you like to proceed with OS-only log collection" -ForegroundColor Green
@@ -185,7 +184,7 @@ function Get-InstanceNamesOnly()
 
             if ($confirm -eq "Y")
             {
-                $instnaceArray+=$global:sql_instance_conn_str
+                $InstanceArray+=$global:sql_instance_conn_str
             }
             elseif ($confirm -eq "N")
             {
@@ -197,15 +196,15 @@ function Get-InstanceNamesOnly()
 
         else 
         {
-            Write-LogDebug "The running instances are: " $SqlTaskList -DebugLogLevel 3
-            Write-LogDebug "" -DebugLogLevel 3
-            $SqlTaskList | Select-Object  PID, "Image name", Services | ForEach-Object {Write-LogDebug $_ -DebugLogLevel 5}
+            
             Write-LogDebug ""
-        
-            foreach ($sqlinstance in $SqlTaskList.Services)
-            {
-                #in the case of a default instance, just use MSSQLSERVER which is the instance name
 
+            foreach ($sqlserver in $sql_running_services)
+            {
+
+                [string]$sqlinstance = $sqlserver.Name
+
+                #in the case of a default instance, just use MSSQLSERVER which is the instance name
                 if ($sqlinstance.IndexOf("$") -lt 1)
                 {
                     $selectedSqlInstance  = $sqlinstance
@@ -216,16 +215,16 @@ function Get-InstanceNamesOnly()
                 {
                     $selectedSqlInstance  = $sqlinstance.Substring($sqlinstance.IndexOf("$") + 1)
                 }
-
                 
                 #add each instance name to the array
-                $instnaceArray+=$selectedSqlInstance 
+                $InstanceArray+=$selectedSqlInstance 
             }
 
         }
 
+        Write-LogDebug "The running instances are: $InstanceArray"   -DebugLogLevel 3
 
-        return $instnaceArray
+        return $InstanceArray
     }
     catch 
     {

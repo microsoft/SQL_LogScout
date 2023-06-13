@@ -189,7 +189,6 @@ EXEC(@sql)
 SET @sql = ''
 
 
-
 --AlwaysOn Availability Database Identification, Configuration, State and Performance 
 SET @sql ='SELECT  ag.name AS Availability_Group, drcs.replica_id, drcs.group_database_id, drcs.database_name, drcs.is_failover_ready, drcs.is_pending_secondary_suspend, 
         drcs.is_database_joined, drcs.recovery_lsn, drcs.truncation_lsn, drs.database_id, drs.group_id, drs.is_local '
@@ -240,13 +239,59 @@ OPTION (max_grant_percent = 3, MAXDOP 1)'
 PRINT ''
 PRINT '--AG_hadr_ag_database_replica_states--'
 EXEC(@sql)
-
 SET @sql = ''
-		 
 PRINT ''
+
+
 PRINT '-- AG_dm_os_server_diagnostics_log_configurations --'
 SELECT        is_enabled, path, max_size, max_files
 FROM            sys.dm_os_server_diagnostics_log_configurations
+PRINT ''
+
+IF (@sql_major_version >=13) --this exists SQL 2016 and above
+BEGIN
+	PRINT '-- AG_hadr_automatic_seeding --'
+	SELECT	CONVERT(VARCHAR(64),ag.name) AS ag_name, 
+			CONVERT(VARCHAR(64),db_name(dbrs.database_id)) database_name,  
+			start_time, completion_time, operation_id, is_source, 
+			CONVERT(VARCHAR(128),current_state) AS current_state, 
+			performed_seeding, CONVERT(VARCHAR(128),failure_state_desc) AS failure_state_desc, 
+			error_code  
+	FROM sys.dm_hadr_automatic_seeding asd 
+	LEFT OUTER JOIN sys.availability_groups ag
+		ON asd.ag_id = ag.group_id
+	LEFT OUTER JOIN sys.dm_hadr_database_replica_states dbrs
+		ON asd.ag_db_id  = dbrs.group_database_id
+		AND asd.ag_id = dbrs.group_id
+	WHERE dbrs.is_primary_replica = 1 OR dbrs.is_primary_replica IS NULL
+	ORDER BY start_time
+	PRINT ''
+
+	PRINT '-- AG_hadr_physical_seeding_stats --'
+	SELECT 
+		local_physical_seeding_id,
+		remote_physical_seeding_id,
+		local_database_id,
+		local_database_name,
+		remote_machine_name,
+		role_desc,
+		internal_state_desc,
+		transfer_rate_bytes_per_second,
+		transferred_size_bytes,
+		database_size_bytes,
+		start_time_utc,
+		end_time_utc,
+		estimate_time_complete_utc,
+		total_disk_io_wait_time_ms,
+		total_network_wait_time_ms,
+		failure_code,
+		failure_message,
+		failure_time_utc,
+		is_compression_enabled
+	 FROM sys.dm_hadr_physical_seeding_stats
+END
+PRINT ''
+
 
 SET QUOTED_IDENTIFIER ON
 
@@ -258,8 +303,9 @@ SELECT cast(event_data as XML) AS EventData
   INTO #AOHealth
   FROM sys.fn_xe_file_target_read_file(
   @XELFile, NULL, null, null);
-
 PRINT ''
+
+
 PRINT '-- AG_AlwaysOn_health_alwayson_ddl_executed --'
 SELECT TOP 500 
 EventData.value('(event/@timestamp)[1]', 'datetime') AS TimeStampUTC,
@@ -271,8 +317,8 @@ FROM #AOHealth
 WHERE EventData.value('(event/@name)[1]', 'varchar(max)') = 'alwayson_ddl_executed'
 	AND UPPER(EventData.value('(event/data[@name="statement"]/value)[1]','varchar(max)')) NOT LIKE '%FAILOVER%'
 ORDER BY EventData.value('(event/@timestamp)[1]', 'datetime') DESC;
-
 PRINT ''
+
 PRINT '-- AG_AlwaysOn_health_failovers --'
 SELECT TOP 500 
 EventData.value('(event/@timestamp)[1]', 'datetime') AS TimeStampUTC,
@@ -371,3 +417,6 @@ WITH ErrorCTE (ErrorNum, ErrorCount, FirstDate, LastDate) AS (
 
 DROP TABLE #AOHealth
 DROP TABLE #error_reported
+PRINT ''
+
+

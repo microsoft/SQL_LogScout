@@ -135,10 +135,25 @@
 \SQL Server 2016 XTP IO Governor(*)\*
 \SQL Server 2016 XTP Phantom Processor(*)\*
 \SQL Server 2016 XTP Transactions(*)\*
+\SQL Server 2017 SQL Server XTP Storage(*)\*
+\SQL Server 2017 SQL Server XTP Transaction Log(*)\*
+\SQL Server 2017 XTP Cursors(*)\*
+\SQL Server 2017 XTP Databases(*)\*
+\SQL Server 2017 XTP Garbage Collection(*)\*
+\SQL Server 2017 XTP IO Governor(*)\*
+\SQL Server 2017 XTP Phantom Processor(*)\*
+\SQL Server 2017 XTP Transactions(*)\*
+\SQL Server 2022 SQL Server XTP Storage(*)\*
+\SQL Server 2022 SQL Server XTP Transaction Log(*)\*
+\SQL Server 2022 XTP Cursors(*)\*
+\SQL Server 2022 XTP Databases(*)\*
+\SQL Server 2022 XTP Garbage Collection(*)\*
+\SQL Server 2022 XTP IO Governor(*)\*
+\SQL Server 2022 XTP Phantom Processor(*)\*
+\SQL Server 2022 XTP Transactions(*)\*
 \System\*
 \TCP\*
 \Telephony\*
-\Thread(*)\*
 \UDP\*
 \Web Service(_Total)\*
 \Web Service(Administration Web Site)\*

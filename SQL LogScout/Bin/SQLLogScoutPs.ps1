@@ -208,7 +208,9 @@ $global:ScenarioMenuOrdinals.Add(11 , $global:ScenarioBitTbl[$global:IO_NAME]   
 $global:ScenarioMenuOrdinals.Add(12 , $global:ScenarioBitTbl[$global:LIGHTPERF_NAME]    )
 $global:ScenarioMenuOrdinals.Add(13 , $global:ScenarioBitTbl[$global:PROCMON_NAME]      )
 
-
+# synchronizable hashtable (collection) to be used for thread synchronization
+[hashtable] $global:xevent_ht = @{}
+$global:xevent_ht.IsSynchronized = $true
 
 
 
