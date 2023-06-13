@@ -375,6 +375,19 @@ begin
 end
 go	       
 
+IF OBJECT_ID ('sp_mem_stats16','P') IS NOT NULL
+   DROP PROCEDURE sp_mem_stats16
+GO
+go
+CREATE PROCEDURE sp_mem_stats16  @runtime datetime , @lastruntime datetime =null
+AS 
+begin
+	exec sp_mem_stats15  @runtime, @lastruntime
+end
+go	       
+
+
+
 IF OBJECT_ID ('sp_Run_MemStats','P') IS NOT NULL
    DROP PROCEDURE sp_Run_MemStats
 GO
