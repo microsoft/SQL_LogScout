@@ -1,0 +1,520 @@
+﻿<Window
+	xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SQL_LogScout " Height="608" Width="750"  >
+	<Window.Resources>
+		<XmlDataProvider x:Key="xmlData" x:Name="XmlDataProviderName" />
+
+		<ControlTemplate x:Key="CheckBoxItemTemplate" >
+			<StackPanel Orientation="Horizontal">
+				<CheckBox VerticalAlignment="Center"  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor,
+                           AncestorType={x:Type CheckBox},
+                           AncestorLevel=1}, Path=IsChecked}" />
+			</StackPanel>
+		</ControlTemplate>
+
+	</Window.Resources>
+	<Grid Margin="20" DataContext="xmlData"  >
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="200"></ColumnDefinition>
+			<ColumnDefinition Width="*"></ColumnDefinition>
+			<ColumnDefinition Width="0"></ColumnDefinition>
+		</Grid.ColumnDefinitions>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="100" ></RowDefinition>
+			<RowDefinition ></RowDefinition>
+			<RowDefinition Height="30" ></RowDefinition>
+		</Grid.RowDefinitions>
+		<Border Grid.Row="0" Margin="0,-10,5,5" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" BorderBrush="DarkGray" BorderThickness="2" CornerRadius="10" >
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition ></ColumnDefinition>
+					<ColumnDefinition ></ColumnDefinition>
+				</Grid.ColumnDefinitions>
+				<Grid.RowDefinitions>
+					<RowDefinition ></RowDefinition>
+					<RowDefinition ></RowDefinition>
+				</Grid.RowDefinitions>
+
+				<StackPanel Orientation="Horizontal" Margin="2.5" Grid.Row="0" Grid.Column="0" >
+					<Label FontWeight="Bold" VerticalAlignment="Center" Width="96" >Log Location:</Label>
+					<TextBox x:Name="txtPresentDirectory" Width="150" Height="23"></TextBox>
+					<Button x:Name="ButtonPresentDirectory" Width="83" Height="23" Margin="5">Browse</Button>
+				</StackPanel>
+
+				<StackPanel Orientation="Horizontal" Margin="10" Grid.Row="0" Grid.Column="1" >
+					<CheckBox Margin="2.5" VerticalAlignment="Center" Visibility ="hidden" x:Name="overrideExistingCheckBox" Content="Overwrite Existing Logs">
+						<CheckBox.ToolTip>
+							<ToolTip>
+								<TextBlock Foreground="CadetBlue">
+									Folder \output already exists in the Log Location.
+									<LineBreak />
+									Check the box to overwrite it. Uncheck the box to create a new folder"
+									<Bold> \output_ddMMyyhhmmss </Bold>
+								</TextBlock>
+							</ToolTip>
+						</CheckBox.ToolTip>
+					</CheckBox>
+					<CheckBox x:Name="CheckBox1" Visibility ="hidden" Margin="2.5" VerticalAlignment="Center" Content="Auto Start/Stop" HorizontalAlignment="Right" />
+				</StackPanel>
+
+				<Border Visibility ="Collapsed"  Grid.RowSpan="2" Grid.Column="1" Margin="6,42,5,5" BorderThickness="2" CornerRadius="10" BorderBrush="DarkGray" >
+					<Border.Style>
+						<Style TargetType="Border">
+							<Style.Triggers>
+								<MultiDataTrigger>
+									<MultiDataTrigger.Conditions>
+										<Condition Binding="{Binding ElementName=CheckBox1, Path=IsChecked}" Value="False" />
+									</MultiDataTrigger.Conditions>
+									<Setter Property="IsEnabled" Value="False" />
+								</MultiDataTrigger>
+							</Style.Triggers>
+						</Style>
+					</Border.Style>
+					<StackPanel Margin="5">
+						<Label Margin="-5,-5,0,0" FontWeight="Bold" >Duration In Minutes:</Label>
+						<StackPanel Orientation="Horizontal">
+							<TextBlock HorizontalAlignment="Center">Start after:</TextBlock>
+							<TextBox Margin="0,0,20,0" Width="20" Height="18">1</TextBox>
+							<TextBlock  Width="97" Text="Running duration"/>
+							<TextBox  Width="20" Height="18">1</TextBox>
+						</StackPanel>
+					</StackPanel>
+				</Border>
+
+				<StackPanel Margin="2.5"  Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan="2" >
+					<Label Height="25" FontWeight="Bold" HorizontalAlignment="Left" Width="96" >SQL Instance :</Label>
+					<ComboBox Width="236" Height="23" x:Name="ComboBoxInstanceName"/>
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<Border  Grid.Row="1" Grid.Column="2" Margin="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" BorderBrush="DarkGray" BorderThickness="2" CornerRadius="10" >
+			<StackPanel Margin="5">
+
+				<Label FontWeight="Bold" >Select the SQLVesrion</Label>
+				<RadioButton Margin="10,0,0,0">SQL 2008</RadioButton>
+
+				<StackPanel Orientation="Horizontal" Margin="2.5"/>
+			</StackPanel>
+		</Border>
+
+		<Border  Margin="2.5" Grid.Row="1" Grid.Column="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" BorderBrush="DarkGray" BorderThickness="2" CornerRadius="10">
+			<StackPanel>
+				<Label FontWeight="Bold" >Scenario(s)</Label>
+				<CheckBox x:Name="basicPerfCheckBox" Margin="20,5,0,0" Content="Basic Logs" >
+					<CheckBox.Style>
+						<Style TargetType="CheckBox">
+							<Style.Triggers>
+								<MultiDataTrigger>
+									<MultiDataTrigger.Conditions>
+										<Condition Binding="{Binding ElementName=NoBasicCheckBox, Path=IsChecked}" Value="True" />
+									</MultiDataTrigger.Conditions>
+									<Setter Property="IsChecked" Value="False" />
+								</MultiDataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> Basic scenario </Bold> collects snapshot logs. It captures information:
+								<LineBreak />
+								Running drivers on the system
+								<LineBreak />
+								System information (systeminfo.exe)
+								<LineBreak />
+								Miscellaneous sql configuration (sp_configure, databases, etc)
+								<LineBreak />
+								Processes running on the system (Tasklist.exe)
+								<LineBreak />
+								Current active PowerPlan
+								<LineBreak />
+								Installed Windows Hotfixes
+								<LineBreak />
+								Running filter drivers
+								<LineBreak />
+								Event logs (system and application in both .CSV and .TXT formats)
+								<LineBreak />
+								SQL Errorlogs
+								<LineBreak />
+								SQL Agent logs
+								<LineBreak />
+								Polybase logs
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+				<CheckBox x:Name="generalPerfCheckBox" Margin="20,5,0,0" Content="General Performance" >
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/GeneralPerf/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> GeneralPerf scenario: </Bold> ollects all the Basic scenario logs as well as some long-term, continuous logs (until SQL LogScout is stopped).
+								<LineBreak />
+								Basic scenario
+								<LineBreak />
+								Performance Monitor counters for SQL Server instance and general OS counters
+								<LineBreak />
+								Extended Event (XEvent) trace captures batch-level starting/completed events, errors and warnings, log
+								<LineBreak />
+								growth/shrink, lock escalation and timeout, deadlock, login/logout
+								<LineBreak />
+								List of actively-running SQL traces and Xevents
+								<LineBreak />
+								Snapshots of SQL DMVs that track waits/blocking and high CPU queries
+								<LineBreak />
+								Query Data Store info (if that is active)
+								<LineBreak />
+								Tempdb contention info from SQL DMVs/system views
+								<LineBreak />
+								Linked Server metadata (SQL DMVs/system views)
+								<LineBreak />
+								Service Broker configuration information (SQL DMVs/system views)
+
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+				<CheckBox Margin="20,5,0,0" x:Name="LightPerfCheckBox" Content="Light Performance">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/LightPerf/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> LightPerf: </Bold> collects everything that the GeneralPerf scenario does, except the Extended Event traces. This is intended to
+								<LineBreak />
+								capture light perf data to get an overall system performance view without detailed execution of queries (no XEvents).
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+				<CheckBox  x:Name="DetailedPerfCheckBox" Margin="20,5,0,0" Content="Detailed Performance">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/DetailedPerf/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> DetailedPerf scenario: </Bold> collects the same info that the GeneralPerf scenario. The difference is in the Extended event trace
+								<LineBreak />
+								GeneralPerf scenario
+								<LineBreak />
+								Extended Event trace captures same as GeneralPerf. In addition in the same trace it captures statement level
+								<LineBreak />
+								starting/completed events and actual XML query plans (for completed queries)
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+				<CheckBox  x:Name="replicationPerfCheckBox" Margin="20,5,0,0" Content="Replication">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/ReplicationPerf/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> Replication scenario: </Bold> collects all the Basic scenario logs plus SQL Replication, Change Data Capture (CDC) and
+								<LineBreak />
+								Change Tracking (CT) information
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+				<CheckBox  x:Name="alwaysOnPerfCheckBox" Margin="20,5,0,0" Content="AlwaysOn">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/alwaysOnPerf/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+				<CheckBox  x:Name="networkTraceCheckBox" Margin="20,5,0,0" Content="NetworkTrace">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/networkTrace/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="memoryCheckBox" Margin="20,5,0,0" Content="Memory">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/memory/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="dumpMemoryCheckBox" Margin="20,5,0,0" Content="Memory Dump">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/dumpMemory/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="WPRCheckBox" Margin="20,5,0,0" Content="WPR">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/WPR/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="SetupCheckBox" Margin="20,5,0,0" Content="Setup">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/Setup/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="BackupRestoreCheckBox" Margin="20,5,0,0" Content="BackupRestore">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/BackupRestore/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="IOCheckBox" Margin="20,5,0,0" Content="IO">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/IO/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
+
+				<CheckBox  x:Name="NoBasicCheckBox" VerticalAlignment="Bottom" Margin="20,80,0,0"  Content="NoBasic" Height="21">
+
+					<CheckBox.Style>
+						<Style TargetType="CheckBox">
+							<Style.Triggers>
+								<MultiDataTrigger>
+									<MultiDataTrigger.Conditions>
+										<Condition Binding="{Binding ElementName=basicPerfCheckBox, Path=IsChecked}" Value="True" />
+									</MultiDataTrigger.Conditions>
+									<Setter Property="IsChecked" Value="False" />
+								</MultiDataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+					<CheckBox.ToolTip>
+						<ToolTip>
+							<TextBlock Foreground="CadetBlue">
+								<Bold> No Basic: </Bold> will avoide basic log collection
+							</TextBlock>
+						</ToolTip>
+					</CheckBox.ToolTip>
+				</CheckBox>
+
+			</StackPanel>
+		</Border>
+
+		<Border  Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" BorderBrush="DarkGray" BorderThickness="2" CornerRadius="10">
+
+			<TabControl Margin="5" BorderBrush="Transparent" BorderThickness="5" >
+				<TabItem Header="Perfmon" >
+					<ListView x:Name="listExtraSkills" ItemsSource="{Binding}">
+						<ListView.ItemTemplate>
+							<DataTemplate>
+								<CheckBox IsChecked="{Binding State}" Content="{Binding Caption}" />
+							</DataTemplate>
+						</ListView.ItemTemplate>
+					</ListView>
+				</TabItem>
+				<TabItem Header="XEvent"  >
+					<StackPanel >
+						<TreeView VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Height="350">
+
+							<TreeViewItem x:Name="TVI_xevent_general" IsEnabled="False">
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventGeneral_CheckBox" />
+										<TextBlock Text="xevent_general" />
+									</StackPanel>
+								</TreeViewItem.Header>
+								<ListView x:Name="listXevnets" ItemsSource="{Binding}" Height ="200" Width="200" >
+									<ListView.ItemTemplate>
+										<DataTemplate>
+											<CheckBox IsChecked="{Binding State}" Content="{Binding Caption}">
+												<CheckBox.Style>
+													<Style TargetType="{x:Type CheckBox}">
+														<Setter Property="Visibility" Value="Visible"/>
+														<Style.Triggers>
+															<DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="{x:Null}">
+																<Setter Property="Visibility" Value="Collapsed"/>
+															</DataTrigger>
+														</Style.Triggers>
+													</Style>
+												</CheckBox.Style>
+											</CheckBox>
+										</DataTemplate>
+									</ListView.ItemTemplate>
+								</ListView>
+							</TreeViewItem>
+
+							<TreeViewItem x:Name="TVI_xevent_detailed" IsEnabled="False"  >
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventDetailed_CheckBox" />
+										<TextBlock Text="xevent_detailed" />
+									</StackPanel>
+								</TreeViewItem.Header>
+								<ListView x:Name="list_xevent_detailed" ItemsSource="{Binding}" Height ="200" Width="200" >
+									<ListView.ItemTemplate>
+										<DataTemplate>
+											<CheckBox IsChecked="{Binding State}" Content="{Binding Caption}">
+												<CheckBox.Style>
+													<Style TargetType="{x:Type CheckBox}">
+														<Setter Property="Visibility" Value="Visible"/>
+														<Style.Triggers>
+															<DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="{x:Null}">
+																<Setter Property="Visibility" Value="Collapsed"/>
+															</DataTrigger>
+														</Style.Triggers>
+													</Style>
+												</CheckBox.Style>
+											</CheckBox>
+										</DataTemplate>
+									</ListView.ItemTemplate>
+								</ListView>
+							</TreeViewItem>
+
+							<TreeViewItem x:Name="TVI_xevent_core" IsEnabled="False">
+							<TreeViewItem.Header>
+								<StackPanel Orientation="Horizontal">
+									<CheckBox x:Name="xeventcore_CheckBox" />
+									<TextBlock Text="xevent_core" />
+								</StackPanel>
+							</TreeViewItem.Header>
+								<ListView x:Name="list_xevent_core" ItemsSource="{Binding}" Height ="150" Width="200" >
+									<ListView.ItemTemplate>
+										<DataTemplate>
+											<CheckBox IsChecked="{Binding State}" Content="{Binding Caption}">
+												<CheckBox.Style>
+													<Style TargetType="{x:Type CheckBox}">
+														<Setter Property="Visibility" Value="Visible"/>
+														<Style.Triggers>
+															<DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="{x:Null}">
+																<Setter Property="Visibility" Value="Collapsed"/>
+															</DataTrigger>
+														</Style.Triggers>
+													</Style>
+												</CheckBox.Style>
+											</CheckBox>
+										</DataTemplate>
+									</ListView.ItemTemplate>
+								</ListView>
+							</TreeViewItem>
+
+							<TreeViewItem IsEnabled="False" x:Name="TVI_xevent_AlwaysOn">
+								<TreeViewItem.Header>
+									<StackPanel Orientation="Horizontal">
+										<CheckBox x:Name="XeventAlwaysOn_CheckBox" />
+										<TextBlock Text="xevent_AlwaysOn_Data_Movement" />
+									</StackPanel>
+								</TreeViewItem.Header>
+								<ListView x:Name="list_xevent_AlwaysOn" ItemsSource="{Binding}" Height ="200" Width="200" >
+									<ListView.ItemTemplate>
+										<DataTemplate>
+											<CheckBox IsChecked="{Binding State}">
+												<CheckBox.Content>
+													<TextBlock Text="{Binding Caption}"/>
+												</CheckBox.Content>
+											</CheckBox>
+										</DataTemplate>
+
+									</ListView.ItemTemplate>
+								</ListView>
+							</TreeViewItem>
+						</TreeView>
+					</StackPanel>
+				</TabItem>
+			</TabControl>
+		</Border>
+		<StackPanel Grid.Row="3" Grid.ColumnSpan="3">
+			<!--<TextBlock Grid.Row="3"  Grid.ColumnSpan="3" Foreground="CadetBlue" Height="47" >
+				<Bold> Output folder: </Bold> All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder.
+				<LineBreak />
+				All the diagnostic log files are collected in the (or _ddMMyyhhmmss) folder.
+				<LineBreak />
+				By default this folder is created in the same location where SQL LogScout files reside (present directory).
+			</TextBlock >-->
+			<StackPanel Height="25" VerticalAlignment="Top" Margin="5" Grid.Row="3" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+				<Button  Width="50"   Content="Ok" IsDefault="true" Margin="0,0,10,0" Name="okButton" />
+				<Button  Width="50" Content="Cancel" IsCancel="True"  />
+			</StackPanel>
+		</StackPanel>
+	</Grid>
+</Window>
