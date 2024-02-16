@@ -30,11 +30,20 @@ param(
     [string]$SummaryFilename = ".\output\SUMMARY.TXT",
 
     [Parameter()]
-    [string]$DetailedFilename = ".\output\DETAILED.TXT"
+    [string]$DetailedFilename = ".\output\SearchForErrors_Detailed.TXT"
     )
 
     try {
 
+        $return_val = $true
+
+        #clear contents of the detailed file
+        if (Test-Path $DetailedFilename)
+        {
+            Clear-Content -Path $DetailedFilename
+        }
+
+        #search the debug log for errors
         $AllMatches = Select-String -Path $LogNamePattern -Pattern $MessagePatterns
 
         [System.Text.StringBuilder]$detailedOutput = New-Object -TypeName System.Text.StringBuilder
@@ -56,6 +65,12 @@ param(
             [void]$detailedOutput.AppendLine($Match.LineNumber.ToString() + ": " + $Match.Line)
         }
 
+        #write to the detailed output to file if there is any error found
+        if (-not([string]::IsNullOrWhiteSpace($detailedOutput.ToString()))){
+            $detailedOutput.ToString() | Out-File $DetailedFilename -Append
+        }
+
+        #write summary to file
         $SummaryMsg = "Total Error Pattern Match: " + $AllMatches.Matches.Count.ToString()
 
         if(0 -eq $AllMatches.Matches.Count)
@@ -64,15 +79,25 @@ param(
         } 
         else 
         {
-            $SummaryMsg = ($SummaryMsg + " "*(60 - $SummaryMsg.Length) + "ERRORS FOUND!")
+            # build the full path to the detailed file
+            $cwd = (Get-location).Path 
+            $detailedFileFullPath = (Join-Path $cwd $DetailedFilename) | Resolve-Path
+            
+            $SummaryMsg = ($SummaryMsg + " "*(60 - $SummaryMsg.Length) + "ERRORS FOUND! (See '$detailedFileFullPath' for more details)")
+            $return_val = $false
         }
         
         Write-Output ($SummaryMsg) | Out-File $SummaryFilename -Append
 
-        if (-not([string]::IsNullOrWhiteSpace($detailedOutput.ToString()))){
-            $detailedOutput.ToString() | Out-File $DetailedFilename -Append
-        }
 
+
+        if ($return_val -eq $false)
+        {
+            
+            Write-Host "Printing detailed Search-Log test output '$detailedFileFullPath)':`n"
+            Get-Content -Path $DetailedFilename | Out-Host
+        }
+        return $return_val
     }
     catch {
         
@@ -81,6 +106,6 @@ param(
         $error_offset = $PSItem.InvocationInfo.OffsetInLine
         $error_script = $PSItem.InvocationInfo.ScriptName
         Write-LogError "Function '$($MyInvocation.MyCommand)' failed with error:  $error_msg (line: $error_linenum, offset: $error_offset, file: $error_script)"    
-    
+        $return_val = $false
     }
 }

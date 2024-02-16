@@ -135,7 +135,7 @@ function Set-NewOutputPath
     
     try 
     {
-        [string] $new_output_folder_name = "_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
+        [string] $new_output_folder_name = "_" + @(Get-Date -Format yyyyMMddTHHmmss) + "\"
         $global:output_folder = $global:output_folder.Substring(0, ($global:output_folder.Length-1)) + $new_output_folder_name        
     }
     catch
@@ -238,7 +238,7 @@ function ReuseOrRecreateOutputFolder()
                 Write-LogWarning "It appears that output folder '$global:output_folder' has been used before."
                 Write-LogWarning "You can choose to:"
                 Write-LogWarning " - Delete (d) the \output folder contents and recreate it"
-                Write-LogWarning " - Create a new (n) folder using '\Output_ddMMyyhhmmss' format. You can manually delete this folder in the future" 
+                Write-LogWarning " - Create a new (n) folder using '\Output_yyyyMMddTHHmmss' format. You can manually delete this folder in the future" 
     
                 while (-not(($DeleteOrNew -eq "D") -or ($DeleteOrNew -eq "N"))) 
                 {
@@ -283,9 +283,9 @@ function ReuseOrRecreateOutputFolder()
         elseif ($DeleteOrNew -eq "N") 
         {
 
-            #these two calls updates the two globals for the new output and internal folders using the \Output_ddMMyyhhmmss format.
+            #these two calls updates the two globals for the new output and internal folders using the \Output_yyyyMMddTHHmmss format.
             
-            # [string] $new_output_folder_name = "_" + @(Get-Date -Format ddMMyyhhmmss) + "\"
+            # [string] $new_output_folder_name = "_" + @(Get-Date -Format yyyyMMddTHHmmss) + "\"
             # $global:output_folder = $global:output_folder.Substring(0, ($global:output_folder.Length-1)) + $new_output_folder_name
 
             Set-NewOutputPath
@@ -416,7 +416,10 @@ function StartNewProcess()
 
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
-    [console]::TreatControlCAsInput = $true
+    if ($global:gDisableCtrlCasInput -eq "False")
+    {
+        [console]::TreatControlCAsInput = $true
+    }
 
     try 
     {
@@ -490,12 +493,442 @@ function StartNewProcess()
 
 }
 
+# fucntion to collect SQL SERVERPROPERTY and cahe it in $global:SQLSERVERPROPERTYTBL 
+# if globla variable is populated it will use it.
+
+function getServerproperty() 
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    $SQLSERVERPROPERTYTBL = @{}
+    [String] $query 
+    
+    if ($global:SQLSERVERPROPERTYTBL.Count -gt 0) {
+        Write-LogDebug "SQLSERVERPROPERTYTBL cached " -DebugLogLevel 2
+        return $global:SQLSERVERPROPERTYTBL
+    }
+
+    $properties = "BuildClrVersion",
+                    "Collation",
+                    "CollationID",
+                    "ComparisonStyle",
+                    "ComputerNamePhysicalNetBIOS",
+                    "Edition",
+                    "EditionID",
+                    "EngineEdition",
+                    "FilestreamConfiguredLevel",
+                    "FilestreamEffectiveLevel",
+                    "FilestreamShareName",
+                    "HadrManagerStatus",
+                    "InstanceDefaultBackupPath",
+                    "InstanceDefaultDataPath",
+                    "InstanceDefaultLogPath",
+                    "InstanceName",
+                    "IsAdvancedAnalyticsInstalled",
+                    "IsBigDataCluster",
+                    "IsClustered",
+                    "IsExternalAuthenticationOnly",
+                    "IsExternalGovernanceEnabled",
+                    "IsFullTextInstalled",
+                    "IsHadrEnabled",
+                    "IsIntegratedSecurityOnly",
+                    "IsLocalDB",
+                    "IsPolyBaseInstalled",
+                    "IsServerSuspendedForSnapshotBackup",
+                    "IsSingleUser",
+                    "IsTempDbMetadataMemoryOptimized",
+                    "IsXTPSupported",
+                    "LCID",
+                    "LicenseType",
+                    "MachineName",
+                    "NumLicenses",
+                    "PathSeparator",
+                    "ProcessID",
+                    "ProductBuild",
+                    "ProductBuildType",
+                    "ProductLevel",
+                    "ProductMajorVersion",
+                    "ProductMinorVersion",
+                    "ProductUpdateLevel",
+                    "ProductUpdateReference",
+                    "ProductVersion",
+                    "ResourceLastUpdateDateTime",
+                    "ResourceVersion",
+                    "ServerName",
+                    "SqlCharSet",
+                    "SqlCharSetName",
+                    "SqlSortOrder",
+                    "SqlSortOrderName",
+                    "SuspendedDatabaseCount"    
+
+    foreach ($propertyName in $properties) {
+        $query += "  SELECT SERVERPROPERTY ('$propertyName') as value, cast('$propertyName' as varchar(100)) as PropertyName UNION `r`n"
+    }
+    $query = $query.Substring(0,$query.Length - 9)
+
+    Write-LogDebug "Serverproperty Query : $query" -DebugLogLevel 2
+
+    $result = execSQLQuery -SqlQuery $query
+    $emptyTBL =  @{Empty=$true}
+
+    #if no connection, return null
+    if ($false -eq $result)
+    {
+        Write-LogDebug "Failed to connect to SQL instance (may be expected behavior)" -DebugLogLevel 2
+        return $emptyTBL
+    }
+    else 
+    {
+        #We connected, but resultset is blank for some reason. Return null.
+        if ($result.Tables[0].rowcount -eq 0)
+        {
+            Write-LogDebug "No SERVERPROPERTY returned" -DebugLogLevel 2
+            return $emptyTBL
+        }
+    }
+
+    foreach ($row in $result.Tables[0].Rows) {
+        $SQLSERVERPROPERTYTBL.add($row.PropertyName.ToString().Trim(), $row.value)
+    }
+    
+    $global:SQLSERVERPROPERTYTBL = $SQLSERVERPROPERTYTBL
+
+    return $SQLSERVERPROPERTYTBL
+}
+
+function getSQLConnection ([Boolean] $SkipStatusCheck = $false)
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    try
+    {
+        $globalCon = $global:SQLConnection
+
+        if ( $null -eq $globalCon) 
+        {
+            Write-LogDebug "SQL Connection is null, initializing now" -DebugLogLevel 2
+
+            [System.Data.SqlClient.SqlConnection] $globalCon = New-Object System.Data.SqlClient.SqlConnection
+            $conString = getSQLConnectionString -SkipStatusCheck $SkipStatusCheck
+            if ($false -eq $conString ) 
+            {
+                #we failed to get proper conneciton string
+                Write-LogDebug "We failed to get connection string, check pervious messages to for more details"  -DebugLogLevel 3
+            
+                return $false
+            }
+
+            $globalCon.ConnectionString = $conString
+            
+            $globalCon.Open() | Out-Null
+            
+            $global:SQLConnection = $globalCon
+        
+        } elseif (($globalCon.GetType() -eq [System.Data.SqlClient.SqlConnection]) -and ($globalCon.State -ne "Open") )
+        {
+            Write-LogDebug "Connection exists and is not Open, opening now" -DebugLogLevel 2
+            
+            $globalCon.Open() | Out-Null
+        } elseif ( $globalCon.GetType() -ne [System.Data.SqlClient.SqlConnection]) 
+        {
+
+            Write-LogError "Could not create or obtain SqlConnection object  "  $globalCon.GetType()
+
+            return $false
+        }
+        
+        return $globalCon
+
+    }
+
+    catch {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return $false
+    }
+}
+
+function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false)
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    try 
+    {
+        if 
+        (
+            ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)    -or    
+            ($true -eq $global:instance_independent_collection )     -or 
+            ( ("Running" -ne $global:sql_instance_service_status) -and (-$false -eq $SkipStatusCheck) )
+        )
+        {
+            Write-LogWarning "No SQL Server instance found, instance is offline, or instance-independent collection. Not executing SQL queries."
+            return $false
+        }
+        elseif ([String]::IsNullOrEmpty($global:sql_instance_conn_str) -eq $false)
+        {
+            
+            $SQLInstance = $global:sql_instance_conn_str
+        } 
+        else 
+        {
+            Write-LogError "SQL Server instance name is empty. Exiting..."
+            exit
+        }
+
+        Write-LogDebug "Received parameter SQLInstance: `"$SQLInstance`"" -DebugLogLevel 2
+        
+        #default integrated security and encryption with trusted server certificate
+        return "Server=$SQLInstance;Database=master;Application Name=SQLLogScout;Integrated Security=True;Encrypt=True;TrustServerCertificate=true;"
+    }
+
+    catch {
+       HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+       return $false
+    }        
+}
+
+function getSQLCommand([Boolean] $SkipStatusCheck)
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    try 
+    {
+     
+        $SqlCmd = $global:SQLCommand
+        
+        if ($null -eq $SqlCmd) 
+        {
+            $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+            $conn = getSQLConnection($SkipStatusCheck)
+
+            if ($false -eq $conn) {
+                #failed to obtain a connection
+                Write-LogDebug "Failed to get a connection object, check previous messages" -DebugLogLevel 3
+                return $false
+            }
+            $SqlCmd.Connection = $conn
+        }
+        
+        if ($SqlCmd.GetType() -eq [System.Data.SqlClient.SqlCommand]) 
+        {
+            return $SqlCmd
+        }
+
+        Write-LogDebug "Did not get a valid SQLCommand , Type : $SqlCmd.GetType() " -DebugLogLevel 2 
+        
+        #if type is not correct don't return it
+        return $false
+    }
+
+    catch {
+       HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+       return $false
+    }
+}
+
+function execSQLNonQuery ($SqlQuery,[Boolean] $TestFailure = $false) 
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    return execSQLQuery -SqlQuery $SqlQuery  -Command "ExecuteNonQuery" -TestFailure $TestFailure
+}
+
+function execSQLReader($SqlQuery, $CommandBehavior, $TestFailure = $false, $CommandType = [System.Data.CommandType]::StoredProcedure)
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    return execSQLQuery -SqlQuery $SqlQuery  -Command "ExecuteReader" -CommandBehavior $CommandBehavior -TestFailure $TestFailure
+}
+
+function execSQLScalar ($SqlQuery, [int] $Timeout = 30, [Boolean] $TestFailure = $false) 
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    return execSQLQuery -SqlQuery $SqlQuery  -Command "ExecuteScalar" -Timeout $Timeout -TestFailure $TestFailure
+}
+function saveContentToFile() 
+{
+    [CmdletBinding()]
+    param 
+    (
+        [Parameter(Mandatory, Position=0)]
+        [String]$content,
+        [Parameter(Mandatory, Position=1)]
+        [String] $fileName
+    )
+    
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    $content | out-file $fileName | Out-Null
+    return $true
+}
+function saveSQLQuery() 
+{
+[CmdletBinding()]
+    param 
+    (
+        [Parameter(Mandatory, Position=0)]
+        [String]$SqlQuery,
+        [Parameter(Mandatory, Position=1)]
+        [String] $fileName,
+        [int] $Timeout = 30,
+        [Boolean] $TestFailure = $false
+    )
+
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    $DS = execSQLQuery -SqlQuery $SqlQuery -Timeout $Timeout -TestFailure $TestFailure
+    
+    if ($DS.GetType() -eq [System.Data.DataSet])
+    {
+        try {
+            [String] $content =""
+            foreach ($row in $DS.Tables[0].Rows)
+            {
+                $content = $content + $row[0]
+            }
+            Write-LogDebug "Saving query to file $fileName"
+
+            
+            $content | out-file $fileName | Out-Null
+            return $true
+        } catch 
+        {
+            Write-LogError "Could not save query to file $fileName "
+    
+            $mycommand = $MyInvocation.MyCommand
+            $error_msg = $PSItem.Exception.InnerException.Message
+            Write-LogError "$mycommand Function failed with error:  $error_msg"
+    
+            return $false
+        }
+        
+
+    } else {
+        Write-LogDebug "Query failed, errors mabye in execSQLQuery messages " -DebugLogLevel 3
+        return $false
+    }
+    
+} #saveSQLQuery -SqlQuery -fileName
+
+#execSQLQery connect to SQL Server using System.data objects
+#The simplest way to use it is 
+
+<#
+    .SYNOPSIS
+        Returns false if query fails and Dataset if it succeeds 
+
+    .DESCRIPTION
+        Returns false if query fails and Dataset if it succeeds 
+        Can be used to perofrm ExecNonQuery and ExcuteReader as well
+
+    .EXAMPLE
+        execQuery -SqlQuery "SELECT 1 "
+#>
+
+function execSQLQuery()
+{
+    [CmdletBinding()]
+    param 
+    (
+        [Parameter(Mandatory, Position=0)]
+        [String]$SqlQuery,
+        [Parameter(Mandatory=$false)]
+        [Boolean]$SkipStatusCheck = $false,
+        [Parameter(Mandatory=$false)]
+        [Boolean]$TestFailure = $false,
+        [String]$Command = "SelectCommand",
+        [System.Data.CommandBehavior] $CommandBehavior,
+        [int] $Timeout = 30
+    )
+    
+     Write-LogDebug "inside " $MyInvocation.MyCommand
+        
+     #if in Teting Mode return false immediately
+     if ($TestFailure) { return $false }
+     
+     $permittedCommands = "SelectCommand", "ExecuteNonQuery", "ExecuteReader", "ExecuteScalar"
+     
+     if (-not( $permittedCommands -contains $command) ) 
+     {
+         Write-LogWarning "Permitted commands for execQuery are : " $permittedCommands.ToString
+         exit
+     }
+
+    Write-LogDebug "Creating SqlClient objects and setting parameters" -DebugLogLevel 2
+        
+    $SqlCmd = getSQLCommand($SkipStatusCheck)
+    
+    if ($false -eq $SqlCmd) 
+    {
+        return $false
+    }
+
+    $SqlCmd.CommandText = $SqlQuery
+    $SqlCmd.CommandTimeout = $Timeout
+    
+    $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
+    $DataSetResult = New-Object System.Data.DataSet
+
+    Write-LogDebug "About to call the required command : $Command " -DebugLogLevel 2
+    try {
+        
+        if ($Command -eq "SelectCommand") 
+        {
+            $SqlAdapter.SelectCommand = $SqlCmd
+            $SqlAdapter.Fill($DataSetResult) | Out-Null #fill method returns rowcount, Out-Null prevents the number from being printed in console
+            return $DataSetResult
+        } elseif ($Command -eq "ExecuteNonQuery") 
+        {           
+            $SqlCmd.ExecuteNonQuery() | Out-Null
+            return $true;
+
+        } elseif ($command -eq "ExecuteScalar") {
+            return $SqlCmd.ExecuteScalar()
+
+        } elseif ($Command -eq "ExecuteReader")
+        {
+            #this shold eventually be passed as parameter if other function will require different return values.
+            $SqlRetValue = New-Object System.Data.SqlClient.SqlParameter
+            $SqlRetValue.DbType = [System.Data.DbType]::Int32
+            $SqlRetValue.Direction = [System.Data.ParameterDirection]::ReturnValue
+            
+            $SqlCmd.Parameters.Add($SqlRetValue) | Out-Null
+
+            #SQL Reader and ExecuteNonQuery can execute SP
+            $SqlCmd.CommandType = [System.Data.CommandType]::StoredProcedure
+            
+            $SqlReader = $SqlCmd.ExecuteReader($CommandBehavior)
+
+            $result = [PSCustomObject] @{
+                SQLReader = $SqlReader
+                ReturnValue = $SqlRetValue
+            }
+            
+            return $result;
+        }
+    }
+    catch 
+    {
+        Write-LogError "Could not connect to SQL Server instance '$SQLInstance' to perform query."
+
+        $mycommand = $MyInvocation.MyCommand
+        $error_msg = $PSItem.Exception.InnerException.Message
+        Write-LogError "$mycommand Function failed with error:  $error_msg"
+
+        # we can't connect to SQL, probably whole capture will fail, so we just abort here
+        return $false
+    }
+}
+
 function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name, [bool]$is_query=$false, [string]$query_text, [bool]$has_output_results=$true, [bool]$wait_sync=$false, [string]$server = $global:sql_instance_conn_str, [string]$setsqlcmddisplaywidth)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
 
-    [console]::TreatControlCAsInput = $true
+    if ($global:gDisableCtrlCasInput -eq "False")
+    {
+        [console]::TreatControlCAsInput = $true
+    }
 
 
     # if query is empty and script should be populated
@@ -516,7 +949,9 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
         $input_script = BuildInputScript $global:present_directory $input_script_name 
         
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000"
+
+        #command arguments for sqlcmd; server connection, trusted connection, Hostname, wide output, and encryption negotiation
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -C -N"
 
         #if secondary replica has read-intent, we add -KReadOnly to avoid failures on those secondaries
         if ($global:is_secondary_read_intent_only -eq $true)
@@ -524,6 +959,7 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
             $argument_list += " -KReadOnly"
         }
 
+        #if query is passed, use the -Q parameter
         if (($is_query -eq $true) -and ([string]::IsNullOrWhiteSpace($query_text) -ne $true) )
         {
             $argument_list += " -Q`"" + $query_text + "`""
@@ -581,6 +1017,28 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
 
 #======================================== END of Process management section
 
+#check if HADR is enabled from serverproperty
+function isHADREnabled() 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    
+    $propertiesList = $global:SQLSERVERPROPERTYTBL
+    
+    if (!$propertiesList) {
+        #We didn't receive server properteis     
+        Write-LogError " getServerproperty returned no results " 
+        return $false
+    }
+    
+    $isHadrEnabled = $propertiesList."IsHadrEnabled"
+
+    if ($isHadrEnabled -eq "1") {
+        return $True
+    }
+    
+    return $false
+
+}
 
 #check if cluster - based on cluster service status and cluster registry key
 function IsClustered()
@@ -845,3 +1303,238 @@ Function GetRegistryKeys
     }
 } #End of GetRegistryKeys
 
+#Test connection functionality to see if SQL accessible.
+function Test-SQLConnection ([string]$SQLServerName,[string]$SqlQuery)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    if ([string]::IsNullOrEmpty($SqlQuery))
+    {
+        $Sqlquery = "SELECT @@SERVERNAME"
+    }
+    
+    $DataSetPermissions = execSQLQuery -SqlQuery $Sqlquery -SkipStatusCheck $true #-TestFailure $true
+    
+    if ($DataSetPermissions -eq $false) {
+        return $false;
+    } else {
+        return $true;
+    }
+}
+
+#Call this function to check if your version is supported checkSQLVersion -VersionsList @("SQL2022RTMCU8", "SQL2019RTMCU23")
+#The function checks if current vesion is higher than versionsList, if you want it lowerthan, then user -LowerThan:$true
+function checkSQLVersion ([String[]] $VersionsList, [Boolean]$LowerThan = $false, [Long] $SQLVersion = -1)
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    #in case we decide to pass the version , for testing or any other reason
+    if ($SQLVersion -eq -1) {
+        $currentSQLVersion =  $global:SQLVERSION 
+    } else {
+        $currentSQLVersion = $SQLVersion
+    }
+
+    [long[]] $versions = @()
+    foreach ($ver in $VersionsList) 
+    {
+        $versions += $global:SqlServerVersionsTbl[$ver]
+    }
+
+    #upper limit is used to up the version to its ceiling
+    $upperLimit = 999999999
+    
+    #count is needed to check if we are on the upper limit of the array
+    [int] $count = 0
+
+    $modulusFactor = 1000000000
+
+    #sorting is important to make sure we compare the upper limits first and exit early
+    if (-Not $LowerThan) 
+    {
+        $sortedVersions = $versions  | Sort-Object -Descending
+    } else {
+        $sortedVersions = $versions  | Sort-Object 
+    }
+
+    foreach ($v in $sortedVersions)
+    {
+        $vLower = $v - ($v % $modulusFactor)
+        
+        #if we are on the head of the array, make the limit significantly high and low to encompass all above upper ad below lower.
+        if ($count -eq 0 )
+        {
+            $vUpper = $upperLimit * $modulusFactor * 1000
+            $vLower = 0
+        } else {
+            $vUpper = $vLower + $upperLimit
+        }
+
+        #This bit identifies the upper/lower limits to compare to, to avoid having copy of the same if statement
+        if (-Not $LowerThan) {
+            $gtBaseValue = $v
+            $leBaseValue = $vUpper
+        } else {
+            $gtBaseValue = $vLower
+            $leBaseValue = $v-1 #-1 needed to make sure we are less than Base not equl.
+        }
+        Write-LogDebug "current $currentSQLVersion gt $gtBaseValue lt $leBaseValue" -DebugLogLevel 3
+        if ($currentSQLVersion -ge $gtBaseValue -and $currentSQLVersion -le $leBaseValue )
+        {
+            Write-LogDebug "Version $currentSQLVersion is supported in $v" -DebugLogLevel 3
+            return $true
+        }
+        $count ++
+    }
+
+    Write-LogDebug "Version $currentSQLVersion is not supported" -DebugLogLevel 3
+    #we reach here, we are unsupported
+    return $false
+}
+
+function GetLogPathFromReg([string]$server, [string]$logType) 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    try
+    {
+        $vInstance = ""
+        $vRegInst = ""
+        $RegPathParams = ""
+        $retLogPath = ""
+        $regInstNames = "HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL"
+
+
+        # extract the instance name from the server name
+        $instByPort = GetSQLInstanceNameByPortNo($server)
+        Write-LogDebug "Result from GetSQLInstanceNameByPortNo is '$instByPort'" -DebugLogLevel 2
+        
+        if ($true -ne [String]::IsNullOrWhiteSpace($instByPort))
+        {
+            $vInstance = $instByPort
+        }
+        else 
+        {
+            if ($server -like '*\*')
+            {
+                $vInstance = Get-InstanceNameOnly($server)
+            }
+            else 
+            {
+                $vInstance = "MSSQLSERVER"
+            }
+        }
+        
+        Write-LogDebug "Instance name is $vInstance" -DebugLogLevel 2
+
+        # make sure a Instance Names is a valid registry key (could be missing if SQL Server is not installed or registry is corrupt)
+        if (Test-Path -Path $regInstNames)
+        {
+            $vRegInst = (Get-ItemProperty -Path $regInstNames).$vInstance
+        }
+        else
+        {
+            Write-LogDebug "Registry regInstNames='$regInstNames' is not valid or doesn't exist" -DebugLogLevel 2
+            return $false
+        }
+        
+
+        # validate the registry value with the instance name appended to the end
+        # for example, HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL\SQL2017
+        if ([String]::IsNullOrWhiteSpace($vRegInst) -eq $true)
+        {
+            Write-LogDebug "Registry value vRegInst is null or empty. Not getting files from Log directory" -DebugLogLevel 2
+            return $false
+        }
+        else
+        {
+            # get the SQL Server registry key + instance name
+            $RegPathParams = "HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst 
+
+            switch ($logType)
+            {
+                {($_ -eq "ERRORLOG") -or ($_ -eq "POLYBASELOG")}
+                {
+                    # go after the startup params registry key 
+                    $RegPathParams +=  "\MSSQLServer\Parameters"
+                
+                    # validate key to get the path to the ERRORLOG
+                    if (Test-Path -Path $RegPathParams)
+                    {
+                        # strip the -e from the beginning of the string
+                        $retLogPath = (Get-ItemProperty -Path $RegPathParams).SQLArg1 -replace "^-e", ""
+    
+                        # strip the word ERRORLOG from the end of the string
+                        $retLogPath = Split-Path $retLogPath -Parent
+
+                        if ($logType -eq "POLYBASELOG") 
+                        {
+                            # append the PolyBase folder name to the end of the path
+                            $retLogPath = $retLogPath + "\PolyBase\"
+                        }
+                    }
+                    else
+                    {
+                        Write-LogDebug "Registry RegPathParams='$RegPathParams' is not valid or doesn't exist" -DebugLogLevel 2
+                        return $false
+                    }
+                }
+                "DUMPLOG"
+                {
+                    # go after the dump configured registry key
+                    # HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\vRegInst\CPE
+                    $vRegDmpPath = $RegPathParams + "\CPE"
+                
+                    if (Test-Path -Path $vRegDmpPath)
+                    {
+                        # strip the -e from the beginning of the string
+                        $retLogPath = (Get-ItemProperty -Path $vRegDmpPath).ErrorDumpDir
+                    }
+                    else
+                    {
+                        Write-LogDebug "Registry RegDmpPath='$vRegDmpPath' is not valid or doesn't exist" -DebugLogLevel 2
+                        return $false
+                    }
+                }
+                Default
+                {
+                    Write-LogDebug "Invalid logType='$logType' passed to GetLogPathFromReg()" -DebugLogLevel 2
+                    return $false
+                }
+            }
+        }
+
+        # make sure the path to the log directory is valid
+        if (Test-Path -Path $retLogPath -PathType Container)
+        {
+            Write-LogDebug "Log path is $retLogPath" -DebugLogLevel 2
+        }
+        else
+        {
+            if ($logType -ne "POLYBASELOG")
+            {
+                Write-LogWarning "The directory $retLogPath is not accessible to collect logs. Check the disk is mounted and the folder is valid. Continuing with other collectors."
+            }
+            #Give user time to read the prompt.
+            Start-Sleep -Seconds 4
+
+            Write-LogDebug "Log path '$retLogPath' is not valid or doesn't exist" -DebugLogLevel 2
+            return $false
+        }
+
+        # return the path to directory pulled from registry
+        return $retLogPath
+        
+    }
+    catch 
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+}
+function setDisableCtrlCasInput 
+{
+    if ($global:gDisableCtrlCasInput -eq "False")
+    {
+        [console]::TreatControlCAsInput = $true
+    }
+}

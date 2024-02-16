@@ -81,6 +81,10 @@ param(
         Write-LogInformation ($CustomLogMessage + " " + $ret)
     }
 
+    #Read-Host is the cause of resetting disableCtrlCAsInput so we need to check reset it after every use.
+    
+    setDisableCtrlCasInput
+
     return $ret
 }
 

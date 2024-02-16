@@ -83,8 +83,38 @@
 				</Border>
 
 				<StackPanel Margin="2.5"  Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan="2" >
-					<Label Height="25" FontWeight="Bold" HorizontalAlignment="Left" Width="96" >SQL Instance :</Label>
-					<ComboBox Width="236" Height="23" x:Name="ComboBoxInstanceName"/>
+					<Label Height="23" FontWeight="Bold" HorizontalAlignment="Left" Width="96" >SQL Instance :</Label>
+                    <ComboBox Width="300" Height="23" x:Name="ComboBoxInstanceName">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="border">
+									<Grid>
+										<Grid.ColumnDefinitions>
+											<ColumnDefinition Width="Auto"/>
+											<ColumnDefinition Width="*"/>
+										</Grid.ColumnDefinitions>
+
+										<!-- TextBlock for Name -->
+										<TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" HorizontalAlignment="Stretch" Foreground="#333333"/>
+
+										<!-- TextBlock for DisplayStatus -->
+										<TextBlock Grid.Column="1" Text="{Binding Status}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="10 0 0 0" FontStyle="Italic"/>
+									</Grid>
+                                </Border>
+
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Status}" Value="Stopped">
+										<Setter TargetName="border" Property="Width" Value="300"/>
+										<Setter TargetName="border" Property="Background" Value="#ffe6e6"/>
+                                    </DataTrigger>
+									<DataTrigger Binding="{Binding Status}" Value="Running">
+										<Setter TargetName="border" Property="Width" Value="300"/>
+										<Setter TargetName="border" Property="Background" Value="#f2ffe6"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
 				</StackPanel>
 			</Grid>
 		</Border>
@@ -92,7 +122,7 @@
 		<Border  Grid.Row="1" Grid.Column="2" Margin="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" BorderBrush="DarkGray" BorderThickness="2" CornerRadius="10" >
 			<StackPanel Margin="5">
 
-				<Label FontWeight="Bold" >Select the SQLVesrion</Label>
+				<Label FontWeight="Bold" >Select the SQLVersion</Label>
 				<RadioButton Margin="10,0,0,0">SQL 2008</RadioButton>
 
 				<StackPanel Orientation="Horizontal" Margin="2.5"/>
@@ -178,8 +208,6 @@
 								Tempdb contention info from SQL DMVs/system views
 								<LineBreak />
 								Linked Server metadata (SQL DMVs/system views)
-								<LineBreak />
-								Service Broker configuration information (SQL DMVs/system views)
 
 							</TextBlock>
 						</ToolTip>
@@ -354,9 +382,34 @@
 						</Style>
 					</CheckBox.Style>
 				</CheckBox>
+                
+				<CheckBox x:Name="ServiceBrokerDbMailCheckBox" Margin="20,5,0,0" Content="ServiceBrokerDbMail">
+                    <CheckBox.Style>
+                        <Style TargetType="{x:Type CheckBox}">
+                            <Setter Property="IsChecked" Value="False" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding XPath=root/Scenario/SsbDbMail/@Value, Source={StaticResource xmlData}}" Value="1">
+                                    <Setter Property="IsChecked" Value="True" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </CheckBox.Style>
+                </CheckBox>
 
-				<CheckBox  x:Name="NoBasicCheckBox" VerticalAlignment="Bottom" Margin="20,80,0,0"  Content="NoBasic" Height="21">
+				<CheckBox  x:Name="NeverEndingQueryCheckBox" Margin="20,5,0,0" Content="NeverEndingQuery">
+					<CheckBox.Style>
+						<Style TargetType="{x:Type CheckBox}">
+							<Setter Property="IsChecked" Value="False" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding XPath=root/Scenario/NeverEndingQuery/@Value, Source={StaticResource xmlData}}" Value="1">
+									<Setter Property="IsChecked" Value="True" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</CheckBox.Style>
+				</CheckBox>
 
+				<CheckBox  x:Name="NoBasicCheckBox" VerticalAlignment="Bottom" Margin="20,40,0,0"  Content="NoBasic" Height="21">
 					<CheckBox.Style>
 						<Style TargetType="CheckBox">
 							<Style.Triggers>
@@ -494,10 +547,37 @@
 												</CheckBox.Content>
 											</CheckBox>
 										</DataTemplate>
-
 									</ListView.ItemTemplate>
 								</ListView>
 							</TreeViewItem>
+
+							<TreeViewItem IsEnabled="False" x:Name="TVI_xevent_servicebroker_dbmail">
+                                <TreeViewItem.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox x:Name="XeventServiceBrokerDbMail_CheckBox" />
+                                        <TextBlock Text="xevent_servicebroker_dbmail" />
+                                    </StackPanel>
+                                </TreeViewItem.Header>
+                                <ListView x:Name="list_xevent_servicebroker_dbmail" ItemsSource="{Binding}" Height ="200" Width="200" >
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding State}" Content="{Binding Caption}">
+												<CheckBox.Style>
+													<Style TargetType="{x:Type CheckBox}">
+														<Setter Property="Visibility" Value="Visible"/>
+														<Style.Triggers>
+															<DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="{x:Null}">
+																<Setter Property="Visibility" Value="Collapsed"/>
+															</DataTrigger>
+														</Style.Triggers>
+													</Style>
+												</CheckBox.Style>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </TreeViewItem>
+
 						</TreeView>
 					</StackPanel>
 				</TabItem>

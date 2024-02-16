@@ -13,5 +13,7 @@
 		<Setup Value="0" />
 		<BackupRestore Value="0" />
 		<IO Value="0" />
+		<SsbDbMail Value="0" />
+		<NeverEndingQuery Value="0" />
 	</Scenario>
 </root>

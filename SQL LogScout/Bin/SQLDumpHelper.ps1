@@ -50,7 +50,7 @@ while(($ProductNumber -ne "1") -and ($ProductNumber -ne "2") -and ($ProductNumbe
     Write-Host "4    SSRS (Reporting Services)"
     Write-Host "5    SQL Server Agent"
     Write-Host ""
-    $ProductNumber = Read-Host "Enter 1-5>" -CustomLogMessage "Dump Product Console input:"
+    $ProductNumber = Read-Host "Enter 1-5>" -CustomLogMessage "Dump Product console input:"
 
     if (($ProductNumber -ne "1") -and ($ProductNumber -ne "2") -and ($ProductNumber -ne "3") -and ($ProductNumber -ne "4")-and ($ProductNumber -ne "5"))
     {
@@ -153,7 +153,7 @@ if (($SqlTaskList.Count -eq 0))
         {   
             Write-LogInformation ""
             Write-Host "Please enter the ID for the desired $ProductStr from list above" -ForegroundColor Yellow
-            $IdStr = Read-Host ">" -CustomLogMessage "ID choice Console input:"
+            $IdStr = Read-Host ">" -CustomLogMessage "ID choice console input:"
         
             try{
                 $IdInt = [convert]::ToInt32($IdStr)
@@ -182,12 +182,12 @@ if (0 -eq $PIDInt)
     # for anything other than SSIS
     if (-not ($InstanceOnlyName.StartsWith("MsDtsServer", [System.StringComparison]::CurrentCultureIgnoreCase)))
     {
-        Write-Host "$ProductStr service name = $InstanceOnlyName"
+        Write-Host "$ProductStr service name = '$InstanceOnlyName'"
         $PIDStr = $SqlTaskList | Where-Object {$_.Services -like "*$InstanceOnlyName"} | Select-Object PID
-        Write-Host "Service ProcessID =" $PIDStr.PID
+        Write-Host "Service ProcessID = '$($PIDStr.PID)'"
         $PIDInt = [convert]::ToInt32($PIDStr.PID)
     
-        Write-Host "Using PID=", $PIDInt," for generating a $ProductStr memory dump" -ForegroundColor Green
+        Write-LogDebug "Using PID = '$PIDInt' for generating a $ProductStr memory dump" -DebugLogLevel 1
         Write-Host ""
 
     } else {
@@ -217,7 +217,7 @@ if (0 -eq $PIDInt)
             {   
                 Write-LogInformation ""
                 Write-Host "Please enter the ID for the desired SSIS from list above" -ForegroundColor Yellow
-                $SSISIdStr = Read-Host ">" -CustomLogMessage "ID choice Console input:"
+                $SSISIdStr = Read-Host ">" -CustomLogMessage "ID choice console input:"
             
                 try{
                         $SSISIdInt = [convert]::ToInt32($SSISIdStr)
@@ -268,7 +268,7 @@ if ($ProductNumber -eq "1")  #SQL Server memory dump
         Write-Host "3    Filtered dump  (Not Recommended)"
         Write-Host "4    Full dump      (Do Not Use on Production systems!)"
         Write-Host ""
-        $SqlDumpTypeSelection = Read-Host "Enter 1-4>" -CustomLogMessage "Dump type Console Input:"
+        $SqlDumpTypeSelection = Read-Host "Enter 1-4>" -CustomLogMessage "Dump type console input:"
 
         if (($SqlDumpTypeSelection -ne "1") -and ($SqlDumpTypeSelection -ne "2") -And ($SqlDumpTypeSelection -ne "3") -And ($SqlDumpTypeSelection -ne "4" ))
         {
@@ -291,6 +291,49 @@ if ($ProductNumber -eq "1")  #SQL Server memory dump
 
     }
 
+
+    Write-LogDebug "SQL Version: $SqlVersion" -DebugLogLevel 1
+
+    [string]$CompressDumpFlag = ""
+
+    
+    # if the version is between SQL 2019, CU23 (16000004075) and  16000000000 (SQL 2022)  
+    # or if greater than or equal to 2022 CU8 (16000004075), then we can create a compressed dump -zdmp flag
+
+    #if (($SqlDumpTypeSelection -in ("3", "4")) -and  ((($SqlVersion -ge 15000004335) -and ($SqlVersion -lt 16000000000)) -or ($SqlVersion -ge 16000004075)) )
+    if (($SqlDumpTypeSelection -in ("3", "4")) -and  (checkSQLVersion -VersionsList @("2022RTMCU8", "2019RTMCU23") -eq $true) ) 
+    {
+        
+        Write-Host "Starting with SQL Server 2019 CU23 and SQL Server 2022 CU8, you can create a compressed full or filter memory dump."
+        Write-Host "Would you like to create compressed memory dumps?" 
+        
+        while (($isCompressedDump -ne "Y") -and ($isCompressedDump -ne "N"))
+        {
+        
+            $isCompressedDump = Read-Host "Create a compressed memory dump? (Y/N)" -CustomLogMessage "Compressed Dump console input:"
+            $isCompressedDump = $isCompressedDump.ToUpper()
+
+            if ($isCompressedDump -eq "Y")
+            {
+                $CompressDumpFlag = "-zdmp"
+            }
+            elseif ($isCompressedDump -eq "N")
+            {
+                $CompressDumpFlag = ""
+            }
+            else 
+            {
+                Write-Host "Not a valid 'Y' or 'N' response"
+            }
+        }
+    }
+    else {
+        Write-Host "WARNING: Filtered and Full dumps are not recommended for production systems. They might cause performance issues and should only be used when directed by Microsoft Support." -ForegroundColor Yellow
+        Write-Host ""
+    }
+
+
+
 }
 elseif ($ProductNumber -eq "2")  #SSAS dump 
 {
@@ -302,7 +345,7 @@ elseif ($ProductNumber -eq "2")  #SSAS dump
         Write-Host "1) Mini-dump"
         Write-Host "2) Full dump  (Do Not Use on Production systems!)" -ForegroundColor Red
         Write-Host ""
-        $SSASDumpTypeSelection = Read-Host "Enter 1-2>" -CustomLogMessage "SSAS Dump Type Console input:"
+        $SSASDumpTypeSelection = Read-Host "Enter 1-2>" -CustomLogMessage "SSAS Dump Type console input:"
 
         if (($SSASDumpTypeSelection -ne "1") -and ($SSASDumpTypeSelection -ne "2"))
         {
@@ -334,7 +377,7 @@ elseif ($ProductNumber -eq "3" -or $ProductNumber -eq "4" -or $ProductNumber -eq
         Write-Host "1) Mini-dump"
         Write-Host "2) Full dump" 
         Write-Host ""
-        $SSISDumpTypeSelection = Read-Host "Enter 1-2>" -CustomLogMessage "SSIS Dump Type Console input:"
+        $SSISDumpTypeSelection = Read-Host "Enter 1-2>" -CustomLogMessage "SSIS Dump Type console input:"
 
         if (($SSISDumpTypeSelection  -ne "1") -and ($SSISDumpTypeSelection  -ne "2"))
         {
@@ -363,7 +406,7 @@ while($OutputFolder -eq "" -or !(Test-Path -Path $OutputFolder))
 {
     Write-Host ""
     Write-Host "Where would your like the memory dump stored (output folder)?" -ForegroundColor Yellow
-    $OutputFolder = Read-Host "Enter an output folder with no quotes (e.g. C:\MyTempFolder or C:\My Folder)" -CustomLogMessage "Dump Output Folder Console Input:"
+    $OutputFolder = Read-Host "Enter an output folder with no quotes (e.g. C:\MyTempFolder or C:\My Folder)" -CustomLogMessage "Dump Output Folder console input:"
     if ($OutputFolder -eq "" -or !(Test-Path -Path $OutputFolder))
     {
         Write-Host "'" $OutputFolder "' is not a valid folder. Please, enter a valid folder location" -ForegroundColor Yellow
@@ -374,11 +417,11 @@ while($OutputFolder -eq "" -or !(Test-Path -Path $OutputFolder))
 if ($OutputFolder.Substring($OutputFolder.Length-1) -eq "\")
 {
     $OutputFolder = $OutputFolder.Substring(0, $OutputFolder.Length-1)
-    Write-Host "Stripped the last '\' from output folder name. Now folder name is  $OutputFolder"
+    Write-LogDebug "Stripped the last '\' from output folder name. Now folder name is  $OutputFolder" -DebugLogLevel 1
 }
 
 #find the highest version of SQLDumper.exe on the machine
-$NumFolder = dir "c:\Program Files\microsoft sql server\1*" | Select-Object @{name = "DirNameInt"; expression={[int]($_.Name)}}, Name, Mode | Where-Object Mode -Match "da*" | Sort-Object DirNameInt -Descending
+$NumFolder = Get-ChildItem -Path "c:\Program Files\microsoft sql server\1*" -Directory | Select-Object @{name = "DirNameInt"; expression={[int]($_.Name)}}, Name, Mode | Sort-Object DirNameInt -Descending
 
 for($j=0;($j -lt $NumFolder.Count); $j++)
 {
@@ -397,7 +440,7 @@ for($j=0;($j -lt $NumFolder.Count); $j++)
 #build the SQLDumper.exe command e.g. (Sqldumper.exe 1096 0 0x0128 0 c:\temp\)
 
 $cmd = "$([char]34)"+$SQLDumperDir + "sqldumper.exe$([char]34)"
-$arglist = $PIDInt.ToString() + " 0 " +$DumpType +" 0 $([char]34)" + $OutputFolder + "$([char]34)"
+$arglist = $PIDInt.ToString() + " 0 " +$DumpType +" 0 $([char]34)" + $OutputFolder + "$([char]34) " + $CompressDumpFlag
 Write-Host "Command for dump generation: ", $cmd, $arglist -ForegroundColor Green
 
 #do-we-want-multiple-dumps section
@@ -409,7 +452,7 @@ Write-Host "Would you like to collect multiple memory dumps?" -ForegroundColor Y
 $YesNo = $null # reset the variable because it could be assigned at this point
 while (($YesNo -ne "y") -and ($YesNo -ne "n"))
 {
-    $YesNo = Read-Host "Enter Y or N>" -CustomLogMessage "Multiple Dumps Choice Console input:"
+    $YesNo = Read-Host "Enter Y or N>" -CustomLogMessage "Multiple Dumps Choice console input:"
 
     if (($YesNo -eq "y") -or ($YesNo -eq "n") )
     {
@@ -429,7 +472,7 @@ if ($YesNo -eq "y")
     while(1 -ge $DumpCountInt)
     {
         Write-Host "How many dumps would you like to generate for this $ProductStr" -ForegroundColor Yellow
-        $DumpCountStr = Read-Host ">" -CustomLogMessage "Dump Count Console input:"
+        $DumpCountStr = Read-Host ">" -CustomLogMessage "Dump Count console input:"
 
         try
         {
@@ -451,7 +494,7 @@ if ($YesNo -eq "y")
     while(0 -ge $DelayIntervalInt)
     {
         Write-Host "How frequently (in seconds) would you like to generate the memory dumps?" -ForegroundColor Yellow
-        $DelayIntervalStr = Read-Host ">" -CustomLogMessage "Dump Frequency Console input:"
+        $DelayIntervalStr = Read-Host ">" -CustomLogMessage "Dump Frequency console input:"
 
         try
         {

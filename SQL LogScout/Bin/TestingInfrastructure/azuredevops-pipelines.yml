@@ -1,0 +1,248 @@
+# # Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+
+steps:
+- script: echo Start Pipeline!
+  displayName: 'Run a one-line script'
+
+
+- task: PSScriptAnalyzer@1
+  inputs:
+    Path: '$(Build.SourcesDirectory)'
+    Settings: 'required'
+    Recurse: true
+
+- task: AntiMalware@4
+  inputs:
+    InputType: 'Basic'
+    ScanType: 'CustomScan'
+    FileDirPath: '$(Build.StagingDirectory)'
+    TreatSignatureUpdateFailureAs: 'Warning'
+    SignatureFreshness: 'UpToDate'
+    TreatStaleSignatureAs: 'Error'
+
+- task: ComponentGovernanceComponentDetection@0
+  inputs:
+    scanType: 'Register'
+    verbosity: 'Verbose'
+    alertWarningLevel: 'High'
+
+- task: CredScan@3
+
+- task: Guardian@1
+  inputs:
+    break: true
+
+- task: PostAnalysis@2
+  inputs:
+   GdnBreakAllTools: true
+    
+- task: ManifestGeneratorTask@0
+  inputs:
+    BuildDropPath: '$(Build.ArtifactStagingDirectory)'
+
+# for now disabling publish artifacts task
+#- task: PublishPipelineArtifact@1
+#  inputs:
+#    targetPath: '$(Pipeline.Workspace)/a/_manifest/spdx_2.2'
+#    artifact: 'PipelineArtifacts'
+#    publishLocation: 'pipeline'
+- task: PowerShell@2
+  displayName: Version check - Powershell and .NET Framework
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "PowerShell version:"
+       $PSVersionTable.PSVersion
+      Write-Host "-----------------------------"
+      $release = Get-ItemPropertyValue -LiteralPath 'HKLM:SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release
+      switch ($release) {
+          { $_ -ge 533320 } { $version = '4.8.1 or later'; break }
+          { $_ -ge 528040 } { $version = '4.8'; break }
+          { $_ -ge 461808 } { $version = '4.7.2'; break }
+          { $_ -ge 461308 } { $version = '4.7.1'; break }
+          { $_ -ge 460798 } { $version = '4.7'; break }
+          { $_ -ge 394802 } { $version = '4.6.2'; break }
+          { $_ -ge 394254 } { $version = '4.6.1'; break }
+          { $_ -ge 393295 } { $version = '4.6'; break }
+          { $_ -ge 379893 } { $version = '4.5.2'; break }
+          { $_ -ge 378675 } { $version = '4.5.1'; break }
+          { $_ -ge 378389 } { $version = '4.5'; break }
+          default { $version = $null; break }
+      }
+      
+      if ($version) {
+          Write-Host -Object ".NET Framework Version: $version"
+      } else {
+          Write-Host -Object '.NET Framework Version 4.5 or later is not detected.'
+      }
+
+- task: CmdLine@2
+  displayName: Install Nexus Prerequisites
+  inputs:
+    script: |
+
+      echo Downloading Nexus prerequisites...
+      curl.exe --output .\sqlnexus_install_components\SQLSysClrTypes.msi --create-dirs --url https://download.microsoft.com/download/B/1/7/B1783FE9-717B-4F78-A39A-A2E27E3D679D/ENU/x64/SQLSysClrTypes.msi
+
+      curl.exe --output .\sqlnexus_install_components\ReportViewer.msi --url https://download.microsoft.com/download/B/1/7/B1783FE9-717B-4F78-A39A-A2E27E3D679D/ENU/x86/ReportViewer.msi
+
+      curl.exe --output .\sqlnexus_install_components\RMLSetup.msi --url https://download.microsoft.com/download/a/a/d/aad67239-30df-403b-a7f1-976a4ac46403/RMLSetup.msi
+
+      echo:
+      cd sqlnexus_install_components
+      dir
+
+      echo: 
+      echo Installing CLR types...
+      SQLSysClrTypes.msi -passive
+
+      echo Installing RML Utilities...
+      RMLSetup.msi -passive
+
+      echo Installing Report Viewer Control...
+      ReportViewer.msi -passive
+
+      echo:
+      echo Testing ReadTrace...
+      "C:\Program Files\Microsoft Corporation\RMLUtils\ReadTrace.exe" /? & echo:
+      if %ERRORLEVEL% equ 9009 echo Could not find ReadTrace.exe, listing directory for user verification: & echo: & dir "C:\Program Files\Microsoft Corporation\RMLUtils" & exit 100001
+      if %ERRORLEVEL% equ -6 echo RML Utilities installed successfully!
+
+      echo:
+      echo Checking SQL CLR Types...
+      if exist C:\Windows\System32\SqlServerSpatial130.dll echo SQL CLR Types installed successfully!
+      if NOT exist C:\Windows\System32\SqlServerSpatial130.dll echo SQL CLR Types not found! & exit 100002
+
+      echo:
+      echo Checking ReportViewer...
+      if exist C:\Windows\Microsoft.NET\assembly\GAC_MSIL\Microsoft.ReportViewer.Common.resources\v4.0_13.0.0.0_es_89845dcd8080cc91\Microsoft.ReportViewer.Common.resources.dll echo Resource Viewer installed successfully!
+      if NOT exist C:\Windows\Microsoft.NET\assembly\GAC_MSIL\Microsoft.ReportViewer.Common.resources\v4.0_13.0.0.0_es_89845dcd8080cc91\Microsoft.ReportViewer.Common.resources.dll echo Resource Viewer not found! & exit 100003
+
+      echo:
+      cd ..
+      echo Downloading SQL Nexus latest binaries...
+      curl.exe -L --output .\sqlnexus\SQLNexus_Signed.zip --create-dirs --url https://aka.ms/get-sqlnexus
+
+- task: ExtractFiles@1
+  displayName: Extract Nexus Zip
+  inputs:
+    archiveFilePatterns: '.\sqlnexus\SQLNexus_Signed.zip'
+    destinationFolder: '.\sqlnexus'
+    cleanDestinationFolder: false
+    overwriteExistingFiles: false
+
+- task: CmdLine@2
+  displayName: Install Nexus
+  inputs:
+    script: |
+      echo Listing Nexus directory...
+      cd sqlnexus
+      dir
+      echo ##vso[task.setvariable variable=CWD;]%CD%
+
+      echo Testing Nexus...
+      sqlnexus.exe /? & echo:
+      if %ERRORLEVEL% neq -1 echo Failed to call sqlnexus.exe & exit 100004
+      if %ERRORLEVEL% equ -1 echo SQL Nexus has installed successfully! & (call )
+
+- task: CmdLine@2
+  displayName: Install SQL Server and test a connection
+  inputs:
+    script: |
+            time /t
+            echo ========================================================================================
+            echo Downloading SQL Express...
+            curl.exe https://download.microsoft.com/download/5/1/4/5145fe04-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe --output .\SQL2022-SSEI-Expr.exe --silent
+        
+        
+            echo List current folder content
+            dir
+            
+            echo ========================================================================================
+            echo Installing SQL Express. Wait for install to finish...
+            start /wait  .\SQL2022-SSEI-Expr.exe /Action=Install /Language=en-US /ENU /HideProgressBar /IAcceptSqlServerLicenseTerms /InstallPath="c:\Program Files\Microsoft SQL Server" /Quiet
+            echo SQL Express installation finished!
+
+            setx /M PATH "%PATH%;c:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\"
+            
+            echo ========================================================================================
+            echo Connect to SQL Server and run a test query
+            sqlcmd -S.\sqlexpress -Q "set nocount on; SELECT @@version; SELECT @@servername"
+            date /t & time /t
+
+- task: CmdLine@2
+  displayName: Run LogScout Test Suite
+  inputs:
+    script: |
+            time /t
+            sqlcmd -S.\sqlexpress -Q "set nocount on; SELECT @@version; SELECT @@servername; SELECT * FROM sys.databases"
+
+            echo ========================================================================================
+            echo Starting SQL LogScout test...
+            date /t & time /t
+            cd .\Bin\TestingInfrastructure
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Basic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "DetailedPerf+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+            
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "LightPerf+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+            
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Memory+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "AlwaysOn+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "NetworkTrace+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+            
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "IO+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "BackupRestore+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Replication+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+            
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Setup+NoBasic" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "ServiceBrokerDBMail+NoBasic" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+Replication" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+AlwaysOn" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+IO"- -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+NetworkTrace" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+Memory" -SqlNexusPath $(CWD) -SqlNexusDb "SqlNexusDB" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf+ServiceBrokerDBMail" -DisableCtrlCasInput "True"
+            IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
+
+            date /t & time /t

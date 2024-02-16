@@ -54,7 +54,7 @@ function Get-ClusterVnnPlusInstance([string]$instance)
             if ($instance -eq "MSSQLSERVER"){
                 Write-LogDebug  "VirtualName+Instance:   " ($vnn) -DebugLogLevel 2
 
-                $VirtNetworkNamePlusInstance = ($vnn)
+                $VirtNetworkNamePlusInstance = $vnn
 
                 Write-LogDebug "Combined NetName+Instance: '$VirtNetworkNamePlusInstance'" -DebugLogLevel 2
             }
@@ -141,24 +141,27 @@ function IsFailoverClusteredInstance([string]$instanceName)
     }
 }
 
-function Get-InstanceNamesOnly()
+function Get-SQLServiceNameAndStatus()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
    
     try 
     {
         
-        [string[]]$InstanceArray = @()
-        $selectedSqlInstance = ""
+        $InstanceArray = @()
 
 
         #find the actively running SQL Server services
-        $sql_running_services = Get-Service | Where-Object {(($_.Name -match "MSSQL\$") -or ($_.Name -eq "MSSQLSERVER")) -and ($_.Status -eq "Running")} | Select-Object Name 
+        $sql_services = Get-Service | Where-Object {(($_.Name -match "MSSQL\$") -or ($_.Name -eq "MSSQLSERVER"))} | ForEach-Object {[PSCustomObject]@{Name=$_.Name; Status=$_.Status.ToString()}}
         
-        if ($sql_running_services.Count -eq 0)
+        if ($sql_services.Count -eq 0)
         {
+            #Insert dummy row in array to keep object type consistent
+            [PSCustomObject]$sql_services = @{Name='no_instance_found'; Status='UNKNOWN'}
+            Write-LogDebug "No installed SQL Server instances found. Array value: $sql_services" -DebugLogLevel 1
+   
 
-            Write-LogInformation "There are currently no running instances of SQL Server. Would you like to proceed with OS-only log collection" -ForegroundColor Green
+            Write-LogInformation "There are currently no installed instances of SQL Server. Would you like to proceed with OS-only log collection?" -ForegroundColor Green
             
             if ($global:gInteractivePrompts -eq "Noisy")
             {
@@ -184,7 +187,7 @@ function Get-InstanceNamesOnly()
 
             if ($confirm -eq "Y")
             {
-                $InstanceArray+=$global:sql_instance_conn_str
+                $InstanceArray+=$sql_services
             }
             elseif ($confirm -eq "N")
             {
@@ -197,27 +200,25 @@ function Get-InstanceNamesOnly()
         else 
         {
             
-            Write-LogDebug ""
-
-            foreach ($sqlserver in $sql_running_services)
+            foreach ($sqlserver in $sql_services)
             {
-
-                [string]$sqlinstance = $sqlserver.Name
+                Write-LogDebug "The SQL Server service array in foreach contains $sqlserver" -DebugLogLevel 3
 
                 #in the case of a default instance, just use MSSQLSERVER which is the instance name
-                if ($sqlinstance.IndexOf("$") -lt 1)
+                if ($sqlserver.Name -contains "$")
                 {
-                    $selectedSqlInstance  = $sqlinstance
+                    Write-LogDebug "The SQL Server service array returned $sqlserver" -DebugLogLevel 3
+                    $InstanceArray  += $sqlserver
                 }
 
                 #for named instance, strip the part after the "$"
                 else
                 {
-                    $selectedSqlInstance  = $sqlinstance.Substring($sqlinstance.IndexOf("$") + 1)
+                    Write-LogDebug "The SQL Server service named instance array returned $sqlserver" -DebugLogLevel 3
+                    $sqlserver.Name = $sqlserver.Name -replace '.*\$',''
+                    $InstanceArray  += $sqlserver
+                    Write-LogDebug "The SQL Server service named extracted instance array returned $sqlserver" -DebugLogLevel 3
                 }
-                
-                #add each instance name to the array
-                $InstanceArray+=$selectedSqlInstance 
             }
 
         }
@@ -236,71 +237,92 @@ function Get-InstanceNamesOnly()
 function Get-NetNameMatchingInstance()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
+        
     try
     {
-        [string[]]$NetworkNamePlustInstanceArray = @()
+        $NetworkNamePlusInstanceArray = @()
         $isClustered = $false
-        [string[]]$instanceArrayLocal = @()
+        #create dummy record in array and delete $NetworkNamePlusInstanceArray
+        
 
+        #get the list of instance names and status of the service
+        [PSCustomObject]$InstanceNameAndStatusArray = Get-SQLServiceNameAndStatus
+        Write-LogDebug "The InstanceNameAndStatusArray is: $InstanceNameAndStatusArray" -DebugLogLevel 3
 
-        #get the list of instance names
-        $instanceArrayLocal = Get-InstanceNamesOnly
-
-        #special cases - if no SQL instance on the machine, just hard-code a value
-        if ($global:sql_instance_conn_str -eq $instanceArrayLocal.Get(0) )
+        foreach ($SQLInstance in $InstanceNameAndStatusArray)
         {
-            $NetworkNamePlustInstanceArray+=$instanceArrayLocal.Get(0)
-            Write-LogDebug "No running SQL Server instances on the box so hard coding a value and collecting OS-data" -DebugLogLevel 1
-        }
-        elseif ($instanceArrayLocal -and ($null -ne $instanceArrayLocal))
-        {
-            Write-LogDebug "InstanceArrayLocal contains:" $instanceArrayLocal -DebugLogLevel 2
+            Write-LogDebug "Instance name and status: '$SQLInstance'" -DebugLogLevel 3
 
-            #build NetName + Instance 
-
-            $isClustered = IsClustered #($instanceArrayLocal)
-
-            #if this is on a clustered system, then need to check for FCI or AG resources
-            if ($isClustered -eq $true)
+            #special cases - if no SQL instance on the machine, just hard-code a value
+            if ($global:sql_instance_conn_str -eq $SQLInstance.Name)
             {
-            
-                #loop through each instance name and check if FCI or not. If FCI, use ClusterVnnPlusInstance, else use HostnamePlusInstance
-                #append each name to the output array $NetworkNamePlustInstanceArray
-                for($i=0; $i -lt $instanceArrayLocal.Count; $i++)
+                $NetworkNamePlusInstanceArray+=@([PSCustomObject]@{Name=$SQLInstance.Name;Status='UNKNOWN'})
+                Write-LogDebug "No running SQL Server instances on the box so hard coding a value and collecting OS-data" -DebugLogLevel 1
+            }
+
+            elseif ($SQLInstance -and ($null -ne $SQLInstance))
+            {
+                Write-LogDebug "SQLInstance array contains:" $SQLInstance -DebugLogLevel 2
+
+                #build NetName + Instance 
+
+                $isClustered = IsClustered #($InstanceNameAndStatusArray)
+
+                #if this is on a clustered system, then need to check for FCI or AG resources
+                if ($isClustered -eq $true)
                 {
-                    if (IsFailoverClusteredInstance($instanceArrayLocal[$i]))
+                
+                    #loop through each instance name and check if FCI or not. If FCI, use ClusterVnnPlusInstance, else use HostnamePlusInstance
+                    #append each name to the output array $NetworkNamePlusInstanceArray
+                   
+                        if (IsFailoverClusteredInstance($SQLInstance.Name))
+                            {
+                                Write-LogDebug "The instance '$SQLInstance' is a SQL FCI" -DebugLogLevel 2
+                                $SQLInstance.Name = Get-ClusterVnnPlusInstance($SQLInstance.Name)
+                                $LogRec = $SQLInstance.Name
+                                Write-LogDebug "The value of SQLInstance.Name $LogRec" -DebugLogLevel 3
+                                Write-LogDebug "Temp FCI value is $SQLInstance" -DebugLogLevel 3
+                                Write-LogDebug "The value of the array before change is $NetworkNamePlusInstanceArray" -DebugLogLevel 3
+                                Write-LogDebug "The data type of the array before change is ($NetworkNamePlusInstanceArray.GetType())" -DebugLogLevel 3
+                                Write-LogDebug "The value of the SQLInstance array before change is $SQLInstance" -DebugLogLevel 3
+                                
+                                #This doesn't work for some reason
+                                #$NetworkNamePlusInstanceArray += $SQLInstance
+                                
+                                $NetworkNamePlusInstanceArray += @([PSCustomObject]$SQLInstance)
+
+                                Write-LogDebug "The value of the SQLInstance array after change is $SQLInstance" -DebugLogLevel 3
+                                Write-LogDebug "Result of FCI is $NetworkNamePlusInstanceArray" -DebugLogLevel 3
+                            }
+                        else
                         {
-                            $NetworkNamePlustInstanceArray += Get-ClusterVnnPlusInstance ($instanceArrayLocal[$i])  
+                            Write-LogDebug "The instance '$SQLInstance' is a not SQL FCI but is clustered" -DebugLogLevel 2
+                            $SQLInstance.Name = Get-HostnamePlusInstance($SQLInstance.Name)
+                            $NetworkNamePlusInstanceArray += $SQLInstance
+                            Write-LogDebug "Result of non-FCI Cluster is $NetworkNamePlusInstanceArray" -DebugLogLevel 3
                         }
-                    else
-                    {
-                        $NetworkNamePlustInstanceArray += Get-HostnamePlusInstance($instanceArrayLocal[$i])
-                    }
 
                 }
+                #all local resources so just build array with local instances
+                else
+                {
+                    $TestLog = $SQLInstance.Name
+                    Write-LogDebug "Array value is $SQLInstance" -DebugLogLevel 3
+                    Write-LogDebug "Array value.name is $TestLog" -DebugLogLevel 3
+                    $SQLInstance.Name = Get-HostnamePlusInstance($SQLInstance.Name)
+                    Write-LogDebug "Array value after Get-HostnamePlusInstance is $SQLInstance" -DebugLogLevel 3
+                    $NetworkNamePlusInstanceArray += $SQLInstance
+                }
             }
-            #all local resources so just build array with local instances
+
             else
             {
-                for($i=0; $i -lt $instanceArrayLocal.Count; $i++)
-                {
-                        $NetworkNamePlustInstanceArray += Get-HostnamePlusInstance($instanceArrayLocal[$i])
-                }
-
+                Write-LogError "InstanceArrayLocal array is blank or null - no instances populated for some reason"
             }
-
-
-
-
         }
 
-        else
-        {
-            Write-LogError "InstanceArrayLocal array is blank or null - no instances populated for some reason"
-        }
-
-        return $NetworkNamePlustInstanceArray
+        Write-LogDebug "The NetworkNamePlusInstanceArray in Get-NetNameMatchingInstance is: $NetworkNamePlusInstanceArray" -DebugLogLevel 3
+        return [PSCustomObject]$NetworkNamePlusInstanceArray
     }
     catch 
     {
@@ -320,8 +342,7 @@ function Select-SQLServerForDiagnostics()
         $SqlIdInt = 777
         $isInt = $false
         $ValidId = $false
-        [string[]]$NetNamePlusinstanceArray = @()
-        [string]$PickedNetPlusInstance = ""
+        $NetNamePlusinstanceArray = @()
 
         if ($global:instance_independent_collection -eq $true)
         {
@@ -332,9 +353,8 @@ function Select-SQLServerForDiagnostics()
         #ma Added
         #$global:gui_mode
         [bool]$isInstanceNameSelected = $false
-        IF (![string]::IsNullOrWhitespace($Global:ComboBoxInstanceName.Text))
+        if (![string]::IsNullOrWhitespace($Global:ComboBoxInstanceName.Text))
         {
-            $portName = $Global:ComboBoxInstanceName.SelectedIndex
             $SqlIdInt = $Global:ComboBoxInstanceName.SelectedIndex
             $isInstanceNameSelected = $true
         } 
@@ -342,43 +362,121 @@ function Select-SQLServerForDiagnostics()
         #if SQL LogScout did not accept any values for parameter $ServerName 
         if (($true -eq [string]::IsNullOrWhiteSpace($global:gServerName)) -and $global:gServerName.Length -le 1 )
         {
-            Write-LogDebug "Server Instance param is blank. Switching to auto-discovery of instances" -DebugLogLevel 2
+            Write-LogDebug "Server Instance param is blank. Switching to auto-discovery of instances" -DebugLogLevel 3
 
             $NetNamePlusinstanceArray = Get-NetNameMatchingInstance
 
-            if ($NetNamePlusinstanceArray.get(0) -eq $global:sql_instance_conn_str) 
+            Write-LogDebug "The NetNamePlusinstanceArray in discovery is: $NetNamePlusinstanceArray" -DebugLogLevel 3
+
+            if ($NetNamePlusinstanceArray.Name -eq $global:sql_instance_conn_str) 
             {
-                $hard_coded_instance  = $NetNamePlusinstanceArray.Get(0)
-                Write-LogDebug "No running SQL Server instances, thus returning the default '$hard_coded_instance' and collecting OS-data only" -DebugLogLevel 1
+                $hard_coded_instance  = $NetNamePlusinstanceArray.Name
+                Write-LogDebug "No running SQL Server instances, thus returning the default '$hard_coded_instance' and collecting OS-data only" -DebugLogLevel 3
                 return 
             }
-            elseif ($NetNamePlusinstanceArray -and ($null -ne $NetNamePlusinstanceArray))
+            elseif ($NetNamePlusinstanceArray.Name -and ($null -ne $NetNamePlusinstanceArray.Name))
             {
-                Write-LogDebug "NetNamePlusinstanceArray contains: " $NetNamePlusinstanceArray -DebugLogLevel 4
+        
+                Write-LogDebug "NetNamePlusinstanceArray contains: " $NetNamePlusinstanceArray -DebugLogLevel 3
 
                 #prompt the user to pick from the list
 
-                
-                if ($NetNamePlusinstanceArray.Count -ge 1 -and !$isInstanceNameSelected)
+                $Count = $NetNamePlusinstanceArray.Count
+                Write-LogDebug "Count of NetNamePlusinstanceArray is $Count" -DebugLogLevel 3
+                Write-LogDebug "isInstanceNameSelected is $isInstanceNameSelected" -DebugLogLevel 3
+
+                if ($NetNamePlusinstanceArray.Count -ne 0 -and !$isInstanceNameSelected)
                 {
+                    Write-LogDebug "NetNamePlusinstanceArray contains more than one instance. Prompting user to select one" -DebugLogLevel 3
                     
-                    $instanceIDArray = 0..($NetNamePlusinstanceArray.Length -1)
+                    $instanceIDArray = 0..($NetNamePlusinstanceArray.Length -1)                 
 
-                    #print out the instance names
 
-                    Write-LogInformation "Discovered the following SQL Server instance(s)`n"
-                    Write-LogInformation ""
-                    Write-LogInformation "ID	SQL Instance Name"
-                    Write-LogInformation "--	----------------"
+
 
                     # sort the array by instance name
-                    $NetNamePlusinstanceArray = $NetNamePlusinstanceArray | Sort-Object
+                    #TO DO - sory by property.
+                    $NetNamePlusinstanceArray = $NetNamePlusinstanceArray | Sort-Object -Property Name
+                    #TO DO - parse the file length out using something like $maxLength = ($array.Name | Measure-Object -Maximum -Property Length).Maximum. Need to calculate spaces based on values.
 
-                    for($i=0; $i -lt $NetNamePlusinstanceArray.Count;$i++)
+                    Write-LogDebug "NetNamePlusinstanceArray sorted contains: " $NetNamePlusinstanceArray -DebugLogLevel 4
+
+                    #set spacing for displaying the text
+                    
+                    #set hard-coded spacing for displaying the text
+                    [string] $StaticGap = "".PadRight(3)
+
+                    #GETTING PROMPT TO DISPLAY 
+               
+                    ## build the ID# header values
+                    $IDHeader = "ID#"
+
+                    #get the max length of the ID# values (for 2000 instances on the box the value would be 1999, and length will be 4 characters)
+                    [int]$IDMaxLen = ($NetNamePlusinstanceArray.Count | ForEach-Object { [string]$_ } | Measure-Object -Maximum -Property Length).Maximum
+
+                    #if the max value is less than the header length, then set the header be 3 characters long
+                    if ($IDMaxLen -le $IDHeader.Length)
                     {
-                        Write-LogInformation $i "	" $NetNamePlusinstanceArray[$i]
+                        [int]$IDMaxLen = $IDHeader.Length
+                    }
+                    Write-LogDebug "IDMaxLen is $IDMaxLen"
+
+                    # create the header hyphens to go above the ID#
+                    [string]$IDMaxHeader = '-' * $IDMaxLen
+
+                    ## build the instance name header values
+                    [string]$InstanceNameHeader = "SQL Instance Name"
+
+                    #get the max length of all the instances found the box (running or stopped)
+                    [int]$SQLInstanceNameMaxLen = ($NetNamePlusinstanceArray.Name | ForEach-Object {[string]$_}| Measure-Object -Maximum -Property Length).Maximum
+                    Write-LogDebug "SQLInstanceNameMaxLen value is $SQLInstanceNameMaxLen"
+                   
+                    # if longest instance name is less than the defined header length, then pad to the header length and not instance length
+                    if ($SQLInstanceNameMaxLen -le ($InstanceNameHeader.Length))
+                    {
+                        $SQLInstanceNameMaxLen = $InstanceNameHeader.Length
+                    }
+                    Write-LogDebug "SQLInstanceNameMaxLen is $SQLInstanceNameMaxLen"
+
+                    # prepare the header hyphens to go above the instance name
+                    [string]$SQLInstanceNameMaxHeader = '-' * $SQLInstanceNameMaxLen
+
+                    ## build the service status header values
+                    $InstanceStatusHeader = "Status"
+
+                    #get the max length of all the service status strings (running or stopped for now)
+                    [int]$ServiceStatusMaxLen= ($NetNamePlusinstanceArray.Status | ForEach-Object {[string]$_} | Measure-Object -Maximum -Property Length).Maximum
+ 
+                    if ($ServiceStatusMaxLen -le $InstanceStatusHeader.Length)
+                    {
+                        $ServiceStatusMaxLen = $InstanceStatusHeader.Length
+                    }
+                    Write-LogDebug "ServiceStatusMaxLen is $ServiceStatusMaxLen"
+
+                    #prepare the header hyphens to go above service status
+                    [string]$ServiceStatusMaxHeader = '-' * $ServiceStatusMaxLen
+
+                    #display the header
+                    Write-LogInformation "Discovered the following SQL Server instance(s)`n"
+                    Write-LogInformation ""
+                    Write-LogInformation "$($IDHeader+$StaticGap+$InstanceNameHeader.PadRight($SQLInstanceNameMaxLen)+$StaticGap+$InstanceStatusHeader.PadRight($ServiceStatusMaxLen))"
+                    Write-LogInformation "$($IDMaxHeader+$StaticGap+$SQLInstanceNameMaxHeader+$StaticGap+$ServiceStatusMaxHeader)"
+                    
+                    
+                    #loop through instances and append to cmd display
+                    $i = 0
+                    foreach ($FoundInstance in $NetNamePlusinstanceArray)
+                    {
+                        $InstanceName = $FoundInstance.Name
+                        $InstanceStatus = $FoundInstance.Status
+                        
+                        Write-LogDebug "Looping through $i, $InstanceName, $InstanceStatus" -DebugLogLevel 3
+                        Write-LogInformation "$($i.ToString().PadRight($IdMaxLen)+$StaticGap+$InstanceName.PadRight($SQLInstanceNameMaxLen)+$StaticGap+$InstanceStatus.PadRight($ServiceStatusMaxWithSpace))"
+                        #Write-LogInformation $i "	" $FoundInstance.Name "	" $FoundInstance.Status
+                        $i++
                     }
 
+                    #prompt the user to select an instance
                     while(($isInt -eq $false) -or ($ValidId -eq $false))
                     {
                         Write-LogInformation ""
@@ -419,16 +517,18 @@ function Select-SQLServerForDiagnostics()
                 exit
             }
 
-            $str = "You selected instance '" + $NetNamePlusinstanceArray[$SqlIdInt] +"' to collect diagnostic data. "
+            $str = "You selected instance '" + $NetNamePlusinstanceArray[$SqlIdInt].Name +"' to collect diagnostic data. "
             Write-LogInformation $str -ForegroundColor Green
 
             #set the global variable so it can be easily used by multiple collectors
-            $global:sql_instance_conn_str = $NetNamePlusinstanceArray[$SqlIdInt] 
-
+            $global:sql_instance_conn_str = $NetNamePlusinstanceArray[$SqlIdInt].Name
+            
+            $global:sql_instance_service_status = $NetNamePlusinstanceArray[$SqlIdInt].Status
+            Write-LogDebug "The SQL instance service status is updated to $global:sql_instance_service_status"
             #return $NetNamePlusinstanceArray[$SqlIdInt] 
 
         }
-
+        # if the instance is passed in as a parameter, then use that value. But test if that instance is running/valid
         else 
         {
             Write-LogDebug "Server Instance param is '$($global:gServerName)'. Using this value for data collection" -DebugLogLevel 2
@@ -449,7 +549,16 @@ function Select-SQLServerForDiagnostics()
             {
                 $global:sql_instance_conn_str = $global:gServerName
             }
-            
+        
+            #Get service status. Since user provided instance name, no instance discovery code invoked
+            if (Test-SQLConnection($global:sql_instance_conn_str)) 
+            {
+                $global:sql_instance_service_status = "Running"
+            } 
+            else 
+            {
+                $global:sql_instance_service_status = "UNKNOWN"
+            }
         }
 
     }

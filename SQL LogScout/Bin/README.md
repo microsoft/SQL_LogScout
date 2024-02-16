@@ -212,6 +212,7 @@ Possible values are:
  - IO
  - LightPerf
  - ProcessMonitor
+ - NeverEndingQuery
  - MenuChoice - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with SQL_LogScout.cmd. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
  - NoBasic - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
 
@@ -254,6 +255,9 @@ Possible values are:
 
  - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
  - Noisy - (default) shows prompts requesting user input where necessary
+
+### DisableCtrlCasInput
+Used for internal testing only and changes behavior of cancelling SQL LogScout. Do not use this parameter.
 
 ## Graphical User Interface (GUI)
 
@@ -330,16 +334,20 @@ Collects snapshot or static logs. It captures information on:
 - OS disk information
 - Running filter drivers
 - Event logs (system and application in both .CSV and .TXT formats)
+- SQL Server dumps found in the errorlog directory. We collect up to 20 dumps if they were created in the last 2 months and are less than 100 MB in size.
+- Memory dump .txt files (most recent 200 files)
 - IPConfig, DNSClientInfo, and TCP and UDP endpoints
 - SQL Errorlogs
 - SQL Agent logs
+- SystemHealth XELs
 - Polybase logs
-- Azure Arc Agent logs (if SQL Server enabled for Azure Arc)
+- Azure Arc Agent logs (if SQL Server enabled for Azure Arc). More info available at [Azure Instance Metadata Service](https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=windows)
+- [SQL Azure VM Information](https://learn.microsoft.com/azure/virtual-machines/instance-metadata-service?tabs=windows) (if SQL Server is Azure Virtual Machine)
 - Performance Monitor counters for SQL Server instance and general OS counters - just a few snapshots for a few seconds.
-- [AlwaysOn_health.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health)
 - [MSSQLSERVER_SQLDIAG.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log)
 - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
 - [SQL Assessment API](https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview) log
+- Environment variables full list
 
 ## 1. GeneralPerf scenario
 
@@ -353,7 +361,6 @@ Collects all the Basic scenario logs as well as some long-term, continuous logs 
 - Query Data Store (QDS) info (if that is active)
 - Tempdb contention info from SQL DMVs/system views
 - Linked Server metadata (SQL DMVs/system views)
-- Service Broker configuration information (SQL DMVs/system views)
 
  *Note:* If you combine GeneralPerf with DetailedPerf scenario, then the GeneralPerf will be disabled and only DetailedPerf will be collected.
 
@@ -377,6 +384,7 @@ Collects all the Basic scenario logs as well as Always On configuration informat
 
 - Basic scenario
 - Always On diagnostic info (SQL DMVs/system views)
+- [AlwaysOn_health.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health)
 - Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141) and the AG topology XML file required for [AG latency](https://learn.microsoft.com/archive/blogs/psssql/aglatency-report-tool-introduction) analysis.
 - Core Xevents trace (RPC and Batch started and completed, login/logout, errors)
 - Performance Monitor counters for SQL Server instance and general OS counters
@@ -448,6 +456,27 @@ Collects everything that the GeneralPerf scenario does (includes Basic scenario)
 
 Collects a [Process Monitor](https://docs.microsoft.com/en-us/sysinternals/downloads/procmon) (Procmon) log to help with troubleshooting specific file or registry related issues. This collector requires that you have Procmon downloaded and unzipped in a folder of your choice. SQL LogScout will prompt you to provide the path to that folder. You don't need to wrap the path in quotes even if there are spaces in the path name. 
 
+## 14. Service Broker and Database mail
+
+Collect logs to help troubleshoot SQL Service Broker and Database mail scenarios. The scenarion includes the following logs:
+
+- Basic scenario
+- Service Broker configuration information (SQL DMVs/system views)
+- Performance Monitor counters for SQL Server instance and general OS counters
+- Extended events (Xevents) for SQL Server Service Broker
+
+## 15. Never Ending Query
+
+Collect logs to help troubleshoot Never Ending Query scenarios. The scenario includes the following logs:
+
+- Basic scenario
+- Never Ending Query Perfstats (SQL DMVs/system views)
+- Performance Monitor counters for SQL Server instance and general OS counters
+- XML Plans for top 5 High CPU consuming queries
+- XML Plans for all Never Ending queries
+
+A never-ending query is considered a query that is driving CPU due to execution for a long time, and not one that is waiting for a long-time. This scenario will consider only queries that have consumed 60 seconds of more of CPU time. For more information, see [Troubleshoot queries that seem to never end in SQL Server](https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/performance/troubleshoot-never-ending-query)
+
 # Output folders
 
 **Output folder**: All the diagnostic log files are collected in the \output (or \output_ddMMyyhhmmss) folder. These include Perfmon log (.BLG), event logs, system information, extended event (.XEL), etc. By default this folder is created in the same location where SQL LogScout files reside (present directory). However a user can choose to collect data on a different disk volume and folder. This can be done by following the prompt for a non-default drive and directory or by using the CustomOutputPath parameter ([Parameters](#parameters))
@@ -504,6 +533,8 @@ Diagnostic data is collected from the SQL instance you selected locally on the m
 
 # Security
 
+## Digitally signed files and hash computed
+
 SQL LogScout is released with digitally-signed Powershell files. For other files, SQL LogScout calculates a SHA512 hash and compares it to the expected value of each file. If the stored hash does not match the calculated hash on disk, then SQL LogScout will not run.  
 
 To manually validate script signature, you may execute the following:
@@ -547,6 +578,10 @@ SignerCertificate : [Subject]
                     [Thumbprint]
                       ABDCA79AF9DD48A0EA702AD45260B3C03093FB4B
 ```
+
+## Encrypted connection to SQL Server
+
+SQL LogScout negotiates connection encryption with the SQL Server it collects data from. It does so by using "Encrypt=True;TrustServerCertificate=true;" and "sqlcmd -C -N" values. 
 
 # Sample output
 
@@ -642,10 +677,9 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:04:21.313	INFO	Executing Collector: HighCPU_perfstats 
 2021-09-10 11:04:21.364	INFO	Executing Collector: SQLServerPerfStats 
 2021-09-10 11:04:23.441	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
-2021-09-10 11:04:23.492	INFO	Executing Collector: Query Store 
+2021-09-10 11:04:23.492	INFO	Executing Collector: QueryStore 
 2021-09-10 11:04:25.552	INFO	Executing Collector: TempDBAnalysis 
 2021-09-10 11:04:25.601	INFO	Executing Collector: linked_server_config 
-2021-09-10 11:04:25.652	INFO	Executing Collector: SSB_diag 
 2021-09-10 11:04:25.708	INFO	Collecting logs for 'AlwaysOn' scenario 
 2021-09-10 11:04:25.740	INFO	Executing Collector: AlwaysOnDiagScript 
 2021-09-10 11:04:25.788	INFO	Executing Collector: Xevent_CoreAddSesion 
@@ -678,7 +712,7 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
 2021-09-10 11:04:47.407	INFO	Executing Collector: FLTMC_Filters 
 2021-09-10 11:04:47.464	INFO	Executing Collector: FLTMC_Instances 
 2021-09-10 11:04:47.533	INFO	Executing Collector: SystemInfo_Summary 
-2021-09-10 11:04:47.618	INFO	Executing Collector: MiscPssdiagInfo 
+2021-09-10 11:04:47.618	INFO	Executing Collector: MiscDiagInfo 
 2021-09-10 11:04:47.681	INFO	Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel 
 2021-09-10 11:04:50.501	INFO	Executing Collector: PolybaseLogs 
 2021-09-10 11:04:50.533	INFO	Executing Collector: SQLAssessmentAPI 

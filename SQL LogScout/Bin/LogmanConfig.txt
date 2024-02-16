@@ -47,7 +47,7 @@
 \MSSQL$*:Availability Replica(*)\*
 \MSSQL$*:Backup Device\*
 \MSSQL$*:Batch Resp Statistics(*)\*
-\MSSQL$*:Broker Activation\*
+\MSSQL$*:Broker Activation(*)\*
 \MSSQL$*:Broker Statistics\*
 \MSSQL$*:Broker TO Statistics\*
 \MSSQL$*:Broker/DBM Transport\*
@@ -152,9 +152,11 @@
 \SQL Server 2022 XTP Phantom Processor(*)\*
 \SQL Server 2022 XTP Transactions(*)\*
 \System\*
-\TCP\*
+\TCPv4\*
+\TCPv6\*
 \Telephony\*
-\UDP\*
+\UDPv4\*
+\UDPv6\*
 \Web Service(_Total)\*
 \Web Service(Administration Web Site)\*
 \Web Service(Default Web Site)\*
