@@ -42,8 +42,8 @@ IF [%6] EQU [] (set p6="") ELSE (set p6=%6)
 IF [%7] EQU [] (set p7="") ELSE (set p7=%7)
 IF [%8] EQU [] (set p8="") ELSE (set p8=%8)
 
-
-powershell.exe -ExecutionPolicy RemoteSigned -File SQLLogScoutPs.ps1 -Scenario %p1% -ServerName %p2% -CustomOutputPath %p3% -DeleteExistingOrCreateNew %p4% -DiagStartTime %p5% -DiagStopTime %p6% -InteractivePrompts %p7% 2> .\##STDERR.LOG
+REM always keep the -DisableCtrlCasInput as the last parameter in case future params are added
+powershell.exe -ExecutionPolicy RemoteSigned -File SQLLogScoutPs.ps1 -Scenario %p1% -ServerName %p2% -CustomOutputPath %p3% -DeleteExistingOrCreateNew %p4% -DiagStartTime %p5% -DiagStopTime %p6% -InteractivePrompts %p7% -DisableCtrlCasInput %p8% 2> .\##STDERR.LOG
 
 powershell.exe -ExecutionPolicy RemoteSigned -File StdErrorOutputHandling.ps1 .\##STDERR.LOG
 
@@ -53,6 +53,9 @@ exit /b
 
 :Help
 @echo off
+set cwd=%~dp0\Bin
+cd "%cwd%"
+
 powershell.exe -ExecutionPolicy RemoteSigned -File SQLLogScoutPs.ps1 -help
 
 :EOF

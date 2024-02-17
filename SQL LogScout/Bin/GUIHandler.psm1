@@ -5,11 +5,19 @@
 [Collections.Generic.List[GenericModel]]$global:XeventsList_AlwaysOn = New-Object Collections.Generic.List[GenericModel]
 [Collections.Generic.List[GenericModel]]$global:XeventsList_core = New-Object Collections.Generic.List[GenericModel]
 [Collections.Generic.List[GenericModel]]$global:XeventsList_detailed = New-Object Collections.Generic.List[GenericModel]
-[String[]]$global:varXevents = "xevent_AlwaysOn_Data_Movement", "xevent_core", "xevent_detailed" , "xevent_general"
+[Collections.Generic.List[GenericModel]]$global:XeventsList_servicebroker_dbmail = New-Object Collections.Generic.List[GenericModel]
+[Collections.Generic.List[ServiceState]]$global:List_service_name_status = New-Object Collections.Generic.List[ServiceState]
+
+[String[]]$global:varXevents = "xevent_AlwaysOn_Data_Movement", "xevent_core", "xevent_detailed" , "xevent_general", "xevent_servicebroker_dbmail"
 class GenericModel {
     [String]$Caption
     [String]$Value
     [bool]$State
+}
+
+class ServiceState {
+    [String]$Name
+    [String]$Status
 }
 
 function InitializeGUIComponent() {
@@ -50,6 +58,8 @@ function InitializeGUIComponent() {
         $Global:SetupCheckBox = $Global:Window.FindName("SetupCheckBox")
         $Global:BackupRestoreCheckBox = $Global:Window.FindName("BackupRestoreCheckBox")
         $Global:IOCheckBox = $Global:Window.FindName("IOCheckBox")
+        $Global:ServiceBrokerDbMailCheckBox = $Global:Window.FindName("ServiceBrokerDbMailCheckBox")
+        $Global:NeverEndingQueryCheckBox = $Global:window.FindName("NeverEndingQueryCheckBox")
         $Global:NoBasicCheckBox = $Global:Window.FindName("NoBasicCheckBox")
         $Global:overrideExistingCheckBox = $Global:Window.FindName("overrideExistingCheckBox")
         
@@ -61,26 +71,33 @@ function InitializeGUIComponent() {
         $Global:list_xevent_detailed = $Global:Window.FindName("list_xevent_detailed")
         $Global:list_xevent_core = $Global:Window.FindName("list_xevent_core")
         $Global:list_xevent_AlwaysOn = $Global:Window.FindName("list_xevent_AlwaysOn")
+        $Global:list_xevent_servicebroker_dbmail = $Global:Window.FindName("list_xevent_servicebroker_dbmail")
+
         $Global:TVI_xevent_general = $Global:Window.FindName("TVI_xevent_general")
         $Global:TVI_xevent_detailed = $Global:Window.FindName("TVI_xevent_detailed")
         $Global:TVI_xevent_core = $Global:Window.FindName("TVI_xevent_core")
         $Global:TVI_xevent_AlwaysOn = $Global:Window.FindName("TVI_xevent_AlwaysOn")
+        $Global:TVI_xevent_servicebroker_dbmail = $Global:Window.FindName("TVI_xevent_servicebroker_dbmail")
+        
         $Global:xeventcore_CheckBox = $Global:Window.FindName("xeventcore_CheckBox")
         $Global:XeventAlwaysOn_CheckBox = $Global:Window.FindName("XeventAlwaysOn_CheckBox")
         $Global:XeventGeneral_CheckBox = $Global:Window.FindName("XeventGeneral_CheckBox")
         $Global:XeventDetailed_CheckBox = $Global:Window.FindName("XeventDetailed_CheckBox")
+        $Global:XeventServiceBrokerDbMail_CheckBox = $Global:Window.FindName("XeventServiceBrokerDbMail_CheckBox")
+
 
         #set the output folder to be parent of folder where execution files reside
         $Global:txtPresentDirectory.Text = (Get-Item $CurrentDirectory).Parent.FullName
         #Read current config.
         $Global:XmlDataProviderName.Source = $ConfigPath
         
-        #Setting the item source for verious lists.
+        #Setting the item source for various lists.
         $Global:listExtraSkills.ItemsSource = $Global:list      
         $Global:listXevnets.ItemsSource = $Global:XeventsList_general
         $Global:list_xevent_detailed.ItemsSource = $Global:XeventsList_detailed
         $Global:list_xevent_core.ItemsSource = $Global:XeventsList_core
         $Global:list_xevent_AlwaysOn.ItemsSource = $Global:XeventsList_AlwaysOn
+        $Global:list_xevent_servicebroker_dbmail.ItemsSource = $Global:XeventsList_servicebroker_dbmail
         
         RegisterEvents
         Set-PresentDirectory
@@ -116,28 +133,40 @@ function RegisterEvents() {
     $Global:generalPerfCheckBox.Add_Click({ generalPerfCheckBox_Click_EventHandler $Global:generalPerfCheckBox.IsChecked })
     $Global:LightPerfCheckBox.Add_Click({ LightPerfCheckBox_Click_EventHandler $Global:LightPerfCheckBox.IsChecked })
     $Global:alwaysOnPerfCheckBox.Add_Click({ alwaysOnPerfCheckBox_Click_EventHandler $Global:alwaysOnPerfCheckBox.IsChecked })
+    $Global:ServiceBrokerDbMailCheckBox.Add_Click({ ServiceBrokerDbMailCheckBox_Click_EventHandler $Global:ServiceBrokerDbMailCheckBox.IsChecked })
 
+    #perfmon counters
     $Global:memoryCheckBox.Add_Click({ Manage_PerfmonCounters $Global:memoryCheckBox.IsChecked })
     $Global:BackupRestoreCheckBox.Add_Click({ Manage_PerfmonCounters $Global:BackupRestoreCheckBox.IsChecked })
     $Global:IOCheckBox.Add_Click({ Manage_PerfmonCounters $Global:IOCheckBox.IsChecked })
     $Global:basicPerfCheckBox.Add_Click({ Manage_PerfmonCounters $Global:basicPerfCheckBox.IsChecked })
     $Global:NoBasicCheckBox.Add_Click({ Manage_PerfmonCounters $Global:NoBasicCheckBox.IsChecked })
+
+    #xevents
     $Global:xeventcore_CheckBox.Add_Click({ HandleCeventcore_CheckBoxClick $Global:xeventcore_CheckBox.IsChecked })
     $Global:XeventAlwaysOn_CheckBox.Add_Click({ AlwaysOn_CheckBoxClick $Global:XeventAlwaysOn_CheckBox.IsChecked })
     $Global:XeventGeneral_CheckBox.Add_Click({ XeventGeneral_CheckBoxClick $Global:XeventGeneral_CheckBox.IsChecked })
     $Global:XeventDetailed_CheckBox.Add_Click({ XeventDetailed_CheckBoxClick $Global:XeventDetailed_CheckBox.IsChecked })
+    $Global:NeverEndingQueryCheckBox.Add_Click({ Manage_PerfmonCounters $Global:NeverEndingQueryCheckBox.IsChecked })
 
 }
 function HandleCeventcore_CheckBoxClick([bool] $state) {
     
 
         foreach ($item in $Global:XeventsList_core) {
-            $item.State = $state
+            [GenericModel] $item = $item
+            
+            if ($item.Caption -like "*existing_connection*" ) {
+                #This should remain always seleted because core xevents is needed to create the main event
+                $item.State = $true
+            } else {
+                $item.State = $state
+            }
         }
         $Global:list_xevent_core.ItemsSource = $null
         $Global:list_xevent_core.ItemsSource = $Global:XeventsList_core
-        $Global:xeventcore_CheckBox.IsChecked = $state
-    
+        #Core xevent collection is needed because it is the one that creates xevent_SQLLogScout session
+        $Global:xeventcore_CheckBox.IsChecked = $Global:TVI_xevent_core.IsEnabled  #$state
 }
 function AlwaysOn_CheckBoxClick([bool] $state) {
     
@@ -176,6 +205,18 @@ function XeventDetailed_CheckBoxClick([bool] $state) {
     
 }
 
+function XeventServiceBrokerDbMail_CheckBoxClick([bool] $state) {
+    
+
+    foreach ($item in $Global:XeventsList_servicebroker_dbmail) {
+        $item.State = $state
+    }
+
+    $Global:XeventServiceBrokerDbMail_CheckBox.IsChecked = $state
+    $Global:list_xevent_servicebroker_dbmail.ItemsSource = $null
+    $Global:list_xevent_servicebroker_dbmail.ItemsSource = $Global:XeventsList_servicebroker_dbmail
+}
+
 function ButtonPresentDirectory_EventHandler() {
     $objForm = New-Object System.Windows.Forms.FolderBrowserDialog
     $Show = $objForm.ShowDialog()
@@ -185,19 +226,23 @@ function ButtonPresentDirectory_EventHandler() {
 }
 
 function Window_Loaded_EventHandler() {
-    Foreach ($Instance in Get-NetNameMatchingInstance) { $ComboBoxInstanceName.Items.Add($Instance) }           
+
+    BuildServiceNameStatusModel
     BuildPermonModel
     BuildXEventsModel
     BuildXEventsModel_core
     BuildXEventsModel_detailed
     BuildXEventsModel_AlwaysOn
+    BuildXEventsModel_servicebroker_dbmail
+
+
     Manage_PerfmonCounters($false)
     HandleCeventcore_CheckBoxClick($false)
     AlwaysOn_CheckBoxClick($false)
     XeventGeneral_CheckBoxClick($false)
     XeventDetailed_CheckBoxClick($false)
-    # $Global:listExtraSkills = $Global:Window.FindName("listExtraSkills")
-    # listExtraSkills
+    XeventServiceBrokerDbMail_CheckBoxClick($false)
+
 }
 function Manage_PerfmonCounters([bool] $state) {
     if ($Global:DetailedPerfCheckBox.IsChecked -or
@@ -207,6 +252,9 @@ function Manage_PerfmonCounters([bool] $state) {
         $Global:memoryCheckBox.IsChecked -or
         $Global:BackupRestoreCheckBox.IsChecked -or
         $Global:IOCheckBox.IsChecked -or
+        $Global:basicPerfCheckBox.IsChecked -or
+        $Global:NeverEndingQueryCheckBox.IsChecked -or
+        $Global:ServiceBrokerDbMailCheckBox.IsChecked -or
         $Global:basicPerfCheckBox.IsChecked) {
         $Global:listExtraSkills.IsEnabled = $true
         foreach ($item in $Global:list) {
@@ -287,6 +335,18 @@ function alwaysOnPerfCheckBox_Click_EventHandler([bool] $state) {
         }
     }
 }
+
+function ServiceBrokerDbMailCheckBox_Click_EventHandler([bool] $state) {
+
+    $Global:TVI_xevent_core.IsEnabled = $state
+    $Global:TVI_xevent_servicebroker_dbmail.IsEnabled = $state
+
+    XeventServiceBrokerDbMail_CheckBoxClick($state)
+    HandleCeventcore_CheckBoxClick($state)
+    Manage_PerfmonCounters($state)
+
+}
+
 
 function Set-Mode() {
 
@@ -370,6 +430,12 @@ function EnableScenarioFromGUI {
     if ($Global:IOCheckBox.IsChecked) { 
         $global:gScenario += "IO+"
     }
+    if ($Global:NeverEndingQueryCheckBox.IsChecked) {
+        $global:gScenario += "NeverEndingQuery+"
+    }
+    if ($Global:ServiceBrokerDbMailCheckBox.IsChecked) { 
+        $global:gScenario += "ServiceBrokerDbMail+"
+    }
     if ($Global:NoBasicCheckBox.IsChecked) { 
         $global:gScenario += "NoBasic+"
     }
@@ -399,60 +465,45 @@ function DisableAll([bool] $state) {
     # $Global:basicPerfCheckBox.IsEnabled = !$state
 
     $Global:generalPerfCheckBox.IsChecked = $false
-    
     $Global:DetailedPerfCheckBox.IsChecked = $false
-    
     $Global:LightPerfCheckBox.IsChecked = $false
-    
     $Global:replicationPerfCheckBox.IsChecked = $false
-    
     $Global:alwaysOnPerfCheckBox.IsChecked = $false
-    
     $Global:networkTraceCheckBox.IsChecked = $false
-    
     $Global:memoryCheckBox.IsChecked = $false
-    
     $Global:dumpMemoryCheckBox.IsChecked = $false
-    
     $Global:SetupCheckBox.IsChecked = $false
-    
     $Global:BackupRestoreCheckBox.IsChecked = $false
-    
     $Global:IOCheckBox.IsChecked = $false
+    $Global:NeverEndingQueryCheckBox.IsChecked = $false
+    $Global:ServiceBrokerDbMailCheckBox.IsChecked = $false
     $Global:generalPerfCheckBox.IsEnabled = !$state
-    
     $Global:DetailedPerfCheckBox.IsEnabled = !$state
-    
     $Global:LightPerfCheckBox.IsEnabled = !$state
-    
     $Global:replicationPerfCheckBox.IsEnabled = !$state
-    
     $Global:alwaysOnPerfCheckBox.IsEnabled = !$state
-    
     $Global:networkTraceCheckBox.IsEnabled = !$state
-    
     $Global:memoryCheckBox.IsEnabled = !$state
-    
     $Global:dumpMemoryCheckBox.IsEnabled = !$state
-    
     $Global:SetupCheckBox.IsEnabled = !$state
-    
     $Global:BackupRestoreCheckBox.IsEnabled = !$state
-    
     $Global:IOCheckBox.IsEnabled = !$state
-    
-    
+    $Global:NeverEndingQueryCheckBox.IsEnabled = !$state
+    $Global:ServiceBrokerDbMailCheckBox.IsEnabled = !$state
 }
+
 function GenerateXeventFileFromGUI {
     Write-LogDebug "inside" $MyInvocation.MyCommand  
     try {
-        CreateFile $Global:XeventsList_general "xevent_general.sql"
-        MakeSureCreateBeforeAlterEvent $Global:XeventsList_core "EVENT SESSION [xevent_SQLLogScout] ON SERVER  ADD EVENT"
-        CreateFile $Global:XeventsList_core 'xevent_core.sql'
-        CreateFile $Global:XeventsList_detailed 'xevent_detailed.sql'
+        CreateFile -mylist $Global:XeventsList_general -fileName "xevent_general.sql"
+        MakeSureCreateBeforeAlterEvent -mylist $Global:XeventsList_core -pattern "EVENT SESSION [xevent_SQLLogScout] ON SERVER  ADD EVENT"
+        CreateFile -mylist $Global:XeventsList_core -fileName 'xevent_core.sql'
+        CreateFile -mylist $Global:XeventsList_detailed -fileName 'xevent_detailed.sql'
 
-        MakeSureCreateBeforeAlterEvent $Global:XeventsList_AlwaysOn " EVENT SESSION [SQLLogScout_AlwaysOn_Data_Movement] ON SERVER"
-        CreateFile $Global:XeventsList_AlwaysOn 'xevent_AlwaysOn_Data_Movement.sql'
+        CreateFile -mylist $Global:XeventsList_servicebroker_dbmail -fileName 'xevent_servicebroker_dbmail.sql'
+
+        MakeSureCreateBeforeAlterEvent -mylist $Global:XeventsList_AlwaysOn -pattern " EVENT SESSION [SQLLogScout_AlwaysOn_Data_Movement] ON SERVER"
+        CreateFile -mylist $Global:XeventsList_AlwaysOn -fileName 'xevent_AlwaysOn_Data_Movement.sql'
     }
     catch {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  
@@ -637,4 +688,64 @@ function BuildXEventsModel_AlwaysOn() {
         exit
     }
 
+}
+
+
+function BuildXEventsModel_servicebroker_dbmail() {
+    try {
+        Write-LogDebug "inside" $MyInvocation.MyCommand  
+        $xevent_string = New-Object -TypeName System.Text.StringBuilder
+        $GenericModelobj = New-Object GenericModel
+        foreach ($element in Get-Content .\xevent_servicebroker_dbmail.sql) {
+            if ($element -eq "GO") { 
+                $GenericModelobj.Value = $xevent_string
+                $GenericModelobj.State = $true
+                $global:XeventsList_servicebroker_dbmail.Add($GenericModelobj)
+                 
+                # reset the object and string builder
+                $GenericModelobj = New-Object GenericModel
+                $xevent_string = New-Object -TypeName System.Text.StringBuilder
+                [void]$xevent_string.Append("GO `r`n")
+            }
+            else {
+                [void]$xevent_string.Append($element)
+                [void]$xevent_string.Append("`r`n")
+                
+                #$GenericModelobj.Value = $line
+                # get the event name from the event session and add it to the model
+                if ($element.contains("[xevent_SQLLogScout]")) {
+                    $temp = $element.split('(')[0].split('.')
+                    if ($temp.count -eq 2) {
+                        $GenericModelobj.Caption = $temp[1]
+                    }
+
+                }
+            }
+        }
+    }
+    catch {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  
+        exit
+    }
+
+}
+
+function BuildServiceNameStatusModel() {
+
+    try 
+    {
+        foreach ($Instance in Get-NetNameMatchingInstance) 
+        { 
+            $global:List_service_name_status.Add((New-Object ServiceState -Property @{Name=$Instance.Name; Status=$Instance.Status}))
+            
+        }   
+        
+        $ComboBoxInstanceName.ItemsSource = $global:List_service_name_status 
+    }
+    
+    catch 
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  
+        exit
+    }
 }

@@ -62,14 +62,21 @@ param
 
     #specify quiet mode for any Y/N prompts
     [Parameter(Position=7,HelpMessage='Choose Quiet|Noisy')]
-    [string] $InteractivePrompts = "Noisy"
+    [string] $InteractivePrompts = "Noisy",
 
-    
+    #scenario is an optional parameter since there is a menu that covers for it if not present. Always keep as the last parameter
+    [Parameter(Position=8,Mandatory=$false,HelpMessage='Test parameter that should not be used for most collections')]
+    [string] $DisableCtrlCasInput = "False"
 )
 
 
 #=======================================Globals =====================================
-[console]::TreatControlCAsInput = $true
+
+if ($global:gDisableCtrlCasInput -eq "False")
+{
+    [console]::TreatControlCAsInput = $true
+}
+
 [string]$global:present_directory = ""
 [string]$global:output_folder = ""
 [string]$global:internal_output_folder = ""
@@ -97,11 +104,14 @@ param
 [int] $global:scenario_bitvalue  = 0
 [int] $global:sql_major_version = -1
 [int] $global:sql_major_build = -1
+[long] $global:SQLVERSION = -1
 [string] $global:procmon_folder = ""
 [bool] $global:gui_mode = $false
 [bool] $global:gui_Result = $false
 [String[]]$global:varXevents = "xevent_AlwaysOn_Data_Movement", "xevent_core", "xevent_detailed" ,"xevent_general"
 [bool] $global:is_secondary_read_intent_only = $false
+[bool]$global:allow_static_data_because_service_offline = $false
+[string]$global:sql_instance_service_status = ""
 
 #constants
 [string] $global:BASIC_NAME = "Basic"
@@ -119,30 +129,49 @@ param
 [string] $global:LIGHTPERF_NAME = "LightPerf"
 [string] $global:NOBASIC_NAME = "NoBasic"
 [string] $global:PROCMON_NAME = "ProcessMonitor"
+[string] $global:SSB_DBMAIL_NAME = "ServiceBrokerDBMail"
+[string] $global:Never_Ending_Query_NAME = "NeverEndingQuery"
 
-[string] $global:DETAILEDPERF_NAME_TEST = "Detailed PERF TEST"
 
 #MenuChoice and NoBasic will not go into this array as they don't need to show up as menu choices
-[string[]] $global:ScenarioArray = @($global:BASIC_NAME,$global:GENERALPERF_NAME,$global:DETAILEDPERF_NAME,$global:REPLICATION_NAME,$global:ALWAYSON_NAME,$global:NETWORKTRACE_NAME,$global:MEMORY_NAME,$global:DUMPMEMORY_NAME,$global:WPR_NAME,$global:SETUP_NAME,$global:BACKUPRESTORE_NAME,$global:IO_NAME,$global:LIGHTPERF_NAME,$global:PROCMON_NAME)
+[string[]] $global:ScenarioArray = @(
+    $global:BASIC_NAME,
+    $global:GENERALPERF_NAME,
+    $global:DETAILEDPERF_NAME,
+    $global:REPLICATION_NAME,
+    $global:ALWAYSON_NAME,
+    $global:NETWORKTRACE_NAME,
+    $global:MEMORY_NAME,
+    $global:DUMPMEMORY_NAME,
+    $global:WPR_NAME,
+    $global:SETUP_NAME,
+    $global:BACKUPRESTORE_NAME,
+    $global:IO_NAME,
+    $global:LIGHTPERF_NAME,
+    $global:PROCMON_NAME,
+    $global:SSB_DBMAIL_NAME,
+    $global:Never_Ending_Query_NAME)
 
 
 # documenting the bits
-# 0000000000000001 (1)   = Basic
-# 0000000000000010 (2)   = GeneralPerf
-# 0000000000000100 (4)   = DetailedPerf
-# 0000000000001000 (8)   = Replication
-# 0000000000010000 (16)  = alwayson
-# 0000000000100000 (32)  = networktrace
-# 0000000001000000 (64)  = memory
-# 0000000010000000 (128) = DumpMemory
-# 0000000100000000 (256) = WPR
-# 0000001000000000 (512) = Setup
-# 0000010000000000 (1024)= BackupRestore
-# 0000100000000000 (2048)= IO
-# 0001000000000000 (4096)= LightPerf
-# 0010000000000000 (8192)= NoBasicBit
-# 0100000000000000 (16384)= ProcmonBit
-# 1000000000000000 (32768)= futureBit
+# 000000000000000001 (1)   = Basic
+# 000000000000000010 (2)   = GeneralPerf
+# 000000000000000100 (4)   = DetailedPerf
+# 000000000000001000 (8)   = Replication
+# 000000000000010000 (16)  = alwayson
+# 000000000000100000 (32)  = networktrace
+# 000000000001000000 (64)  = memory
+# 000000000010000000 (128) = DumpMemory
+# 000000000100000000 (256) = WPR
+# 000000001000000000 (512) = Setup
+# 000000010000000000 (1024)= BackupRestore
+# 000000100000000000 (2048)= IO
+# 000001000000000000 (4096)= LightPerf
+# 000010000000000000 (8192)= NoBasicBit
+# 000100000000000000 (16384)= ProcmonBit
+# 001000000000000000 (32768)= ServiceBrokerDBMail
+# 010000000000000000 (65536)= neverEndingQuery
+# 100000000000000000 (131072) = futureBit
 
 [int] $global:basicBit         = 1
 [int] $global:generalperfBit   = 2 
@@ -159,7 +188,9 @@ param
 [int] $global:LightPerfBit     = 4096
 [int] $global:NoBasicBit       = 8192
 [int] $global:ProcmonBit       = 16384
-[int] $global:futureScBit      = 32768
+[int] $global:ssbDbmailBit     = 32768
+[int] $global:neverEndingQBit  = 65536
+[int] $global:futureScBit      = 131072
 
 #globals to map script parameters into
 [string[]] $global:gScenario
@@ -168,28 +199,32 @@ param
 [string] $global:gDiagStartTime
 [string] $global:gDiagStopTime
 [string] $global:gInteractivePrompts
+[string] $global:gDisableCtrlCasInput
+
 
 $global:ScenarioBitTbl = @{}
 $global:ScenarioMenuOrdinals = @{}
 
 #hashtable to use for lookups bits to names and reverse
 
-$global:ScenarioBitTbl.Add($global:BASIC_NAME        , $global:basicBit)
-$global:ScenarioBitTbl.Add($global:GENERALPERF_NAME  , $global:generalperfBit)
-$global:ScenarioBitTbl.Add($global:DETAILEDPERF_NAME , $global:detailedperfBit)
-$global:ScenarioBitTbl.Add($global:REPLICATION_NAME  , $global:replBit)
-$global:ScenarioBitTbl.Add($global:ALWAYSON_NAME     , $global:alwaysonBit)
-$global:ScenarioBitTbl.Add($global:NETWORKTRACE_NAME , $global:networktraceBit)
-$global:ScenarioBitTbl.Add($global:MEMORY_NAME       , $global:memoryBit)
-$global:ScenarioBitTbl.Add($global:DUMPMEMORY_NAME   , $global:dumpMemoryBit)
-$global:ScenarioBitTbl.Add($global:WPR_NAME          , $global:wprBit)
-$global:ScenarioBitTbl.Add($global:SETUP_NAME        , $global:setupBit)
-$global:ScenarioBitTbl.Add($global:BACKUPRESTORE_NAME, $global:BackupRestoreBit)
-$global:ScenarioBitTbl.Add($global:IO_NAME           , $global:IOBit)
-$global:ScenarioBitTbl.Add($global:LIGHTPERF_NAME    , $global:LightPerfBit)
-$global:ScenarioBitTbl.Add($global:NOBASIC_NAME      , $global:NoBasicBit)
-$global:ScenarioBitTbl.Add($global:PROCMON_NAME      , $global:ProcmonBit)
-$global:ScenarioBitTbl.Add("FutureScen"       , $global:futureScBit)
+$global:ScenarioBitTbl.Add($global:BASIC_NAME                , $global:basicBit)
+$global:ScenarioBitTbl.Add($global:GENERALPERF_NAME          , $global:generalperfBit)
+$global:ScenarioBitTbl.Add($global:DETAILEDPERF_NAME         , $global:detailedperfBit)
+$global:ScenarioBitTbl.Add($global:REPLICATION_NAME          , $global:replBit)
+$global:ScenarioBitTbl.Add($global:ALWAYSON_NAME             , $global:alwaysonBit)
+$global:ScenarioBitTbl.Add($global:NETWORKTRACE_NAME         , $global:networktraceBit)
+$global:ScenarioBitTbl.Add($global:MEMORY_NAME               , $global:memoryBit)
+$global:ScenarioBitTbl.Add($global:DUMPMEMORY_NAME           , $global:dumpMemoryBit)
+$global:ScenarioBitTbl.Add($global:WPR_NAME                  , $global:wprBit)
+$global:ScenarioBitTbl.Add($global:SETUP_NAME                , $global:setupBit)
+$global:ScenarioBitTbl.Add($global:BACKUPRESTORE_NAME        , $global:BackupRestoreBit)
+$global:ScenarioBitTbl.Add($global:IO_NAME                   , $global:IOBit)
+$global:ScenarioBitTbl.Add($global:LIGHTPERF_NAME            , $global:LightPerfBit)
+$global:ScenarioBitTbl.Add($global:NOBASIC_NAME              , $global:NoBasicBit)
+$global:ScenarioBitTbl.Add($global:PROCMON_NAME              , $global:ProcmonBit)
+$global:ScenarioBitTbl.Add($global:SSB_DBMAIL_NAME           , $global:ssbDbmailBit)
+$global:ScenarioBitTbl.Add($global:Never_Ending_Query_NAME   , $global:neverEndingQBit)
+$global:ScenarioBitTbl.Add("FutureScen"                      , $global:futureScBit)
 
 #hashtable for menu ordinal numbers to be mapped to bits
 
@@ -207,12 +242,21 @@ $global:ScenarioMenuOrdinals.Add(10 , $global:ScenarioBitTbl[$global:BACKUPRESTO
 $global:ScenarioMenuOrdinals.Add(11 , $global:ScenarioBitTbl[$global:IO_NAME]           )
 $global:ScenarioMenuOrdinals.Add(12 , $global:ScenarioBitTbl[$global:LIGHTPERF_NAME]    )
 $global:ScenarioMenuOrdinals.Add(13 , $global:ScenarioBitTbl[$global:PROCMON_NAME]      )
+$global:ScenarioMenuOrdinals.Add(14 , $global:ScenarioBitTbl[$global:SSB_DBMAIL_NAME]   )
+$global:ScenarioMenuOrdinals.Add(15 , $global:ScenarioBitTbl[$global:Never_Ending_Query_NAME]   )
 
 # synchronizable hashtable (collection) to be used for thread synchronization
 [hashtable] $global:xevent_ht = @{}
 $global:xevent_ht.IsSynchronized = $true
 
+#SQLSERVERPROPERTY list will be popluated during intialization
+$global:SQLSERVERPROPERTYTBL = @{}
 
+$global:SqlServerVersionsTbl = @{}
+
+#SQLCMD objects reusing the same connection to query SQL Server where needed is more efficient.
+[System.Data.SqlClient.SqlConnection] $global:SQLConnection
+[System.Data.SqlClient.SqlCommand] $global:SQLCcommand
 
 #=======================================Start of \OUTPUT and \INTERNAL directories and files Section
 #======================================== START of Process management section
@@ -254,7 +298,8 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
            $delExistingOrCreateNewHlpStr = "`n[-DeleteExistingOrCreateNew <string>] "
            $DiagStartTimeHlpStr = "`n[-DiagStartTime <string>] "
            $DiagStopTimeHlpStr = "`n[-DiagStopTime <string>] "
-           $InteractivePromptsHlpStr = "`n[-InteractivePrompts <string>] " 
+           $InteractivePromptsHlpStr = "`n[-InteractivePrompts <string>] "
+           $DisableCtrlCasInputHlpStr = "`n[-DisableCtrlCasInput <string>] "
        
         
 
@@ -268,6 +313,7 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                5 { $DiagStartTimeHlpStr= $DiagStartTimeHlpStr + "< " + $ValidArguments +" >"}
                6 { $DiagStopTimeHlpStr = $DiagStopTimeHlpStr + "< " + $ValidArguments +" >"}
                7 { $InteractivePromptsHlpStr = $InteractivePromptsHlpStr + "< " + $ValidArguments +" >"}
+               8 { $DisableCtrlCasInputHlpStr = $DisableCtrlCasInputHlpStr + "< " + $ValidArguments +" >"}
            }
 
    
@@ -279,7 +325,7 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
        + $delExistingOrCreateNewHlpStr `
        + $DiagStartTimeHlpStr`
        + $DiagStopTimeHlpStr `
-       + $InteractivePromptsHlpStr + "`n" `
+       + $InteractivePromptsHlpStr ` + "`n" `
        + "`nExample: `n" `
        + "  SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv `"d:\log`" DeleteDefaultFolder `"01-01-2000`" `"04-01-2021 17:00`" Quiet`n"
 
@@ -511,6 +557,20 @@ function ValidateParameters ()
         Write-LogError "Parameter 'InteractivePrompts' can only accept one of these values: $InteractivePromptsParamArr. Current value '$global:gInteractivePrompts' is incorrect."
         PrintHelp -ValidArguments $InteractivePromptsParamArr -index 7
         return $false
+    }
+
+    #validate DisableCtrlCasInput parameter
+    
+    if ($DisableCtrlCasInput -eq "True")
+    {
+        #If DisableCtrlCasInput is true, then pass as true
+        $global:gDisableCtrlCasInput = "True"
+    }
+
+    else 
+    {
+        #any value other than True or null/whitespace, set value to false.
+        $global:gDisableCtrlCasInput = "False"
     }
 
     # return true since we got to here

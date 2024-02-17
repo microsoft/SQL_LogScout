@@ -50,6 +50,12 @@ BEGIN
 		@sql_major_build = MajorBuild
 	FROM #sqlversion
 
+
+	DECLARE @SQLVERSION BIGINT =  PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) 
+							+ RIGHT(REPLICATE ('0', 3) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 3), 3)  
+							+ RIGHT (replicate ('0', 6) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) , 6)
+
+
 	--Implement the exceptions now. #temptablelist_sqlnexus is already created by parent proc so it exist in this session
 
 	-- exclude scoped configuration table in versions earlier than SQL 2016
@@ -103,6 +109,17 @@ BEGIN
 					)
 		END
 
+		-- in-memory related dmvs
+		IF (@sql_major_version < 12)
+		BEGIN
+			DELETE FROM #temptablelist_sqlnexus 
+			WHERE SchemaName = 'dbo' 
+				AND TableName IN (
+					'tbl_dm_db_xtp_transactions',
+					'tbl_dm_xtp_transaction_stats'					
+					)
+		END
+
 
 	END
 
@@ -148,6 +165,11 @@ BEGIN
 				AND TableName IN (
 				'tbl_hadr_ag_automatic_seeding',
 				'tbl_hadr_ag_physical_seeding_stats')
+		END
+		IF (@exclusion_tag = 'NoAlwaysOn')
+		BEGIN
+			DELETE FROM #temptablelist_sqlnexus 
+			WHERE SchemaName = 'ReadTrace' 
 		END
 	END
 
@@ -202,6 +224,37 @@ BEGIN
 		END
 	END
 
+	--exclude in-memory dvms from before SQL 2014
+	ELSE IF (@scenario_name IN ('Memory'))
+	BEGIN
+		IF (@sql_major_version < 12)
+		BEGIN
+			DELETE FROM #temptablelist_sqlnexus 
+			WHERE SchemaName = 'dbo' 
+				AND TableName IN (
+				'tbl_dm_db_xtp_index_stats'
+               ,'tbl_dm_db_xtp_hash_index_stats'
+               ,'tbl_dm_db_xtp_table_memory_stats'
+               ,'tbl_dm_db_xtp_memory_consumers'
+               ,'tbl_dm_db_xtp_object_stats'
+               ,'tbl_dm_xtp_system_memory_consumers'
+               ,'tbl_dm_xtp_system_memory_consumers_summary'
+               ,'tbl_dm_xtp_gc_stats'
+               ,'tbl_dm_xtp_gc_queue_stats')
+		END
+	END
+
+	-- Exclued Neverneding Query tables
+	ELSE IF (@scenario_name IN ('NeverEndingQuery'))
+	BEGIN
+		IF (@SQLVERSION < 13000004001 OR @exclusion_tag = 'NoNeverEndingQuery')
+		BEGIN
+			DELETE FROM #temptablelist_sqlnexus 
+			
+		END
+	END
+
+
 END
 GO
 
@@ -213,7 +266,22 @@ AS
 BEGIN
 	SET NOCOUNT ON
 -- Validate the parameter db name and scenario name
-	IF (EXISTS (SELECT name FROM master.sys.databases  WHERE (name = @databasename)) and @scenarioname in ('AlwaysOn','GeneralPerf','DetailedPerf','Setup','Basic','BackupRestore','IO','LightPerf','Replication'))
+-- only accept single scenario names (no combinations)
+	IF (EXISTS (SELECT name FROM master.sys.databases  WHERE (name = @databasename)) 
+				and @scenarioname in (
+					'AlwaysOn',
+					'GeneralPerf',
+					'DetailedPerf',
+					'Memory',
+					'Setup',
+					'Basic',
+					'BackupRestore',
+					'IO',
+					'LightPerf',
+					'Replication',
+					'ServiceBrokerDBMail',
+					'NeverEndingQuery')
+		)
 	BEGIN
 		IF  OBJECT_ID('tempdb..#temptablelist_sqlnexus') IS NOT NULL 
 		BEGIN
@@ -264,7 +332,9 @@ BEGIN
 			('dbo','tbl_dm_db_log_info'),
 			('dbo','Counters'),
 			('dbo','CounterDetails'),
-			('dbo','CounterData')
+			('dbo','CounterData'),
+			('dbo', 'tbl_SystemInformation'),
+			('dbo', 'tbl_environment_variables')
 
 		--create the list of Basic scenario tables for reuse in other scenarios
 		IF  OBJECT_ID('tempdb..#tablelist_LightPerfScenario') IS NOT NULL 
@@ -339,7 +409,9 @@ BEGIN
 			('dbo','tbl_query_store_query_variant'),
 			('dbo','tbl_profiler_trace_summary') ,
 			('dbo','tbl_profiler_trace_event_details') ,
-			('dbo','tbl_XEvents')
+			('dbo','tbl_XEvents'),
+			('dbo','tbl_dm_db_xtp_transactions'),
+			('dbo','tbl_dm_xtp_transaction_stats')
 
 		--now go through each scenario and the tables expected for it
 		IF (@scenarioname = 'AlwaysOn')
@@ -387,7 +459,7 @@ BEGIN
 			('ReadTrace','tblUniqueLoginNames'),
 			('dbo','CounterDetails'),
 			('dbo','CounterData'),
-			('dbo','DisplayToID')
+			('dbo','DisplayToID')						
 
 			--insert the tables for Basic scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
@@ -536,12 +608,70 @@ BEGIN
 			('dbo','tbl_repl_mstracer_tokens'),
 			('dbo','tbl_repl_sysservers'),
 			('dbo','tbl_Reports')
+			
 			--insert the tables for Basic scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 
 		END
 
+		ELSE IF (@scenarioname = 'Memory')
+		BEGIN
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
+			('dbo','tbl_Query_Execution_Memory_MemScript'),
+			('dbo','tbl_proccache_summary'),
+			('dbo','tbl_proccache_pollution'),
+			('dbo','tbl_DM_OS_MEMORY_CACHE_COUNTERS'),
+			('dbo','tbl_DM_OS_MEMORY_CLERKS'),
+			('dbo','tbl_DM_OS_MEMORY_CACHE_CLOCK_HANDS'),
+			('dbo','tbl_DM_OS_MEMORY_CACHE_HASH_TABLES'),
+			('dbo','tbl_dm_os_memory_pools'),
+			('dbo','tbl_dm_os_loaded_modules_non_microsoft'),
+			('dbo','tbl_dm_os_memory_objects'),
+			('dbo','tbl_workingset_trimming'),
+			('dbo','tbl_dm_os_ring_buffers_mem'),
+			('dbo','tbl_dm_db_xtp_index_stats'),
+            ('dbo','tbl_dm_db_xtp_hash_index_stats'),
+            ('dbo','tbl_dm_db_xtp_table_memory_stats'),
+            ('dbo','tbl_dm_db_xtp_memory_consumers'),
+            ('dbo','tbl_dm_db_xtp_object_stats'),
+            ('dbo','tbl_dm_xtp_system_memory_consumers'),
+            ('dbo','tbl_dm_xtp_system_memory_consumers_summary'),
+            ('dbo','tbl_dm_xtp_gc_stats'),
+            ('dbo','tbl_dm_xtp_gc_queue_stats')
+			
+			--add the basic scenario tables
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
+            SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
+
+		END
+		ELSE IF (@scenarioname = 'ServiceBrokerDBMail')
+		BEGIN
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
+			('dbo','tbl_sysmail_profileaccount'),
+			('dbo','tbl_sysmail_profile'),
+			('dbo','tbl_sysmail_log'),
+			('dbo','tbl_sysmail_configuration'),
+			('dbo','tbl_sysmail_account'),
+			('dbo','tbl_sysmail_mailitems'),
+            ('dbo','tbl_sysmail_event_log_sysmail_faileditems')
+			
+			--add the basic scenario tables
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
+            SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
+
+		END
+
+		ELSE IF (@scenarioname = 'NeverEndingQuery')
+		BEGIN
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
+			('dbo','tbl_CPU_bound_query_never_completes')
+
+			--add the basic scenario tables
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
+            SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
+
+		END
 		
 		--call the stored proc to implement exceptions
 		EXEC dbo.proc_ExclusionsInclusions @scenario_name = @scenarioname , @database_name = @databasename, @exclusion_tag = @exclusion
@@ -567,6 +697,12 @@ BEGIN
 		    SELECT ' '
 			SELECT 1001001 AS EXIT_CODE
 		END
+	END
+	ELSE
+	BEGIN
+		--if the db name or scenario name is invalid, send some large value code out to indicate failure
+		SELECT 'Scenario name or database name is invalid' as 'Error_Message'
+		SELECT 3003003 AS EXIT_CODE
 	END
 END
 GO

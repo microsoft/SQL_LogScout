@@ -124,7 +124,7 @@ function Initialize-ScheduledTaskLog
         $LogFileNameStringToDelete = $LogFileName
 
         #update file with date
-        $LogFileName = ($LogFileName -replace "##SQLLogScout_ScheduledTask", ("##SQLLogScout_ScheduledTask_" + @(Get-Date -Format  "yyyMMddTHHmmssffff") + ".log"))
+        $LogFileName = ($LogFileName -replace "##SQLLogScout_ScheduledTask", ("##SQLLogScout_ScheduledTask_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".log"))
         $global:ScheduledTaskLog = $LogFilePath + '\' + $LogFileName
         New-Item -ItemType "file" -Path $global:ScheduledTaskLog -Force | Out-Null
         $CurrentTime = (Get-Date -Format("yyyy-MM-dd HH:MM:ss.ms"))
