@@ -1,4 +1,4 @@
-
+$serverBasedFolder = $false
 #=======================================Start of \OUTPUT and \Internal directories and files Section
 function InitCriticalDirectories()
 {
@@ -132,10 +132,19 @@ function Set-OutputPath()
 function Set-NewOutputPath 
 {
     Write-LogDebug "inside" $MyInvocation.MyCommand
-    
+
+Write-Host ""
     try 
     {
-        [string] $new_output_folder_name = "_" + @(Get-Date -Format yyyyMMddTHHmmss) + "\"
+        [string] $new_output_folder_name = $null;
+	if($serverBasedFolder -eq $true)
+	{
+		$new_output_folder_name= "_" + $global:gServerName.Replace(".","_").Replace("\","_")+"_" + @(Get-Date -Format yyyyMMddTHHmmss) + "\"
+	}
+	else 
+	{ 
+		$new_output_folder_name= "_" + @(Get-Date -Format yyyyMMddTHHmmss) + "\"
+	}
         $global:output_folder = $global:output_folder.Substring(0, ($global:output_folder.Length-1)) + $new_output_folder_name        
     }
     catch
@@ -154,7 +163,7 @@ function Set-InternalPath()
     try 
     {
         #the \internal folder is subfolder of \output
-        $global:internal_output_folder =  ($global:output_folder  + "internal\")    
+       	$global:internal_output_folder =  ($global:output_folder  + "internal\")    
     }
     catch 
     {
@@ -228,6 +237,11 @@ function ReuseOrRecreateOutputFolder()
             if($Global:overrideExistingCheckBox.IsChecked) {$DeleteOrNew = "D"}
             else{$DeleteOrNew = "N"}
         }
+	elseif($global:gDeleteExistingOrCreateNew -eq "ServerBasedFolder")
+	{
+		$DeleteOrNew = "N"
+		$serverBasedFolder = $true
+	}
         elseif (Test-Path -Path $global:output_folder)  
         {
             if ([string]::IsNullOrWhiteSpace($global:gDeleteExistingOrCreateNew) )
@@ -254,7 +268,6 @@ function ReuseOrRecreateOutputFolder()
                 }
 
             }
-
             elseif ($global:gDeleteExistingOrCreateNew -in "DeleteDefaultFolder","NewCustomFolder") 
             {
                 Write-LogDebug "The DeleteExistingOrCreateNew parameter is $($global:gDeleteExistingOrCreateNew)" -DebugLogLevel 2

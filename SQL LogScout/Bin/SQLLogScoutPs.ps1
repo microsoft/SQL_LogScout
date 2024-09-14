@@ -49,7 +49,7 @@ param
     [string] $CustomOutputPath = "PromptForCustomDir",
 
     #scenario is an optional parameter since there is a menu that covers for it if not present
-    [Parameter(Position=4,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder')]
+    [Parameter(Position=4,HelpMessage='Choose DeleteDefaultFolder|NewCustomFolder|ServerBasedFolder')]
     [string] $DeleteExistingOrCreateNew = [String]::Empty,
 
     #specify start time for diagnostic
@@ -492,7 +492,7 @@ function ValidateParameters ()
     #validate DeleteExistingOrCreateNew parameter
     if ([String]::IsNullOrWhiteSpace($DeleteExistingOrCreateNew) -eq $false)
     {
-        $DelExistingOrCreateNewParamArr = @("DeleteDefaultFolder","NewCustomFolder")
+        $DelExistingOrCreateNewParamArr = @("DeleteDefaultFolder","NewCustomFolder","ServerBasedFolder")
         if($DeleteExistingOrCreateNew -inotin $DelExistingOrCreateNewParamArr)
         {
             Write-LogError "Parameter 'DeleteExistingOrCreateNew' can only accept one of these values: $DelExistingOrCreateNewParamArr. Current value '$DeleteExistingOrCreateNew' is incorrect."
@@ -526,6 +526,11 @@ function ValidateParameters ()
     if (($DiagStopTime -ne "0000") -and ($false -eq [String]::IsNullOrWhiteSpace($DiagStopTime)))
     {
         [DateTime] $dtStopOut = New-Object DateTime
+	[int]$durationInMinutes = 0;
+	if([int]::TryParse($DiagStopTime,[ref]$durationInMinutes))
+	{
+		$DiagStopTime = (Get-Date).AddMinutes($durationInMinutes)		
+	}
         if([DateTime]::TryParse($DiagStopTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStopOut) -eq $false)
         {
             Write-LogError "Parameter 'DiagStopTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`"). Current value '$DiagStopTime' is incorrect."

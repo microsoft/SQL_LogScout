@@ -382,7 +382,10 @@ try
     {    
         $DeleteFolderOrNew = 'NewCustomFolder'
     }
-
+    elseif ($DeleteFolderOrNew -ieq 'ServerBasedFolder')
+    {    
+        $DeleteFolderOrNew = 'ServerBasedFolder'
+    }
     else
     {
         Log-ScheduledTask -Message "ERROR: Please specify a valid parameter for DeleteFolderOrNew. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"

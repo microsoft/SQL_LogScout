@@ -240,6 +240,7 @@ Possible values are:
 
  - DeleteDefaultFolder - will cause the default \output folder to be deleted and recreated
  - NewCustomFolder  - will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
+ - ServerBasedFolder - will cause the creation of a new folder in the format *\output_ServerName_ddMMyyhhmmss*.
 
 ### DiagStartTime
 
@@ -248,6 +249,7 @@ Specify the time when you want SQL LogScout to start data collection in the futu
 ### DiagStopTime
 
 Specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).
+If the DiagStopTime represents an integer number then the data collection will continue for the specified in DiagStopTime minutes. Note that this duration INCLUDES startup data collection, so add a few minutes for collection to be completed.
 
 ### InteractivePrompts
 
@@ -306,6 +308,12 @@ SQL_LogScout.cmd AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01
 ```
 
 **Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
+
+Collect data for 15 minutes.
+
+```bash
+SQL_LogScout.cmd AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01 19:26:00" "15"
+```
 
 ### E. Execute SQL LogScout with multiple scenarios and in Quiet mode
 
@@ -492,7 +500,7 @@ SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows y
 - **-SQLInstance** - this is the name of the SQL Server instance to connect to. Please provide correct name (for example: "MACHINE1\SQLINST1")
 - **-OutputPath** - you specify whether you want a custom output path by providing the path itself, or specify 'UsePresentDir' to use the current folder as a base under which an output folder will be created. This corresponds to `CustomOutputPath` in SQL LogScout [Parameters](#parameters). Do NOT use `PromptForCustomDir` for a scheduled task, because you have to present to accept this on the screen.
 - **-CmdTaskName** - this is the name of the task as it appears in Windows Task Scheduler. This is an optional parameter that allows you to create multiple scheduled tasks. If you pass a value which already exists, you will be prompted to overwrite or keep original task. Default value is "SQL LogScout Task".
-- **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. Options for it are `DeleteDefaultFolder`, which causes the default \output folder to be deleted and recreated or `NewCustomFolder` which causes the creation of a new folder in the format \output_ddMMyyhhmmss. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters).
+- **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. Options for it are `DeleteDefaultFolder`, which causes the default \output folder to be deleted and recreated; `NewCustomFolder` which causes the creation of a new folder in the format \output_ddMMyyhhmmss or `ServerBasedFolder` which causes the creation of a new folder in the format \output_SQLInstance_ddMMyyhhmmss. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters).
 - **-StartTime** - this is the start time of the scheduled task in Windows Task Scheduler. If the `-Once` parameter is used together with this, only a single execution will occur on the specified date and time. If `-Daily` parameter is used, then the task will execute daily on the specified hour. Valid format for this parameter is  "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00"
 - **-DurationInMins** - this specifies how long, in minutes, the SQL LogScout will run before it stops. Specify an integer value for example "10". This will calculate the stop time for SQL LogScout and pass it as a parameter to `DiagStopTime`.
 - **-Once** - you can request the scheduled task to run a single time at the specified `-StartTime`. Use either this parameter or `-Daily` but not both.
