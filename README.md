@@ -82,11 +82,71 @@ You can place the downloaded SQL_LogScout_*.zip file in any folder of your choic
 
 There are 3 possible ways to run and interact with SQL LogScout:
 
-- Batch file
+- PowerShell script
 - GUI
-- PowerShell file
+- Batch file (backwards compatibility)
 
-## Use batch file
+## Use PowerShell script
+
+1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it. Or you can choose a different destination path later.
+
+   | :warning: WARNING          |
+   |:---------------------------|
+   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
+
+1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+
+   ```console
+   cd d:\sqllogscout
+   ```
+
+1. Start PowerShell (PS). For example you can run
+
+   ```console
+   powershell.exe
+   ```
+
+   **Note:** Avoid the use of [PowerShell ISE](https://learn.microsoft.com/powershell/scripting/windows-powershell/ise/introducing-the-windows-powershell-ise) as it is not updated and doesn't support some features that SQL LogScout uses. A  check is performed for ISE usage upon execution and if it is detected as a host environment, SQL LogScout will raise an error and exit.
+
+1. Run the following PS script by itself or by using [parameters](#parameters). For example:
+
+   ```powershell
+   PS > .\SQL_LogScout.ps1 -Scenario "Basic" -ServerName "Win2022machine\inst2022"
+   ```
+
+**Note:** Using the PowerShell script `SQL_LogScout.ps1` is the recommended way to run SQL LogScout, but `SQL_LogScout.cmd` is supported for backwards compatibility.  The introduction of `SQL_LogScount.ps1` was brought about for several reasons:
+
+1. The ability to invoke SQL LogScout with named parameters in any order and with the option to omit parameters that aren't required. The .CMD file has been inflexible in this respect.
+1. The introduction of a new feature RepeatCollections or continuous mode and the ability to retain a certain number of output folders when run with continuous mode.  
+1. The ability to digitally sign the PS1 file and thus improved security
+
+## Use graphical user interface (GUI)
+
+1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
+
+  | :warning: WARNING          |
+  |:---------------------------|
+  | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
+
+1. Open a PowerShell prompot or a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+
+   ```console
+   cd d:\sqllogscout
+   ```
+
+1. Start the tool via `SQL_LogScout.ps1` before or while the issue is occurring and follow the menus
+
+   ```console
+   SQL_LogScout.ps1
+   ```
+
+1. When prompted `Would you like to use GUI mode ?> (Y/N):` type 'y' and you will be presented with a GUI
+1. Pick one or more [Scenarios](#scenarios) from a list (based on the issue under investigation).
+1. Select from which SQL instance you want to diagnose
+1. Select whether to overwrite an existing folder with data or let it default to creating a new folder
+1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically when it finishes collecting static logs
+
+## Use batch file (backward compatibility)
 
 1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
 
@@ -118,57 +178,9 @@ There are 3 possible ways to run and interact with SQL LogScout:
 
    For more information see [Examples](#examples)
 
-## Use graphical user interface (GUI)
+   NOTE: If you need to run SQL LogScout in a continuous mode, please [use the PowerShell script](#use-powershell-script) option
 
-1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-
-  | :warning: WARNING          |
-  |:---------------------------|
-  | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
-
-1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
-
-   ```console
-   cd d:\sqllogscout
-   ```
-
-1. Start the tool via `SQL_LogScout.cmd` before or while the issue is occurring and follow the menus
-
-   ```console
-   SQL_LogScout.cmd
-   ```
-
-1. When prompted `Would you like to use GUI mode ?> (Y/N):` type 'y' and you will be presented with a GUI
-1. Pick one or more [Scenarios](#scenarios) from a list (based on the issue under investigation).
-1. Select from which SQL instance you want to diagnose
-1. Select whether to overwrite an existing folder with data or let it default to creating a new folder
-1. Stop the collection when you are ready (by typing "stop" or "STOP"). In some Scenarios (e.g. Basic) the collection stops automatically when it finishes collecting static logs
-
-## Use PowerShell script
-
-1. Place the downloaded files on a disk volume where diagnostic logs will be captured. An \output* sub-folder will be created automatically by the tool when you start it
-
-   | :warning: WARNING          |
-   |:---------------------------|
-   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
-
-1. Open a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
-
-   ```console
-   cd d:\sqllogscout
-   ```
-
-1. Start PowerShell (PS). For example you can run
-
-   ```console
-   powershell.exe
-   ```
-
-1. Run the following PS script by itself or by using [parameters](#parameters). For example:
-
-   ```powershell
-   PS > .\SQLLogScoutPs.ps1 -Scenario Basic -ServerName "Win2022machine\inst2022" -DiagStopTime "10-27-2022 19:15"
-   ```
+   IMPORTANT: Using the SQL_LogScout.cmd is an option that is still available, but may be discontinued in future versions. Consider using SQL_LogScout.ps1 PowerShell file for new scripting or automation tasks.
 
 ## Automate data collection
 
@@ -179,8 +191,9 @@ SQL LogScout can be executed with multiple parameters allowing for full automati
 - Schedule start and stop time of data collection
 - Use Quiet mode to accept all prompts automatically
 - Choose the destination output folder (custom location, delete default or create a new one folder)
+- Use the RepeatCollections (continuous mode) option to run SQL LogScout multiple times
 
-See [Parameters](#parameters) and [Example E](#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) for detailed information.
+See [Parameters](#parameters),  [Example F](#f-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode) and [Example G](#g-execute-sql-logscout-in-continuous-mode-repeatcollections-and-keep-a-set-number-of-output-folders) for detailed information.
 
 ## Interrupt execution
 
@@ -192,7 +205,7 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 
 ## Parameters
 
-SQL_LogScout.cmd accepts several optional parameters. Because this is a batch file, you have to specify the parameters in the sequence listed below. Also, you cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify the Scenario parameter before it.
+`SQL_LogScout.ps1` and `SQL_LogScout.cmd` accepts several optional parameters. If you are using the PS1 PowerShell script, you can pass named parameters and omit most of them or specify them in any order. However, if you are using `SQL_LogScout.cmd` because this is a batch file, you have to specify all the parameters in the sequence listed below and cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify the Scenario parameter before it.
 
 ### Scenario
 
@@ -230,24 +243,27 @@ Specify the SQL Server to collect data from by using the following format "Serve
 
 Specify a custom volume and directory where the data can be collected. An *\output* folder or *\output_ddMMyyhhmmss* would still be created under this custom path. Possible values are:
 
- - PromptForCustomDir - will cause the user to be prompted whether to specify a custom path
+ - PromptForCustomDir - will cause the user to be prompted whether to specify a custom path. This is the default value for the parameter. 
  - UsePresentDir  - will use the present directory where SQL LogScout is copied (no custom path)
  - An existing path (e.g. D:\logs) - will use the specified path for data collection.  **Note:** Do not use a trailing backslash at the end. For example "D:\logs\\" will lead to an error.
+
+If RepeatCollections mode is used, then the CustomOutputPath must be either set to 'UsePresentDir' or you can specify an existing valid path.
 
 ### DeleteExistingOrCreateNew
 
 Possible values are:
 
- - DeleteDefaultFolder - will cause the default \output folder to be deleted and recreated
- - NewCustomFolder  - will cause the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used.
+ - DeleteDefaultFolder - causes the default \output folder to be deleted and recreated. This options specifies that the \output folder is overwritten. If the `RepeatCollections` parameter is combined with this value, then only the latest collection is preserved in the \output folder.
+ - NewCustomFolder  - causes the creation of a new folder in the format *\output_ddMMyyhhmmss*. If a previous collection created an \output folder, then that folder will be preserved when NewCustomFolder option is used. If the `RepeatCollections` parameter is combined with this value, then multiple folders are created until the RepeatCollections stops.
+ - \<Number\>  - a positive integer (e.g. 3) that specifies how many output folders to keep when you run SQL LogScout in continuous mode (RepeatCollections). This option is only available when you use `SQL_LogScout.ps1` file to run the application. It only works when RepeatCollections parameter is greater than 0. If you specify 0, then the number will be reset so that 1 (one) output folder is retained. If you specify a number larger than or equal to the RepeatCollections value, then all folders will be preserved (no deletion). This option behaves as if you specified the `NewCustomFolder` value, i.e. a new folder is created for each run of SQL LogScout.
 
 ### DiagStartTime
 
-Specify the time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).  
+Specify the exact or relative time when you want SQL LogScout to start data collection in the future. If the time is older than or equal to current time, data collection starts immediately. For exact time, the format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time). For relative time, the format to use is "+00:15:00", which indicates start SQL LogScout 15 minutes from now. Relative time values can be between 00:00:00 and 11:59:59 (12 hours). If you need to go beyond 12 hours from the current moment, use exact time or [schedule a task](#schedule-sql-logscout-as-a-task-to-automate-execution).
 
 ### DiagStopTime
 
-Specify the time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).
+Specify the exact or relative time when you want SQL LogScout to stop data collection in the future. If the time is older than or equal to current time, data collection stops immediately. Format to use is "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00" or "07-07-2021" (if you want to specify a date in the past without regard for a time).  For relative time, the format to use is "+01:17:00", which indicates stop SQL LogScout 1 hour and 17 minutes from now. Relative time values can be between 00:00:00 and 11:59:59 (12 hours). If you need to go beyond 12 hours from the current moment, use exact time or [schedule a task](#schedule-sql-logscout-as-a-task-to-automate-execution).
 
 ### InteractivePrompts
 
@@ -256,8 +272,16 @@ Possible values are:
  - Quiet - suppresses possible prompts for data input. Selecting Quiet mode implicitly selects "Y" to all the screens that requires an agreement to proceed.
  - Noisy - (default) shows prompts requesting user input where necessary
 
-### DisableCtrlCasInput
-Used for internal testing only and changes behavior of cancelling SQL LogScout. Do not use this parameter.
+When RepeatCollections mode is used, the InteractivePrompts parameter is hard-coded to 'Quiet'.
+
+### RepeatCollections
+
+RepeatCollections is a parameter that allows you to run SQL LogScout continuously. This means after SQL LogScout shuts down, it can start back up automatically, up to the value specified here. This is an integer value that allows you to specify how many times you want SQL LogScout to run. If you are not sure how many times and would like to run it "indefinitely", you can specify a large number, say 10,000 times, and you can shut it down manually using CTRL+C. The very first execution is not counted in this number; the parameter accounts for repeat executions. In other words, if you specify RepeatCollections=3, SQL LogScout will run once plus three repetitions, or 4 times altogether. This option would typically be combined with other parameters used for automation like DiagStartTime, DiagStopTime, InteractivePrompts, etc.
+
+### help
+
+You can use this parameter to display help information on how to call SQL_LogScout. The way to invoke this is use `SQL_LogScout.ps1 -help`. This parameter is used as a stand-alone parameter without combining it with any others.
+
 
 ## Graphical User Interface (GUI)
 
@@ -265,7 +289,7 @@ The GUI is a feature added in version 5.0 of SQL LogScout. It allows the user to
 
 - Select the scenario(s) you would like to collect data for
 - Select the target SQL Server instance
-- Select the destination log output folder. The default option here is to create a new folder under the Log location you choose. The new folder is of the format \Output_datetime. See **-DeleteFolderOrNew** parameter and  `NewCustomFolder` value as a reference. If you check the `Overwrite Existing Logs` option, an \Output folder will be created or overwritten if another copy existed before.
+- Select the destination log output folder. The default option here is to create a new folder under the Log location you choose. The new folder is named \\Output if such folder doesn't exist or the name is of the format \Output_datetime if \\Output exists. See [**DeleteExistingOrCreateNew**](#deleteexistingorcreatenew) parameter and  `NewCustomFolder` value as a reference. If you check the `Overwrite Existing Logs` option, the existing \\Output folder is overwritten.
 - Perfmon counters and SQL Server Extended events. Certain scenarios allow you to collect Perfmon counters and Xevent data (see [Scenarios](#scenarios) for more information). As you select scenarios these options will be enabled or disabled. You can also uncheck certain counters or Xevents if you want avoid collecting them, though it is recommended to go with the full set of counters and events that the scenario uses.
 - The NoBasic checkbox corresponds to the NoBasic scenario switch. Essentially it collects logs for the specific scenario selected but excludes collecting basic logs, which is a default option for many of the scenarios. For more information, see [Parameters](#parameters) -> Scenarios.
 
@@ -277,45 +301,78 @@ If you do not select any option in the GUI (e.g. scenario or server name) and cl
 
 This is the most common method to execute SQL LogScout which allows you to pick your choices from a menu of options
 
-```bash
-SQL_LogScout.cmd
+```powershell
+SQL_LogScout.ps1
 ```
 
-### B. Execute SQL LogScout using a specific scenario and debug level
+### B. Execute SQL LogScout using a specific scenario
 
 This command starts the diagnostic collection specifying the GeneralPerf scenario.
 
-```bash
-SQL_LogScout.cmd GeneralPerf
+```powershell
+SQL_LogScout.ps1 -Scenario "GeneralPerf"
 ```
 
 ### C. Execute SQL LogScout by specifying folder creation option
 
 Execute SQL LogScout using the DetailedPerf Scenario, specifies the Server name, use the present directory and folder option to delete the default \output folder if present
 
-```bash
-SQL_LogScout.cmd DetailedPerf "DbSrv\SQL2019" "UsePresentDir" "DeleteDefaultFolder"
+```powershell
+SQL_LogScout.ps1 -Scenario "DetailedPerf" -ServerName "DbSrv\SQL2019" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder"
 ```
 
-### D. Execute SQL LogScout with start and stop times
+### D. Execute SQL LogScout with start and stop times (absolute values)
 
 The following example collects the AlwaysOn scenario against the "DbSrv" default instance, prompts user to choose a custom path and a new custom subfolder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  
+
+```powershell
+SQL_LogScout.ps1 -Scenario AlwaysOn -ServerName "DbSrv" -CustomOutputPath "PromptForCustomDir" -DeleteExistingOrCreateNew "NewCustomFolder" -DiagStartTime "2000-01-01 19:26:00" -DiagStopTime "2020-10-29 13:55:00"
+```
+
+This is how you would do the same using the .CMD file.
 
 ```bash
 SQL_LogScout.cmd AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01 19:26:00" "2020-10-29 13:55:00"
 ```
 
-**Note:** All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
+### E. Execute SQL LogScout with relative start and stop times (time offset)
 
-### E. Execute SQL LogScout with multiple scenarios and in Quiet mode
+The following example collects the Replication and LightPerf scenarios without getting Basic logs against the "DbSrv\SQL2022" named instance, uses the current directory as root and overwrites the \output subfolder. Then uses relative time from current time to set the start time 3 minutes from now and stop time to seven minutes from now.  
+
+```powershell
+SQL_LogScout.ps1 -Scenario "Replication+LightPerf+NoBasic" -ServerName "DbSrv\SQL2022" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "+00:03:00" -DiagStopTime "+00:07:00"
+```
+
+**Note:** If you are using SQL_LogScout.cmd, all parameters are required when you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
+
+### F. Execute SQL LogScout with multiple scenarios and in Quiet mode
 
 The example collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the "DbSrv" default instance, re-uses the default output folder but creates it in the D:\Log custom path, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  It also automatically accepts the prompts by using Quiet mode and helps a full automation with no interaction.
+
+```powershell
+SQL_LogScout.ps1 -Scenario "GeneralPerf+AlwaysOn+BackupRestore" -ServerName "DbSrv" -CustomOutputPath "d:\log" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "01-01-2000" -DiagStopTime "04-01-2021 17:00" -InteractivePrompts "Quiet"
+```
+
+When you use SQL_LogScout.cmd (available for backwards compatibility), pass the parameters in order
 
 ```bash
 SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv "d:\log" DeleteDefaultFolder "01-01-2000" "04-01-2021 17:00" Quiet
 ```
 
+
 **Note:**  Selecting Quiet mode implicitly selects "Y" to all the screens that requires your agreement to proceed.
+
+
+### G. Execute SQL LogScout in continuous mode (RepeatCollections) and keep a set number of output folders
+
+The example collects data for Memory scenario without Basic logs against the default instance. It runs SQL LogScout 11 times (one initial run and 10 repeat runs), and keeps only the last 2 output folders of the 11 collections. It starts collection 2 seconds after the initialization and runs for 10 seconds.
+
+
+```powershell
+.\SQL_LogScout.ps1 -Scenario "Memory+NoBasic" -ServerName "." -RepeatCollections 10  -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew 2 -DiagStartTime "+00:00:02" -DiagStopTime "+00:00:10"
+```
+
+**Note:** You can only use `SQL_LogScout.ps1`, and not `SQL_LogScout.cmd` for RepeatCollections mode.
 
 # Scenarios
 
@@ -334,6 +391,7 @@ Collects snapshot or static logs. It captures information on:
 - OS disk information
 - Running filter drivers
 - Event logs (system and application in both .CSV and .TXT formats)
+- Full-Text Search Log files and output file with Full-Text metadata
 - SQL Server dumps found in the errorlog directory. We collect up to 20 dumps if they were created in the last 2 months and are less than 100 MB in size.
 - Memory dump .txt files (most recent 200 files)
 - IPConfig, DNSClientInfo, and TCP and UDP endpoints
@@ -348,6 +406,12 @@ Collects snapshot or static logs. It captures information on:
 - [SQL VSS Writer Log (SQL Server 2019 and later)](https://docs.microsoft.com/sql/relational-databases/backup-restore/sql-server-vss-writer-logging)
 - [SQL Assessment API](https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview) log
 - Environment variables full list
+- [Windows Cluster logs](https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog) in local server time, if running on a WSFC or HADR is enabled. 
+- Cluster resource information (name, nodes, groups, shared volumes, network interfaces, quorum, physical disks, etc), if running on a WSFC
+- Windows Cluster HKEY_LOCAL_MACHINE\Cluster registry hive in .HIV format
+- Always On diagnostic info (SQL DMVs/system views), if running on a HADR/AG system and the AlwaysOn scenario isn't explicitly enabled
+- [AlwaysOn_health.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health), if running on a HADR/AG system and the AlwaysOn scenario isn't explicitly enabled
+
 
 ## 1. GeneralPerf scenario
 
@@ -355,7 +419,7 @@ Collects all the Basic scenario logs as well as some long-term, continuous logs 
 
 - Basic scenario
 - Performance Monitor counters for SQL Server instance and general OS counters
-- Extended Event (XEvent) trace captures batch-level starting/completed events, errors  warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout
+- Extended Event (XEvent) trace captures batch-level starting/completed events, errors  warnings, log growth/shrink, lock escalation and timeout, deadlock, login/logout. The extended events collection is configured to use the rollover option and collects up to 50 XEL files, each 500 MB in size : max_file_size=(500), max_rollover_files=(50).
 - List of actively-running SQL traces and Xevents
 - Snapshots of SQL DMVs that track waits/blocking and high CPU queries
 - Query Data Store (QDS) info (if that is active)
@@ -385,12 +449,12 @@ Collects all the Basic scenario logs as well as Always On configuration informat
 - Basic scenario
 - Always On diagnostic info (SQL DMVs/system views)
 - [AlwaysOn_health.xel](https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health)
-- Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141) and the AG topology XML file required for [AG latency](https://learn.microsoft.com/archive/blogs/psssql/aglatency-report-tool-introduction) analysis.
+- Always On [Data Movement Latency Xevent ](https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141) and the AG topology XML file required for [AG latency](https://learn.microsoft.com/archive/blogs/psssql/aglatency-report-tool-introduction) analysis. The extended events collection is configured to use the rollover option and collects up to 50 XEL files, each 500 MB in size : max_file_size=(500), max_rollover_files=(50).
 - Core Xevents trace (RPC and Batch started and completed, login/logout, errors)
 - Performance Monitor counters for SQL Server instance and general OS counters
 - Windows Cluster HKEY_LOCAL_MACHINE\Cluster registry hive in .HIV format
-- [Windows Cluster logs](https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog) in local server time
-- Cluster resource information (name, nodes, groups, shared volumes, network interfaces, quorum, physical disks, etc)
+- [Windows Cluster logs](https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog) in local server time, if running on a WSFC
+- Cluster resource information (name, nodes, groups, shared volumes, network interfaces, quorum, physical disks, etc), if running on a WSFC
   
 ## 5. Network Trace scenario
 
@@ -403,10 +467,13 @@ Collects all the Basic scenario logs and a couple of additional memory-related d
 - Basic scenario
 - Performance Monitor counters for SQL Server instance and general OS counters
 - Memory diagnostic info from SQL DMVs/system views
+- In-Memory OLTP related SQL DMVs/system views
 
 ## 7. Generate Memory Dumps scenario
 
 Allows you to collect one or more memory dumps of SQL Server family of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple dumps are selected, the number of dumps and the interval between them is customizable. Also the type of dump is offered as a choice (mini dump, mini with indirect memory, filtered (SQL Server), full.
+
+You also have the option to defer generating the dump until a later time.  At the Stop prompt, if you type "MemDump" it will produce one or more memory dumps based on the configuration saved earlier.
 
 ## 8. Windows Performance Recorder (WPR) scenario
 
@@ -426,14 +493,15 @@ Allows you to collect a [Windows Performance Recorder](https://docs.microsoft.co
 Collects Setup logs and allows analysis of installation issues of SQL Server components:
 
 - Basic scenario logs
-- All SQL Setup logs from the \Setup Bootstrap\ folders on the system.
+- All SQL Setup logs from the SQL Server \Setup Bootstrap\ folders on the system.
+- Missing MSI/MSP output files showing what installation packages may be missing. The summary file shows the only missing and potentially corrupt packages and the detailed one provides details on each SQL Server MSI/MSP and if it's in place, missing, or corrupt and what actions can be taken.
 
 ## 10. BackupRestore scenario
 
 Collects various logs related to backup and restore activities in SQL Server. These logs include:
 
 - Basic scenario
-- Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents)
+- Backup and restore-related Xevent (backup_restore_progress_trace  and batch start end xevents). The extended events collection is configured to use the rollover option and collects up to 50 XEL files, each 500 MB in size : max_file_size=(500), max_rollover_files=(50).
 - Enables backup and restore related TraceFlags to produce information in the Errorlog
 - Performance Monitor counters for SQL Server instance and general OS counters
 - SQL VSS Writer Log (on SQL Server 2019 and later)
@@ -463,7 +531,7 @@ Collect logs to help troubleshoot SQL Service Broker and Database mail scenarios
 - Basic scenario
 - Service Broker configuration information (SQL DMVs/system views)
 - Performance Monitor counters for SQL Server instance and general OS counters
-- Extended events (Xevents) for SQL Server Service Broker
+- Extended events (Xevents) for SQL Server Service Broker. The extended events collection is configured to use the rollover option and collects up to 50 XEL files, each 500 MB in size : max_file_size=(500), max_rollover_files=(50).
 
 ## 15. Never Ending Query
 
@@ -483,36 +551,44 @@ A never-ending query is considered a query that is driving CPU due to execution 
 
 **Internal folder**: The \output\internal folder stores error log files for each individual data collector. Most of those files are empty (zero bytes) if the specific collector did not generate any errors or console output. If those files are not empty, they contain information about whether a particular data-collector failed or produced some result (not necessarily failure). If a collector fails, then an error will be logged in the corresponding error file in this folder, as well as the error text will be displayed during execution as warning. The \internal folder also stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).  If the main script produces some errors in the console, those are redirected to a file ##STDERR.LOG which is also moved to \internal folder at the end of execution if the file is non-zero in size.
 
-## Schedule SQL LogScout as a task to automate execution
+# Schedule SQL LogScout as a task to automate execution
 
-SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows you to run SQL LogScout at a defined time even if you are not physically present to do this manually. You can schedule the task to execute once or daily at the same time. To schedule a task use the `ScheduleSQLLogScoutAsTask.ps1` script. The script accepts the following parameters:
+SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows you to run SQL LogScout at a defined time even if you are not physically present to do this manually. You can schedule the task to execute once or daily at the same time. To schedule a task use the `ScheduleSQLLogScoutAsTask.ps1` script located in the \bin folder. The script accepts the following parameters:
 
 - **-LogScoutPath** - this is the executable path to the `SQL_LogScout.cmd` file. It defaults to the current path you are running the script from.
 - **-Scenario** - you can input the scenario (s) you want to collect data for. Examples include "Basic", "GeneralPerf" or "Basic+Replication". For more information see [Scenarios](#scenarios)
 - **-SQLInstance** - this is the name of the SQL Server instance to connect to. Please provide correct name (for example: "MACHINE1\SQLINST1")
 - **-OutputPath** - you specify whether you want a custom output path by providing the path itself, or specify 'UsePresentDir' to use the current folder as a base under which an output folder will be created. This corresponds to `CustomOutputPath` in SQL LogScout [Parameters](#parameters). Do NOT use `PromptForCustomDir` for a scheduled task, because you have to present to accept this on the screen.
 - **-CmdTaskName** - this is the name of the task as it appears in Windows Task Scheduler. This is an optional parameter that allows you to create multiple scheduled tasks. If you pass a value which already exists, you will be prompted to overwrite or keep original task. Default value is "SQL LogScout Task".
-- **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. Options for it are `DeleteDefaultFolder`, which causes the default \output folder to be deleted and recreated or `NewCustomFolder` which causes the creation of a new folder in the format \output_ddMMyyhhmmss. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters).
-- **-StartTime** - this is the start time of the scheduled task in Windows Task Scheduler. If the `-Once` parameter is used together with this, only a single execution will occur on the specified date and time. If `-Daily` parameter is used, then the task will execute daily on the specified hour. Valid format for this parameter is  "yyyy-MM-dd hh:mm:ss" (in quotes). For example: "2020-10-27 19:26:00"
-- **-DurationInMins** - this specifies how long, in minutes, the SQL LogScout will run before it stops. Specify an integer value for example "10". This will calculate the stop time for SQL LogScout and pass it as a parameter to `DiagStopTime`.
-- **-Once** - you can request the scheduled task to run a single time at the specified `-StartTime`. Use either this parameter or `-Daily` but not both.
-- **-Daily** - you can request the scheduled task to run daily  at the specified `-StartTime` (the date part will be ignored for daily executions, after the very first one, only the time is honored). Use either this parameter or `-Once` but not both.
-- **-CreateCleanupJob** -  Without a cleanup task, the SQL LogScout Windows Task will remain after collection. This parameter allows you to create a job that will clean itself up after invocation. This is an optional parameter that defaults to $null. If you provide $true, you must also pass `-CleanupJobTime`. If $false is passed, we will not create the job or prompt and manual cleanup is required.
-- **-CleanupJobTime** - Required only when `-CreateCleanupJob` is used. The date passed to this field should be after the LogScout collection has completed, which is not between `-StartTime` and the endtime calculated from `-DurationInMins`. If you pass a date to this field, you must also pass $true to `-CreateCleanupJob`. If `-CreateCleanupJob` is omitted, the value passed to this parameter is ignored.
+- **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters). Options for it are:
+  - `DeleteDefaultFolder`, which causes the default \output folder to be deleted and recreated.
+  - `NewCustomFolder` which causes the creation of a new folder in the format \output_ddMMyyhhmmss. If omitted, this is the default behavior.
+  -  \<Number\>  - a positive integer (e.g. 3) that specifies how many output folders to keep when you run SQL LogScout in continuous mode (RepeatCollections).
+- **-StartTime** - this is the start time of the scheduled task in Windows Task Scheduler. If the `-Once` parameter is used, only a single execution will occur on the specified date and time. If `-Daily` parameter is used, then the task will execute daily on the specified hour and minute. Valid format for this parameter is either relative time such as "+01:15:30" (in quotes) for 1 hour, 15 minutes, and 30 seconds from the current time of execution or datetime such as "2020-10-27 19:26:00" with format "yyyy-MM-dd hh:mm:ss" (in quotes). If omitted, it will be 2 minutes after the current time to prevent race conditions.
+- **-EndTime** - this specifies how long each SQL LogScout execution will run before it stops. Valid format for this parameter is either relative time such as "+01:15:30" (in quotes) for 1 hour, 15 minutes, and 30 seconds from the current time of execution or datetime such as "2020-10-27 19:26:00" with format "yyyy-MM-dd hh:mm:ss" (in quotes). When used with the `-Continuous` switch, you must use a relative `-EndTime` (for example "+00:30:00" ).  Also `-DeleteFolderOrNew` determines at the end of the duration whether to create a new folder or overwrite previous data.
+- Execution behavior switches below. Only choose one.
+ - **-Once** - you can request the scheduled task to run a single time at the specified `-StartTime`.
+ - **-Daily** - you can request the scheduled task to run daily  at the specified `-StartTime` (the date part will be ignored for daily executions, after the very first one, only the time is honored).
+ - **-Continuous** - you can have SQL_LogScout start at `-StartTime` and loop for as many times as defined in `-RepeatCollections`. For example, if `-StartTime` is "+01:00:00" and `-EndTime` is "+00:15:00" with `-RepeatCollections` set to 4, then SQL_LogScout starts 1 hour from script execution time, stops and restarts 15 minutes after start and does that 5 times in total. (1 initial run and 4 repeat runs). This option requires that you use the `-RepeatCollections` parameter also and specify a valid value to it. 
+- **-CreateCleanupJob** -  Without a cleanup task, the SQL LogScout Windows Task will remain after collection. This parameter allows you to create a job that will clean itself up after invocation. This is an optional parameter that defaults to $null. If you provide $true, you must also pass `-CleanupJobTime`. If $false is passed, we will not create the job or prompt and manual cleanup is required. As a part of cleanup, the Windows Task cleanup job runs `.\CleanupIncompleteShutdown.ps1` to prevent lingering connections and passes `-EndActiveConsoles` to terminate all SQL_LogScout sessions on the same server to the specific SQL Server instance used.
+- **-CleanupJobTime** - Required only when `-CreateCleanupJob` is used. The date passed to this field should be after the LogScout collection has completed, which is not between `-StartTime` from `-EndTime`. If you pass a date to this field, you must also pass $true to `-CreateCleanupJob`. If `-CreateCleanupJob` is omitted, the value passed to this parameter is ignored.
 - **-LogonType** - Defaults to null and prompts the user for input if omitted. Accepted values are `Interactive` and `S4U`. This is the value passed to create both the main SQL LogScout job and the Cleanup Job (if applicable). If `Interactive` is selected, when the job runs make sure your user is logged in. If set to `S4U`, make sure your account is logged out when the task is scheduled to run (screen lock is not considered a logout). If the user omits the parameter, the task will prompt Yes or No as to whether you will be logged in. The input will be used to determine if `Interactive` or `S4U` is used. For more information, see [Task Schedule Logon Type](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/ne-taskschd-task_logon_type).
+- **-RepeatCollections** - Used in combination with `-Continuous`, this parameter dictates how many times SQL_LogScout is run repeatedly. If you need to run this long-term over many days or months even, you can specify a large value as this parameter is of integer data type (see [Int32.MaxValue](https://learn.microsoft.com/dotnet/api/system.int32.maxvalue)).
 
-Here is an example of how to schedule
+Examples:
 
+1. Run SQL_LogScout one time for the GeneralPerf scenario, starting at 05/06/2024 at 2:18 PM ending after 10 minutes (2:28 PM). The Output folder is overwritten (if it exists already). User will be logged in during execution.
 ```powershell
-.\ScheduleSQLLogScoutAsTask.ps1  -StartTime "2022-08-30 10:55" -Scenario GeneralPerf -SQLInstance SQLmachine\sql2017 -DeleteFolderOrNew DeleteDefaultFolder -Once -DurationInMins 3
+.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance ".\SQLInstanceName" -StartTime "2024-05-06 14:18" -EndTime "+00:10:00" -Once -DeleteFolderOrNew "DeleteDefaultFolder" -LogonType "S4U"
 ```
-
-If the scheduled task with the same name already exists, you will get the option to overwrite it with a new one.
+2. Run SQL_LogScout starting 6 hours from now, running continously for 48 executions recycling the logs every 30 minutes. The total run time would be 24 hours (48 runs * 30 minutes). A new folder is created for each execution and the user isn't to be logged in during runtime.
+```powershell
+.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance ".\SQLInstanceName" -StartTime "+06:00:00" -EndTime "+00:30:00" -Continuous -DeleteFolderOrNew "NewCustomFolder" -LogonType "Interactive" -RepeatCollections 47
+```
 
 # Logging
 
 ### ##SQLLOGSCOUT.LOG file
-
 SQL LogScout logs the flow of activity in two files ##SQLLOGSCOUT.LOG and ##SQLLOGSCOUT_DEBUG.LOG. The activity flow on the console is logged in ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. This file can be found in the **\Internal** folder
 
 ### ##STDERR.LOG file
@@ -521,17 +597,29 @@ If SQL LogScout main script generates any runtime errors that were not caught, t
 ### ##SQLLOGSCOUT_DEBUG.LOG file
 This file contains everything the ##SQLLOGSCOUT.LOG contains, but also adds many debug-level, detailed messages. These can be used to investigate any issues with SQL LogScout and examine the flow of execution in detail. This file can be found in the **\Internal** folder. In addition, the %temp% folder stores copies of ##SQLLOGSCOUT_DEBUG.LOG from the last 10 executions.
 
-# Permissions
+### SQL_LogScout_Repeated_Execution_yyyyMMddhhmmss.txt
+This file is created when repeated collections (continuous mode) is used. It logs the number of repetitions, the number of folders to be preserved, the names of output folders created by the repeated mode. It is created in the Windows **%temp%** folder (commonly C:\Users\\<user\>\AppData\Local\Temp). 
 
-- **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
+### ##SQLLogScout_ScheduledTask_yyyyMMddhhmmss.log
+This file is created when the functionality to automate the SQL_LogScout collection task through Windows Task Scheduler is used. This file can be found in the user's **%temp%** folder where you can find copies of the latest 10 executions of the task scheduling script `ScheduleSQLLogScoutAsTask.ps1`.
 
-- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. If you are using the Replication scenario, the account running SQLLogScout will need the `db_datareader` permission on the distribution database(s).
+### ##SQLLogScout_CleanupIncompleteShutdown_yyyyMMddhhmmss.log
+This file is created when the functionality to cleanup an incomplete shutdown of SQL_LogScout is used. The last 10 instances of this file can be found in the user's **%temp%** folder.
+
 
 # Targeted SQL instances
 
 Diagnostic data is collected from the SQL instance you selected locally on the machine where SQL LogScout runs. SQL LogScout does not capture data on remote machines. You are prompted to pick a SQL Server instance you want to target. The SQL Server-specific data collection comes from a single instance only.
 
 # Security
+
+The following is security-related information:
+
+## Permissions
+
+- **Windows**: Local Administrator permissions on the machine are required to collect most system-related logs
+
+- **SQL Server**: VIEW SERVER STATE and ALTER ANY EVENT SESSION are the minimum required permission for collecting the SQL Server data. If you are using the Replication scenario, the account running SQLLogScout will need the `db_datareader` permission on the distribution database(s).
 
 ## Digitally signed files and hash computed
 
@@ -805,15 +893,26 @@ Testing has been completed , reports are at: C:\temp\Test 2\TestingInfrastructur
 
 # Script to cleanup an incomplete shutdown of SQL LogScout
 
-SQL LogScout was designed to shutdown and clean-up any processes that it launched during its execution. There are 3 levels of clean-up: regular shutdown, a cleanup action upon exit, and a final process termination of any processes launched by SQL LogScout during collection. However, on rare occasions you may be left with processes still running. One such occasion is if you closed the Commmand Prompt window before SQL LogScout completed.
+SQL LogScout was designed to shutdown and clean-up any processes that it launched during its execution. There are 3 levels of clean-up: regular shutdown, a cleanup action upon exit, and a final process termination of any processes launched by SQL LogScout during collection. However, on rare occasions you may be left with processes still running. One such occasion is if you closed the Commmand Prompt or PowerShell window before SQL LogScout has completed.
+
+The parameters for this script are below are optional:
+- **ServerName** - You can provide an exact server name similar to the main SQL_LogScout script. This will skip prompting for the instance you want to select.
+- **EndActiveConsoles** - Defaults to false. If true, on the machine running this script we will identify any processes that are running SQL_LogScout.ps1 with the same instance name and kill those sessions. Use with warning. This is meaningful if you are running the session on a different user account and the console is still active.
+
 
 | :warning: WARNING          |
 |:---------------------------|
 | Do **not** close the Command Prompt or PowerShell window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
-If you end up in this situation, you can use the `CleanupIncompleteShutdown.ps1` to terminate any left-over processes, as long as you specify the correct SQL Server instance that was used by SQL LogScout.
+If you end up in this situation, you can use the `CleanupIncompleteShutdown.ps1` script located in the \bin folder to terminate any left-over processes, as long as you specify the correct SQL Server instance that was used by SQL LogScout. You can run the script without any parameters or use the optional parameters.
 
-To execute the script, do the following:
+Example passing `-ServerName` which results in no prompt:
+
+```powershell
+.\CleanupIncompleteShutdown.ps1 -ServerName "DbServerMachine\SQL2016"
+```
+
+To execute the script and be prompted for a server name, do the following:
 
 ```powershell
 powershell -File CleanupIncompleteShutdown.ps1
@@ -822,29 +921,31 @@ powershell -File CleanupIncompleteShutdown.ps1
 Here is a sample output:
 
 ```output
-======================================================================================
-This script is designed to clean up SQL LogScout processes that may have be left behind if SQL LogScout was closed incorrectly
+INFO    Created log file C:\Users\ADMINI~1\AppData\Local\Temp\2\##SQLLogScout_CleanupIncompleteShutdown_20241009T1750455751.log
+INFO    Log initialization complete!
+======================================================================================================================================
+This script is designed to clean up SQL LogScout processes that may have been left behind if SQL LogScout was closed incorrectly
+======================================================================================================================================
+   Discovered the following SQL Server instance(s)
 
-======================================================================================
 
-Discovered the following SQL Server instance(s)
+    ID#   SQL Instance Name   Status
+    ---   -----------------   -------
+    0     WIN-5Q53MVQ222R     Running
 
-
-ID      SQL Instance Name
---      ----------------
-0        DbServerMachine\SQL2016
-1        DbServerMachine\SQL2017
-2        DbServerMachine
-
-Please select the ID for SQL instance.: 2
-
-Launching cleanup routine... please wait
-Executing STOP_SQLLogScout_Xevent session. It will stop the Xevent trace in case it was found to be running ...
-Executing STOP_SQLLogScout_AlwaysOn_Data_Movement. It will stop the Xevent trace in case it was found to be running ...
-Executing Disable_BackupRestore_Trace_Flags It will disable the trace flags they were found to be enabled...
-Executing PerfmonStop. It will stop Perfmon started by SQL LogScout in case it was found to be running ...
-Executing NettraceStop. It will stop the network trace in case it was found to be running...
-Executing WPR -cancel. This will stop all WPR traces in case any was found running...
-Executing STOP storport. It will stop a stoport trace if it was found to be running...
+Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter
+SQL Instance Console input: 0
+You selected instance 'WIN-5Q53MVQ222R' to collect diagnostic data.
+Testing connection into: 'WIN-5Q53MVQ222R'. If connection fails, verify instance name.
+Connection to 'WIN-5Q53MVQ222R' successful.
+Launching cleanup routine for instance 'WIN-5Q53MVQ222R'... please wait
+Executing 'WPR-cancel'. It will stop all WPR traces in case any was found running...
+Executing 'StorportStop'. It will stop stoport tracing if it was found to be running...
+Executing 'Stop_SQLLogScout_Xevent' session. It will stop the SQLLogScout performance Xevent trace in case it was found to be running...
+Executing 'Stop_SQLLogScout_AlwaysOn_Data_Movement'. It will stop the SQLLogScout AlwaysOn Xevent trace in case it was found to be running...
+Executing 'Disable_BackupRestore_Trace_Flags' It will disable the trace flags they were found to be enabled...
+xecuting 'PerfmonStop'. It will stop Perfmon started by SQL LogScout in case it was found to be running...
+Executing 'NetworkTraceStop'. It will stop network tracing initiated by SQLLogScout in case it was found to be running...
+Cleanup script execution completed.
+PS C:\SQL LogScout\Bin>
 ```
-
