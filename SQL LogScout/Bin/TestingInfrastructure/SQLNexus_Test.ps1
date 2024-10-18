@@ -54,6 +54,13 @@ function GetExclusionsInclusions ([string]$Scenario)
 
             }
         }
+        "Setup"
+        {
+            if ($true -eq (CheckLogsForString -TextToFind "No missing MSI/MSP files found"))
+            {
+                $RetExclusion = "NoMissingMSI"
+            }
+        }
     }
 
     return $RetExclusion

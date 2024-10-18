@@ -1,3 +1,12 @@
+
+    function SQL_Server_Mem_Stats_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "SQL_Server_Mem_Stats"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 -------------------------------memory collectors ------------------------------------------------------------------------------------------------
 
 USE tempdb
@@ -99,6 +108,7 @@ BEGIN TRY
   FROM     sys.dm_exec_requests r
           JOIN sys.dm_exec_connections c
             ON r.connection_id = c.connection_id
+            AND c.net_transport <> 'session'
           JOIN sys.dm_exec_sessions s
             ON c.session_id = s.session_id
           JOIN sys.databases d
@@ -114,7 +124,7 @@ BEGIN TRY
   RAISERROR ('', 0, 1) WITH NOWAIT
 END TRY
 BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 END CATCH
 GO
@@ -139,7 +149,7 @@ BEGIN TRY
   RAISERROR ('', 0, 1) WITH NOWAIT
 
 
-  -- Check for plans that are "polluting" the proc cache with trivial variations 
+  -- Check for plans that are `"polluting`" the proc cache with trivial variations 
   -- (typically due to a lack of parameterization)
   PRINT '-- proccache_pollution';
   WITH cached_plans (cacheobjtype, objtype, usecounts, size_in_bytes, dbid, objectid, short_qry_text) AS 
@@ -182,7 +192,7 @@ BEGIN TRY
   RAISERROR ('', 0, 1) WITH NOWAIT
 END TRY
 BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 END CATCH
 GO
@@ -244,7 +254,7 @@ BEGIN TRY
   PRINT '-- sys.dm_os_loaded_modules (non-Microsoft)'
   SELECT CONVERT (varchar(30), @runtime, 121) as runtime, * FROM sys.dm_os_loaded_modules 
   WHERE (company NOT LIKE '%Microsoft%' OR company IS NULL)
-    AND UPPER (name) NOT LIKE '%_NSTAP_.DLL' -- instapi.dll (MS dll), with "i"'s wildcarded for Turkish systems
+    AND UPPER (name) NOT LIKE '%_NSTAP_.DLL' -- instapi.dll (MS dll), with `"i`"'s wildcarded for Turkish systems
     AND UPPER (name) NOT LIKE '%\ODBC32.DLL' -- ODBC32.dll (MS dll)
   RAISERROR ('', 0, 1) WITH NOWAIT
 
@@ -793,7 +803,7 @@ BEGIN
 END
 END TRY
 BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 END CATCH
 go
@@ -924,10 +934,44 @@ BEGIN
     WAITFOR DELAY @WaitForDelayString
   END TRY
   BEGIN CATCH
-				PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+				PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 				PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
   END CATCH
 END
 GO
 
 exec sp_Run_MemStats '0:2:0'
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

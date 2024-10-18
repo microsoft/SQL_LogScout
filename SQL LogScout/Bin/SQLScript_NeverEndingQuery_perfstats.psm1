@@ -1,3 +1,12 @@
+
+    function NeverEndingQuery_perfstats_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "NeverEndingQuery_perfstats"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 use tempdb
 go
 IF OBJECT_ID ('dbo.sp_perf_never_ending_query_snapshots','P') IS NOT NULL
@@ -60,7 +69,9 @@ BEGIN
 			ON qp.session_id = req.session_id
 		LEFT OUTER JOIN sys.dm_exec_sessions sess
 			on req.session_id = sess.session_id
-		LEFT OUTER JOIN sys.dm_exec_connections conn on conn.session_id = req.session_id
+		LEFT OUTER JOIN sys.dm_exec_connections conn 
+			on conn.session_id = req.session_id
+			and conn.net_transport <> 'session'
 		OUTER APPLY sys.dm_exec_sql_text (ISNULL (req.sql_handle, conn.most_recent_sql_handle)) as SQLText
 		WHERE req.session_id <> @@SPID 
 			AND ISNULL (sess.host_name, '') != @appname 
@@ -100,8 +111,8 @@ PRINT 'machine name             ' + convert (varchar, serverproperty ('machinena
 PRINT 'sql version (sp)         ' + convert (varchar, serverproperty ('productversion')) + ' (' + convert (varchar, serverproperty ('productlevel')) + ')'
 PRINT 'edition                  ' + convert (varchar, serverproperty ('edition'))
 PRINT 'script name              Query Never Completes stats script'
-PRINT 'script file name         $file: QueryNeverCompletes_perfstats.sql $'
-PRINT 'last modified            $date: 2021/09/07  $'
+PRINT 'script file name         `$file: QueryNeverCompletes_perfstats.sql `$'
+PRINT 'last modified            `$date: 2021/09/07  `$'
 PRINT 'script begin time        ' + convert (varchar(30), getdate(), 126) 
 PRINT 'current database         ' + db_name()
 PRINT '@@spid                   ' + ltrim(str(@@spid))
@@ -174,3 +185,37 @@ end
 
 go
 exec dbo.sp_Run_NeverEndingQuery_Stats
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

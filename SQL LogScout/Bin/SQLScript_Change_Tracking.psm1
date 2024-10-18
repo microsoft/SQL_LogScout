@@ -1,3 +1,14 @@
+
+    function Change_Tracking_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "Change_Tracking"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
+    
+    
 /*
 Purpose:	Change Tracking Script for PSSDiag
 Date:		1/3/2020
@@ -150,3 +161,37 @@ BEGIN
 END;
 CLOSE tnames_cursor;
 DEALLOCATE tnames_cursor;
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

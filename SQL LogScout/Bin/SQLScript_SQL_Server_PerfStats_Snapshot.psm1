@@ -1,3 +1,12 @@
+
+    function SQL_Server_PerfStats_Snapshot_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "SQL_Server_PerfStats_Snapshot"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 USE tempdb
 GO
 SET NOCOUNT ON
@@ -105,7 +114,7 @@ begin
 		PRINT ''
 		PRINT '==============================================================================================='
 		PRINT 'Missing Indexes: '
-		PRINT 'The "improvement_measure" column is an indicator of the (estimated) improvement that might '
+		PRINT 'The `"improvement_measure`" column is an indicator of the (estimated) improvement that might '
 		PRINT 'be seen if the index was created.  This is a unitless number, and has meaning only relative '
 		PRINT 'the same number for other indexes.  The measure is a combination of the avg_total_user_cost, '
 		PRINT 'avg_user_impact, user_seeks, and user_scans columns in sys.dm_db_missing_index_group_stats.'
@@ -294,7 +303,7 @@ begin
 				FETCH NEXT FROM dbCursor  INTO @dbname, @dbid
 			END TRY
 			BEGIN CATCH
-				PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+				PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 				PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 			END CATCH
 		END
@@ -394,7 +403,7 @@ begin
 				FETCH NEXT FROM dbCursor_Index  INTO @dbname_index, @dbid_index
 			END TRY
 			BEGIN CATCH
-				PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+				PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 				PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 			END CATCH
 		END
@@ -425,7 +434,7 @@ begin
 		RAISERROR ('', 0, 1) WITH NOWAIT;
 	END TRY
 	BEGIN CATCH
-		PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+		PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 		PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 	END CATCH
 END
@@ -659,7 +668,7 @@ BEGIN
 	print ''
 	END TRY
 	BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 	END CATCH
 END
@@ -743,14 +752,13 @@ BEGIN
 					FROM @dbtable
 					WHERE id = @cont
 					
-					SET @sql = 'USE [' + @dbname + ']'
 					IF (@sql_major_version > 13)
 					BEGIN
-						SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, is_value_default FROM sys.database_scoped_configurations'
+						SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, is_value_default FROM [' + @dbname + '].sys.database_scoped_configurations'
 					END
 					ELSE
 					BEGIN
-						SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, NULL FROM sys.database_scoped_configurations'
+						SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, NULL FROM [' + @dbname + '].sys.database_scoped_configurations'
 					END
 					
 					--PRINT @sql
@@ -758,7 +766,7 @@ BEGIN
 					SET @cont = @cont + 1
 				END TRY
 				BEGIN CATCH
-					PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+					PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 					PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 				END CATCH
 			END
@@ -776,7 +784,7 @@ BEGIN
 		END
 	END TRY
 	BEGIN CATCH
-		PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+		PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 		PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 	END CATCH
 END
@@ -820,7 +828,7 @@ BEGIN
 		END
 	END TRY
 	BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 	END CATCH
 END
@@ -856,9 +864,43 @@ AS
 		exec @#sp_perf_stats_snapshot_ver
 	END TRY
 	BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 	END CATCH
 GO
 
 exec #sp_Run_PerfStats_Snapshot
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

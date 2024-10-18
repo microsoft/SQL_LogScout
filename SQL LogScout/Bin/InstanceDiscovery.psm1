@@ -395,9 +395,7 @@ function Select-SQLServerForDiagnostics()
 
 
                     # sort the array by instance name
-                    #TO DO - sory by property.
                     $NetNamePlusinstanceArray = $NetNamePlusinstanceArray | Sort-Object -Property Name
-                    #TO DO - parse the file length out using something like $maxLength = ($array.Name | Measure-Object -Maximum -Property Length).Maximum. Need to calculate spaces based on values.
 
                     Write-LogDebug "NetNamePlusinstanceArray sorted contains: " $NetNamePlusinstanceArray -DebugLogLevel 4
 
@@ -542,8 +540,19 @@ function Select-SQLServerForDiagnostics()
             }
             elseif (($global:gServerName -like ".\*") -or ($global:gServerName -eq "(local)\*")) 
             {
-                $inst_name = Get-InstanceNameOnly ($global:gServerName)
-                $global:sql_instance_conn_str = ($global:host_name + "\" + $inst_name)
+                $inst_name_object = Get-InstanceNameObject ($global:gServerName)
+
+                #if a named instance (type 1) name is valid, then use it
+                if ($inst_name_object.Type -eq $global:SQLInstanceType["NamedInstance"]) 
+                {
+                    $inst_name = $inst_name_object.InstanceName
+                    $global:sql_instance_conn_str = ($global:host_name + "\" + $inst_name)
+                }
+                else # this is not likely to happen, but just in case we need to handle it and cause a failure
+                {
+                    Write-LogError "The instance name passed in is not valid."
+                    $global:sql_instance_conn_str = "invalid_instance_name"
+                }
             }
             else 
             {

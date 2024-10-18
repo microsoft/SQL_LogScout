@@ -72,7 +72,7 @@ function ModifyArray()
             [Parameter(Position=1, Mandatory=$true)]
             [string] $TextToFind,
 
-            [Parameter(Position=2, Mandatory=$true)]
+            [Parameter(Position=2, Mandatory=$false)]
             [System.Collections.ArrayList] $ArrayToEdit,
 
             [Parameter(Position=3, Mandatory=$false)]
@@ -84,11 +84,17 @@ function ModifyArray()
         [Boolean] $fTextFound = (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind) -OR
         (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
 
+        #we check for $null ArrayEdit since it is mandatory
+
+        if ($null -eq $ArrayToEdit) 
+        {
+            WriteToConsoleAndFile -Message "ArrayToEdit should not be null"
+            return
+        }
     if ($fTextFound) 
     {
         if ($ActionType -eq 'Add')
         {
-
             [void]$ArrayToEdit.Add($ReferencedLog)
             WriteToConsoleAndFile -Message "Adding value '$ReferencedLog' to array"
 
@@ -104,7 +110,7 @@ function ModifyArray()
         {
             [void]$ArrayToEdit.Clear()
             WriteToConsoleAndFile -Message "Removing all values from array"
-        }
+        } 
 
         #We didn't find the provided text so don't add to array. We don't expect the file.
         else
@@ -156,7 +162,14 @@ function BuildBasicFileArray([bool]$IsNoBasic)
     ModifyArray -ActionType "Remove" -TextToFind "SQL_AzureVM_Information will not be collected" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQL_AzureVM_Information.out"
     ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog ".mdmp"
     ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLDUMPER_ERRORLOG.log"
-    ModifyArray -ActionType "Clear" -TextToFind "NeverEndingQuery Exit without collection" -ArrayToEdit $global:BasicFiles
+    ModifyArray -ActionType "Add" -TextToFind "HADR /AG is enabled on this system" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOnDiagScript.out"
+    ModifyArray -ActionType "Add" -TextToFind "Found AlwaysOn_health files" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOn_health"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "cluster.log"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "ClusterInfo.out"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "ClusterRegistryHive.out"
+    ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "FDLAUNCHERRORLOG"
+    ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "_FD"
+    ModifyArray -ActionType "Add" -TextToFind "FulText-Search Log file *SQLFT* copied." -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLFT"
 
     #calculate count of expected files
     $ExpectedFiles = $global:BasicFiles
@@ -265,6 +278,8 @@ function BuildAlwaysOnFileArray([bool]$IsNoBasic)
         'xevent_LogScout_target',
         'Perfmon.out',
         'cluster.log',
+        'ClusterInfo.out',
+        'ClusterRegistryHive.out'
         'GetAGTopology.xml'
      )
 
@@ -277,10 +292,13 @@ function BuildAlwaysOnFileArray([bool]$IsNoBasic)
     # inclusions and exclusions to the array
     ModifyArray -ActionType "Remove" -TextToFind "AlwaysOn_Data_Movement Xevents is not supported on SQL Server version"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_Data_Movement_target"
     ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "cluster.log"
+    ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "ClusterRegistryHive.out"
+    ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "ClusterInfo.out"
     ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "GetAGTopology.xml"
     ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_Data_Movement_target"
     ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "xevent_LogScout_target"
-
+    ModifyArray -ActionType "Add" -TextToFind "Found AlwaysOn_health files" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_health"
+    
     #calculate count of expected files
     $ExpectedFiles = $global:AlwaysOnFiles
     return $ExpectedFiles
@@ -405,7 +423,9 @@ function BuildSetupFileArray([bool]$IsNoBasic)
 	@(
         'Setup_Bootstrap',
         '_HKLM_CurVer_Uninstall.txt',
-        '_HKLM_MicrosoftSQLServer.txt'
+        '_HKLM_MicrosoftSQLServer.txt',
+        '_MissingMsiMsp_Detailed.txt',
+        '_MissingMsiMsp_Summary.txt'
     )
 
 

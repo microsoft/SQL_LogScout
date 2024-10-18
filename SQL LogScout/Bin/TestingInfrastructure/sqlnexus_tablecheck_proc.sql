@@ -90,6 +90,7 @@ BEGIN
 				AND TableName IN (
 					--added in 2017
 					'tbl_query_store_wait_stats',
+					'tbl_dm_db_tuning_recommendations',
 					--added in 2022
 					'tbl_query_store_query_hints',
 					'tbl_query_store_plan_feedback',
@@ -220,7 +221,10 @@ BEGIN
 				'tbl_repl_mstracer_history',
 				'tbl_repl_mstracer_tokens',
 				'tbl_repl_sourceserver',
-				'tbl_repl_sysservers')
+				'tbl_repl_sysservers',
+				'tbl_repl_msdb_jobhistory',
+				'tbl_repl_msdb_msagent_profileandparameters'
+				)
 		END
 	END
 
@@ -244,7 +248,7 @@ BEGIN
 		END
 	END
 
-	-- Exclued Neverneding Query tables
+	-- Exclude Never-ending Query tables
 	ELSE IF (@scenario_name IN ('NeverEndingQuery'))
 	BEGIN
 		IF (@SQLVERSION < 13000004001 OR @exclusion_tag = 'NoNeverEndingQuery')
@@ -254,6 +258,18 @@ BEGIN
 		END
 	END
 
+	-- exclude the missing msi/msp tables if the exclusion tag is set
+	ELSE IF (@scenario_name IN ('Setup'))
+	BEGIN
+		IF (@exclusion_tag = 'NoMissingMSI')
+		BEGIN
+			DELETE FROM #temptablelist_sqlnexus 
+			WHERE SchemaName = 'dbo' 
+				AND TableName IN (
+				'tbl_setup_missing_msi_msp_packages')
+			
+		END
+	END
 
 END
 GO
@@ -359,7 +375,6 @@ BEGIN
 			('dbo','tbl_ThreadStats'),
 			('dbo','tbl_dm_db_file_space_usage'),
 			('dbo','tbl_dm_exec_cursors'),
-			('dbo','tbl_dm_os_ring_buffers_conn'),
 			('dbo','tbl_PlanCache_Stats'),
 			('dbo','tbl_System_Requests'),
 			('dbo','tbl_Query_Execution_Memory'),
@@ -499,8 +514,13 @@ BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 		END
-		ELSE IF ((@scenarioname = 'Setup') Or (@scenarioname = 'Basic'))
+		ELSE IF ((@scenarioname = 'Setup'))
 		BEGIN
+			-- insert the tables for Setup scenario
+			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
+			('dbo','tbl_setup_missing_msi_msp_packages')
+
+			--insert the tables for Basic scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 		END
@@ -607,7 +627,9 @@ BEGIN
 			('dbo','tbl_repl_mstracer_history'),
 			('dbo','tbl_repl_mstracer_tokens'),
 			('dbo','tbl_repl_sysservers'),
-			('dbo','tbl_Reports')
+			('dbo','tbl_Reports'),
+			('dbo','tbl_repl_msdb_jobhistory'),
+			('dbo','tbl_repl_msdb_msagent_profileandparameters')
 			
 			--insert the tables for Basic scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
@@ -654,7 +676,8 @@ BEGIN
 			('dbo','tbl_sysmail_configuration'),
 			('dbo','tbl_sysmail_account'),
 			('dbo','tbl_sysmail_mailitems'),
-            ('dbo','tbl_sysmail_event_log_sysmail_faileditems')
+            ('dbo','tbl_sysmail_event_log_sysmail_faileditems'),
+			('dbo','tbl_sysmail_server')
 			
 			--add the basic scenario tables
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 

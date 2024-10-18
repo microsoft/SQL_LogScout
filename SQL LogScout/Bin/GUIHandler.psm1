@@ -229,7 +229,7 @@ function Window_Loaded_EventHandler() {
 
     BuildServiceNameStatusModel
     BuildPermonModel
-    BuildXEventsModel
+    BuildXEventsModel_general
     BuildXEventsModel_core
     BuildXEventsModel_detailed
     BuildXEventsModel_AlwaysOn
@@ -542,14 +542,17 @@ function CreateFile($myList, [string]$fileName) {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  
     }
 }
-function BuildXEventsModel() {
+function BuildXEventsModel_general() {
+    Import-Module .\SQLScript_xevent_general.psm1 
     try {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
         Write-LogDebug "BuildXEventsModel...."
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        foreach ($element in Get-Content .\xevent_general.sql) {
-            if ($element -eq "GO") { 
+        $content = xevent_general_Query -returnVariable $true
+
+        foreach ($element in $content <#Get-Content .\xevent_general.sql#>) {
+            if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
                 $Global:XeventsList_general.Add($GenericModelobj)
@@ -581,10 +584,15 @@ function BuildXEventsModel() {
 function BuildXEventsModel_core() {
     try {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
+
+        Import-Module .\SQLScript_xevent_core.psm1
+
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        foreach ($element in Get-Content .\xevent_core.sql) {
-            if ($element -eq "GO") { 
+        $content = xevent_core_Query -returnVariable $true
+
+        foreach ($element in $content <#Get-Content .\xevent_core.sql#>) {
+            if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
                 $Global:XeventsList_core.Add($GenericModelobj)
@@ -616,12 +624,16 @@ function BuildXEventsModel_core() {
 }
 
 function BuildXEventsModel_detailed() {
+    Import-Module .\SQLScript_xevent_detailed.psm1
+
     try {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        foreach ($element in Get-Content .\xevent_detailed.sql) {
-            if ($element -eq "GO") { 
+        $content = xevent_General_Query -returnVariable $true
+
+        foreach ($element in $content <#Get-Content .\xevent_detailed.sql#>) {
+            if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
                 $Global:XeventsList_detailed.Add($GenericModelobj)
@@ -653,12 +665,14 @@ function BuildXEventsModel_detailed() {
 }
 
 function BuildXEventsModel_AlwaysOn() {
+    Import-Module .\SQLScript_xevent_AlwaysOn_Data_Movement.psm1
     try {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        foreach ($element in Get-Content .\xevent_AlwaysOn_Data_Movement.sql) {
-            if ($element -eq "GO") { 
+        $content = xevent_AlwaysOn_Data_Movement_Query -returnVariable $true
+        foreach ($element in $content <#Get-Content .\xevent_AlwaysOn_Data_Movement.sql#>) {
+            if ($element.Trim() -eq "GO")  { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
                 $Global:XeventsList_AlwaysOn.Add($GenericModelobj)
@@ -670,9 +684,7 @@ function BuildXEventsModel_AlwaysOn() {
             else {
                 [void]$xevent_string.Append($element)
                 [void]$xevent_string.Append("`r`n")
-                #ADD EVENT sqlserver.
-                #if ($element.contains("AlwaysOn_Data_Movement")) {
-                if ($element.contains("ADD EVENT sqlserver.")) {
+                if ($element.contains("[SQLLogScout_AlwaysOn_Data_Movement]")) {
 
                     $temp = $element.split('(')[0].split('.')
                     if ($temp.count -eq 2) {
@@ -692,12 +704,15 @@ function BuildXEventsModel_AlwaysOn() {
 
 
 function BuildXEventsModel_servicebroker_dbmail() {
+    Import-Module .\SQLScript_xevent_servicebroker_dbmail.psm1
     try {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        foreach ($element in Get-Content .\xevent_servicebroker_dbmail.sql) {
-            if ($element -eq "GO") { 
+
+        $content = xevent_servicebroker_dbmail_Query -returnVariable $true
+        foreach ($element in $content <#Get-Content .\xevent_servicebroker_dbmail.sql#>) {
+            if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
                 $global:XeventsList_servicebroker_dbmail.Add($GenericModelobj)

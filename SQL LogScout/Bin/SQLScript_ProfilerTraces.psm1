@@ -1,3 +1,12 @@
+
+    function ProfilerTraces_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "ProfilerTraces"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 SET NOCOUNT ON;
 
 print '--profiler trace summary--'
@@ -78,6 +87,15 @@ CASE
                          ,'wait_completed'
                          ,'latch_released'
                          ,'latch_acquired'
+                         ,'sni_trace'
+                         ,'sni_error'
+                         ,'sni_packet'
+                         ,'sni_allocate_id'
+                         ,'sni_deallocate_id'
+                         ,'sni_update_id'
+                         ,'sni_enter'
+                         ,'sni_leave'
+                         ,'sni_packet_data'
                         )
  THEN Cast(1 AS BIT) ELSE Cast(0 AS BIT)
 END AS expensive_event
@@ -85,3 +103,37 @@ FROM sys.dm_xe_sessions sess
  INNER JOIN sys.dm_xe_session_events evt
 ON sess.address = evt.event_session_address 
 print ''
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    
