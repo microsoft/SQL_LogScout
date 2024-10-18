@@ -1,21 +1,21 @@
 <#
 written by 
- James.Ferebee@microsoft.com
+ James.Ferebee @microsoft.com
  PijoCoder @github.com
 
 .SYNOPSIS
   Test Powershell script to create task in Windows Task Scheduler to invoke SQL LogScout.
 .LINK 
-  https://github.com/microsoft/sql_logscout
+  https://github.com/microsoft/SQL_LogScout
 .EXAMPLE
-  .\ScheduleSQLLogScoutAsTask.ps1 -LogScoutPath "C:\temp\log scout\Test 2" -Scenario "GeneralPerf" -SQLInstance "Server1\sqlinst1" 
+  .\ScheduleSQLLogScoutAsTask.ps1 -LogScoutPath "C:\temp\log scout\Test 2" -Once -Scenario "GeneralPerf" -SQLInstance "Server1\sqlinst1" 
   -OutputPath "C:\temp\log scout\test 2" -CmdTaskName "First SQLLogScout Capture" -DeleteFolderOrNew "DeleteDefaultFolder" 
-  -StartTime "2022-08-24 08:26:00" -DurationInMins 10 -Once 
+  -StartTime "+00:05:00" -EndTime "+00:10:00"
 #> 
 
 param
 (
-    #Implement params to have the script accept parameters which is then provided to Windows Task Scheduler logscout command
+    #Implement params to have the script accept parameters which is then provided to Windows Task Scheduler LogScout command
     #LogScout path directory
     [Parameter(Position=0)]
     [string] $LogScoutPath, 
@@ -30,7 +30,7 @@ param
 
     #Whether to use custom path or not
     [Parameter(Position=3, Mandatory=$false)]
-    #We are in bin, but have the output file write to the root logscout folder.
+    #We are in bin, but have the output file write to the root LogScout folder.
     [string] $OutputPath = (Get-Item (Get-Location)).Parent.FullName,
 
     #Name of the Task. Use a unique name to create multiple scheduled runs. Defaults to "SQL LogScout Task" if omitted.
@@ -38,16 +38,16 @@ param
     [string] $CmdTaskName = "SQL LogScout Task",
     
     #Delete existing folder or create new one.
-    [Parameter(Position=5, Mandatory=$true)]
-    [string] $DeleteFolderOrNew,
+    [Parameter(Position=5, Mandatory=$false)]
+    [string] $DeleteFolderOrNew = "NewCustomFolder",
 
-    #Start time of collector. 2022-09-29 21:26:00
-    [Parameter(Position=6,Mandatory=$true)]
-    [datetime] $StartTime,
+    #Start time of collector. Defines scheduled task start time. 2022-09-29 21:26:00
+    [Parameter(Position=6,Mandatory=$false)]
+    [string] $StartTime = "0000",
     
     #How long to execute the collector. In minutes.
     [Parameter(Position=7,Mandatory=$true)]
-    [double] $DurationInMins,
+    [string] $EndTime = "0000",
 
     #schedule it for one execution
     [Parameter(Position=8, Mandatory=$false)]
@@ -57,42 +57,49 @@ param
     [Parameter(Position=9, Mandatory=$false)]
     [switch] $Daily = $false,
 
-    #schedule it daily at the specified time
+    #run continuously
     [Parameter(Position=10, Mandatory=$false)]
-    [nullable[boolean]] $CreateCleanupJob = $null,
+    [switch] $Continuous = $false,
 
     #schedule it daily at the specified time
     [Parameter(Position=11, Mandatory=$false)]
-    [nullable[datetime]] $CleanupJobTime = $null,
+    [nullable[boolean]] $CreateCleanupJob = $null,
 
     #schedule it daily at the specified time
     [Parameter(Position=12, Mandatory=$false)]
-    [string] $LogonType = $null
+    [nullable[datetime]] $CleanupJobTime = $null,
 
-    #Later add switch to auto-delete task if it already exists
+    #schedule it daily at the specified time
+    [Parameter(Position=13, Mandatory=$false)]
+    [string] $LogonType = $null,
 
-    #for future scenarios
-    #[Parameter(Position=9)]
-    #[timespan] $RepetitionDuration, 
-
-    #[Parameter(Position=10)]
-    #[timespan] $RepetitionInterval
+    #how long to loop through repetition (total time to run LogScout from windows task scheduler). Convert to timestamp
+    [Parameter(Position=14, Mandatory=$false)]
+    [int] $RepeatCollections
 
 )
-
-
 
 
 ################ Globals ################
 
 [string]$global:CurrentUserAccount = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+#Value used for LogScout invocation. For starttime, will keep relative format.
+$global:gStartTime = New-Object -TypeName PSObject -Property @{DateAndOrTime = ""; Relative = $false}
+$global:gEndTime = New-Object -TypeName PSObject -Property @{DateAndOrTime = ""; Relative = $false}
+$global:gBinPath = (Get-Item -Path ".\" -Verbose).FullName
+[datetime]$global:gScheduledTaskStartTime = [datetime]::MinValue
+
+$script:InvalidValue = 0
+$script:DefaultValue = 1
+$script:DateTimeValue = 2
+$script:RelativeTimeValue = 3
 
 ################ Import Modules for Shared Functions ################
 
 
 
 ################ Functions ################
-function HandleCatchBlock ([string] $function_name, [System.Management.Automation.ErrorRecord] $err_rec, [bool]$exit_logscout = $false)
+function ScheduledTaskHandleCatchBlock ([string] $function_name, [System.Management.Automation.ErrorRecord] $err_rec, [bool]$exit = $false)
 <#
     .DESCRIPTION
         error handling
@@ -103,6 +110,13 @@ function HandleCatchBlock ([string] $function_name, [System.Management.Automatio
     $error_offset = $err_rec.InvocationInfo.OffsetInLine
     $error_script = $err_rec.InvocationInfo.ScriptName
     Log-ScheduledTask -Message "'$function_name' failed with error:  $error_msg (line: $error_linenum, offset: $error_offset, file: $error_script)" -WriteToConsole $true -ConsoleMsgColor "Red"
+
+    if ($exit -eq $true)
+    {
+        Log-ScheduledTask -Message "Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+        Start-Sleep -Seconds 2
+        exit
+    }
 }
 
 
@@ -124,7 +138,7 @@ function Initialize-ScheduledTaskLog
         $LogFileNameStringToDelete = $LogFileName
 
         #update file with date
-        $LogFileName = ($LogFileName -replace "##SQLLogScout_ScheduledTask", ("##SQLLogScout_ScheduledTask_" + @(Get-Date -Format  "yyyMMddTHHmmssffff") + ".log"))
+        $LogFileName = ($LogFileName -replace "##SQLLogScout_ScheduledTask", ("##SQLLogScout_ScheduledTask_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".log"))
         $global:ScheduledTaskLog = $LogFilePath + '\' + $LogFileName
         New-Item -ItemType "file" -Path $global:ScheduledTaskLog -Force | Out-Null
         $CurrentTime = (Get-Date -Format("yyyy-MM-dd HH:MM:ss.ms"))
@@ -154,9 +168,144 @@ function Initialize-ScheduledTaskLog
     catch
     {
 		#Write-Error -Exception $_.Exception
-        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  -exit_logscout $true
+        ScheduledTaskHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem -exit $true
     }
 
+}
+function ValidateTimeParameter([string]$timeParameter) 
+{
+    <#
+    .DESCRIPTION
+        ValidateTimeParameter does verification on the time parameter and sets the appropriate globals.
+    #> 
+    try
+    {
+        Log-ScheduledTask -Message "Validating $timeParameter" -WriteToConsole $false
+
+        #If time parameter is provided, validate it.
+        if ($timeParameter -ne "0000" -and ($false -eq [String]::IsNullOrWhiteSpace($timeParameter))) 
+        {
+            [DateTime] $dtOut = New-Object DateTime
+            [string] $regexRelativeTime = "^\+(0?[0-9]|1[01]):[0-5][0-9]:[0-5][0-9]$"
+            if ($true -eq [DateTime]::TryParse($timeParameter, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtOut)) 
+            {
+                return $script:DateTimeValue
+            } 
+            elseif ($timeParameter -match $regexRelativeTime) 
+            {
+                return $script:RelativeTimeValue
+            } 
+            else 
+            {
+                Log-ScheduledTask "ValidateTimeParameter skipped due to null" -WriteToConsole $false
+                return $script:InvalidValue
+            }
+        }
+        elseif ($timeParameter -eq "0000")
+        {
+            Log-ScheduledTask -Message "User kept default parameter" -WriteToConsole $false
+            return $script:DefaultValue
+        }
+        else
+        {
+            Log-ScheduledTask -Message "ERROR: Invalid or null time parameter provided. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+            Start-Sleep -Seconds 4
+            exit
+        }
+    }
+    catch
+    {
+		#Write-Error -Exception $_.Exception
+        ScheduledTaskHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem -exit $true
+    }
+}
+
+
+function SetTimeGlobals([string]$ValidationOutput,[string]$StartOrEnd)
+{
+    <#
+    .DESCRIPTION
+        SetTimeGlobals sets the global variables for the start and end times based on the validation output.
+    #> 
+    try
+    {
+        Log-ScheduledTask -Message "inside SetTimeGlobals. Values: $ValidationOutput | $StartOrEnd" -WriteToConsole $false
+
+        if ($StartOrEnd -eq "StartTime")
+        {
+            if ($ValidationOutput -eq $script:DefaultValue)
+            {
+                [datetime]$CurrentTime = Get-Date
+                $global:gStartTime.DateAndOrTime = $CurrentTime.AddMinutes(2)
+                $global:gScheduledTaskStartTime = $CurrentTime.AddMinutes(2)
+                $global:gStartTime.Relative = $false
+                Log-ScheduledTask -Message "ScheduledTaskStartTime is $global:gScheduledTaskStartTime"
+                Log-ScheduledTask -Message "Start time was not set. The job is set to start 2 minutes from now" -WriteToConsole $true -ConsoleMsgColor "Yellow"
+            }
+
+            elseif ($ValidationOutput -eq $script:DateTimeValue)
+            {
+                [datetime]$global:gStartTime.DateAndOrTime = $StartTime
+                $global:gStartTime.Relative = $false
+                $global:gScheduledTaskStartTime = $StartTime
+            }
+
+            elseif ($ValidationOutput -eq $script:RelativeTimeValue)
+            {
+                $global:gStartTime.DateAndOrTime = $StartTime
+                $global:gScheduledTaskStartTime = ParseRelativeTimeSchTask -relativeTime $StartTime -baseDateTime (Get-Date)
+                Log-ScheduledTask -Message "ScheduledTaskStartTime is $global:gScheduledTaskStartTime"
+                $global:gStartTime.Relative = $true
+            }
+            else 
+            {
+                Log-ScheduledTask -Message "StartTime identified but unexpected validation output. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+                Start-Sleep -Seconds 4
+                exit
+            }
+        }
+
+        elseif ($StartOrEnd -eq "EndTime")
+        {
+            if ($ValidationOutput -eq $script:DefaultValue)
+            {
+                Log-ScheduledTask -Message "ERROR: -EndTime omitted. Re-run with endtime." -WriteToConsole $true -ConsoleMsgColor "Red"
+                Start-Sleep -Seconds 4
+                exit
+            }
+            
+            elseif ($ValidationOutput -eq $script:DateTimeValue)
+            {
+                [datetime]$global:gEndTime.DateAndOrTime = $EndTime
+                $global:gEndTime.Relative = $false
+            }
+
+            elseif ($ValidationOutput -eq $script:RelativeTimeValue)
+            {
+                $global:gEndTime.DateAndOrTime = $EndTime
+                $global:gEndTime.Relative = $true
+            }
+            else 
+            {
+                Log-ScheduledTask -Message "EndTime identified but unexpected validation output. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+                Start-Sleep -Seconds 4
+                exit
+            }
+        }
+        
+        else
+        {
+            Log-ScheduledTask -Message "ERROR: Invalid SetTimeGlobals. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+            Start-Sleep -Seconds 4
+            exit
+        }
+
+    }
+    catch
+    {
+        #Write-Error -Exception $_.Exception
+        ScheduledTaskHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem -exit $true
+    }
 }
 
 function Log-ScheduledTask 
@@ -175,12 +324,10 @@ function Log-ScheduledTask
         Appends messages to the persisted log and also returns output to console if flagged.
 
 #>
-
-
     try 
     {
         #Add timestamp
-        [string]$Message = (Get-Date -Format("yyyy-MM-dd HH:MM:ss.ms")) + ': '+ $Message
+        [string]$Message = (Get-Date -Format("yyyy-MM-dd HH:mm:ss.ms")) + ': '+ $Message
         #if we want to write to console, we can provide that parameter and optionally a color as well.
         if ($true -eq $WriteToConsole)
         {
@@ -199,25 +346,117 @@ function Log-ScheduledTask
     }
     catch 
     {
-        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem  -exit_logscout $true
+        ScheduledTaskHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem -exit $true
     }
 }
 
 
+function ParseRelativeTimeSchTask ([string]$relativeTime, [datetime]$baseDateTime)
+{
+    
+    try 
+    {
+        #declare a new datetime variable and set it to min value (can't be null)
+        [datetime] $formatted_time = [DateTime]::MinValue
+
+        # first remove the + sign
+        $relativeTime  = $relativeTime.TrimStart("+") 
+    
+        # split the string by :
+        $time_parts = $relativeTime.Split(":") 
+
+        # assign the each part to hours, minutes and seconds vars
+        $hours = $time_parts[0] 
+        $minutes = $time_parts[1]
+        $seconds = $time_parts[2] 
+
+
+        #create a new timespan object
+        $timespan = New-TimeSpan -Hours $hours -Minutes $minutes -Seconds $seconds 
+
+        #add the TimeSpan to the current date and time
+        if($baseDateTime -ne $null)
+        {
+            # this is the normal case. add the timespan from relative time to the base datetime
+            $formatted_time = $baseDateTime.Add($timespan) 
+        }
+        else 
+        {
+            # this is last resort in case null time is passed as a parm -not presice but better than failing
+            $baseDateTime = (Get-Date).Add($timespan)
+        }
+        
+
+
+        return $formatted_time
+
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return
+    }
+}
+
+function CreateCleanupJobTask([datetime]$ExecutionTime)
+{
+    try
+    {
+        $triggercleanup = New-ScheduledTaskTrigger -Once -At $ExecutionTime
+        Log-ScheduledTask -Message "Creating Cleanup Task for $SQLInstance" -WriteToConsole $true -ConsoleMsgColor "Yellow"
+        $actionscleanup = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ("-File `"" + $IncompleteShutdownPath + "`" -ServerName `"" + $SQLInstance + "`" -EndActiveConsoles") -WorkingDirectory $global:gBinPath
+        $actions2cleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CmdTaskName`" /F")
+        $actions3cleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CleanupTaskName`" /F")
+        $principalcleanup = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
+        $settingscleanup = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
+        #Actions are sequential
+        $taskcleanup = New-ScheduledTask -Action $actionscleanup,$actions2cleanup,$actions3cleanup -Principal $principalcleanup -Trigger $triggercleanup -Settings $settingscleanup
+    
+        Log-ScheduledTask -Message ("Creating " + $CleanupTaskName)
+        Register-ScheduledTask -TaskName $CleanupTaskName  -InputObject $taskcleanup -ErrorAction Stop | Out-Null
+    
+    
+        Log-ScheduledTask -Message "Success! Created Windows Task for SQL LogScout Cleanup ""$CleanupTaskName""" -WriteToConsole $true -ConsoleMsgColor "Magenta"
+        Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
+
+        $CleanupTaskProperties = Get-ScheduledTask -TaskName $CleanupTaskName  | Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
+
+        if ($null -ine $CleanupTaskProperties)
+        {
+            foreach ($item in $CleanupTaskProperties)
+            {
+            
+                Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
+        
+            }
+    
+        }    
+    }
+    catch
+    {
+        ScheduledTaskHandleCatchBlock -function_name "CreateCleanupJob" -err_rec $PSItem -exit $true
+    }
+}
+
 ################ Log initialization ################
 Initialize-ScheduledTaskLog
 
-Log-ScheduledTask -Message "Creating SQL Scout as Task" -WriteToConsole $true -ConsoleMsgColor "Green"
+Log-ScheduledTask -Message "Creating SQL LogScout as Task" -WriteToConsole $true -ConsoleMsgColor "Green"
 
+#Log all the input parameters used for the scheduled task for debugging purposes
+foreach ($param in $PSCmdlet.MyInvocation.BoundParameters.GetEnumerator()) 
+{
+    Log-ScheduledTask "PARAMETER USED: $($param.Key): $($param.Value)" -WriteToConsole $false
+}
 
 ################ Validate parameters and date ################
 try 
-#later add check to make sure sql_logscout exists in directory.
+#later add check to make sure SQL_LogScout exists in directory.
 {
-    #Logscout Path Logic
+    #LogScout Path Logic
     if ($true -ieq [string]::IsNullOrEmpty($LogScoutPath))
     {
-        #Since logscout is not in bin, we need to back out one directory to execute logscout
+        #Since LogScout is not in bin, we need to back out one directory to execute LogScout
         $CurrentDir = Get-Location 
         [string]$LogScoutPath = (Get-Item $CurrentDir).parent.FullName
     }
@@ -243,10 +482,15 @@ try
             exit
         }
     }
+
     
-    #Verify provided date for logscout is in the future
+    SetTimeGlobals -ValidationOutput (ValidateTimeParameter $StartTime) -StartOrEnd "StartTime"
+    SetTimeGlobals -ValidationOutput (ValidateTimeParameter $EndTime) -StartOrEnd "EndTime"
+
+    
+    #Verify provided date for LogScout is in the future
     [DateTime] $CurrentTime = Get-Date
-    if ($CurrentTime -gt $StartTime)
+    if ($CurrentTime -gt $global:gScheduledTaskStartTime)
     {
         Log-ScheduledTask -Message "ERROR: Date or time provided is in the past. Please provide a future date/time. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
         Start-Sleep -Seconds 4
@@ -268,8 +512,8 @@ try
     {
         if ($null -ne $CleanupJobTime) 
         {
-            #Get duration of logscout and cleanup 
-            $timediff = New-TimeSpan -Start $StartTime -End $CleanupJobTime
+            #Get duration of LogScout and cleanup 
+            $timediff = New-TimeSpan -Start $global:gScheduledTaskStartTime -End $CleanupJobTime
 
             #If cleanup job is set to run in the past, throw error.
             if ($CurrentTime -gt $CleanupJobTime)
@@ -280,25 +524,17 @@ try
             }
 
             #Verify job is to be running once and that cleanupjobtime is after invocation start.
-            if ($StartTime -ige $CleanupJobTime)
+            if ($global:gScheduledTaskStartTime -ige $CleanupJobTime)
             {
-                Log-ScheduledTask -Message "ERROR: Logscout configured to run after cleanup. Please correct the execution times. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+                Log-ScheduledTask -Message "ERROR: LogScout configured to run after cleanup. Please correct the execution times. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
                 Start-Sleep -Seconds 4
                 exit
             }
 
-            #Get minutes between cleanup job and current time. If less than 5, throw error so logscout has some time to shut down.
+            #Get minutes between cleanup job and current time. If less than 5, throw error so LogScout has some time to shut down.
             elseif ($timediff.TotalMinutes -le "5")
             {
                 Log-ScheduledTask -Message "ERROR: CleanupJobTime parameter was provided but is within 5 minutes of LogScout start time. Please provide a value greater than 5 minutes. Exiting.." -WriteToConsole $true -ConsoleMsgColor "Red"
-                Start-Sleep -Seconds 4
-                exit
-            }
-
-            #For once executions, verify cleanup job HH:mm is different than start as we could spin them up at the same time.
-            if ($Daily -ieq $true -and (($StartTime.Hour -ieq $CleanupJobTime.Hour) -and ($StartTime.Minute -ieq $CleanupJobTime.Minute)))
-            {
-                Log-ScheduledTask -Message "ERROR: Logscout configured to run daily and cleanup job set to run at the same hour and minute. Please update the cleanup job to run at a different time. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
                 Start-Sleep -Seconds 4
                 exit
             }
@@ -319,27 +555,12 @@ try
         
     }
 
-    ###/Cleanup Job Parameter Validation###
+    ###Cleanup Job Parameter Validation###
 
     else
     {
         Log-ScheduledTask -Message "CreateCleanupJob not provided. No validation performed on CleanupJobTime."
     }
-
-        
-
-    #Calculate stoptime based on minutes provided to determine end time of LogScout
-    if ($DurationInMins-lt 1)
-    {
-        $DurationInMins = 1
-    }
-
-    [datetime] $time = $StartTime
-    [datetime] $endtime = $time.AddMinutes($DurationInMins)
-
-    Log-ScheduledTask -Message "Based on starttime $StartTime and duration $DurationInMins minute(s), the end time is $endtime" 
-
-    
 
     #Output path check
     if (([string]::IsNullOrEmpty($OutputPath) -ieq $true) -or ($OutputPath -ieq 'UsePresentDir') )
@@ -366,64 +587,106 @@ try
 
     }
 
-    #Whether to delete the existing folder or use new folder with incremental date_time in the name
-    #If left blank or null, default behavior is DeleteDefaultFolder
-    if ([string]::IsNullOrEmpty($DeleteFolderOrNew) -ieq $true)
+    #Main LogScout job parameter validation
+    if ([string]::IsNullOrEmpty($DeleteFolderOrNew) -or $DeleteFolderOrNew -ieq 'DeleteDefaultFolder') 
     {
         $DeleteFolderOrNew = 'DeleteDefaultFolder'
-    }
-
-    elseif ($DeleteFolderOrNew -ieq 'DeleteDefaultFolder')
-    {    
-        $DeleteFolderOrNew = 'DeleteDefaultFolder'
-    }
-
-    elseif ($DeleteFolderOrNew -ieq 'NewCustomFolder')
-    {    
+    } 
+    elseif ($DeleteFolderOrNew -ieq 'NewCustomFolder') 
+    {
         $DeleteFolderOrNew = 'NewCustomFolder'
+    } 
+    #Check if the value passed is a positive whole number
+    elseif ($DeleteFolderOrNew -match '^[1-9]\d*$') 
+    {
+        $NumberOfFilesToRetain = [int]$DeleteFolderOrNew
     }
-
-    else
+    else 
     {
         Log-ScheduledTask -Message "ERROR: Please specify a valid parameter for DeleteFolderOrNew. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
         exit
     }
     
 
+    
+
     #define the schedule (execution time) - either run it one time (Once) or every day at the same time (Daily)
     #Verify both Once and Daily aren't provided. If so, exit.
-    if ($Once -ieq $true -and $Daily -ieq $true)
+
+    $switches = @($Once, $Daily, $Continuous)
+    $switchCount = ($switches | Where-Object { $_ }).Count
+    if (-not ($Once -or $Daily -or $Continuous) -or ($switchCount -gt 1)) 
     {
-        Log-ScheduledTask -Message "ERROR: Both Once and Daily switches used in command. Please use only one. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+        Log-ScheduledTask -Message "ERROR: You must specify exactly one of the following switches: -Once, -Daily, -Continuous." -WriteToConsole $true -ConsoleMsgColor "Red"
         Start-Sleep -Seconds 4
         exit
     }
 
-    #Verify both Once and Daily aren't omitted. If so, exit.
-    if ($Once -ieq $false -and $Daily -ieq $false)
-    {
-        Log-ScheduledTask -Message "ERROR: Once and Daily not provided. Please provide either Once or Daily to command. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
-        Start-Sleep -Seconds 4
-        exit
-    }
     if ($Once -ieq  $true)
     {
-        $trigger = New-ScheduledTaskTrigger -Once -At $StartTime
+        $trigger = New-ScheduledTaskTrigger -Once -At $global:gScheduledTaskStartTime
     }
     elseif ($Daily -ieq $true) 
     {
         #Convert date/time of starttime to different format to prevent skipping a day in collection.'2022-08-24 08:26:00' becomes 8:26:00 AM
-        $DailyTimeFormat = Get-Date $StartTime -DisplayHint Time
+        if ($global:gEndTime.Relative -ieq $true)
+        {
+            #gScheduledTaskStartTime is already set for the start time. We just need to convert it to the correct format for windows task scheduler
+            $DailyTimeFormat = Get-Date $global:gScheduledTaskStartTime -DisplayHint Time
+            $trigger = New-ScheduledTaskTrigger -Daily -At $DailyTimeFormat 
+        }
+        else
+        {
+            Log-ScheduledTask -Message "ERROR: Relative time required for daily job. Please provide a relative time for the EndTime parameter. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+            Start-Sleep -Seconds 4
+            exit
+        }
+    }
+    elseif ($Continuous -ieq $true) 
+    {
+        if ($global:gEndTime.Relative -ieq $true)
+        {            
+            if (($RepeatCollections -le 0) -or ($null -eq $RepeatCollections))
+            {
+                Log-ScheduledTask -Message "ERROR: Continuous parameter passed but -RepeatCollections is invalid. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+                Start-Sleep -Seconds 4
+                exit
+            }
+            
+            #gScheduledTaskStartTime is already set for the start time. We just need to convert it to the correct format for windows task scheduler
+            $trigger = New-ScheduledTaskTrigger -Once -At $global:gScheduledTaskStartTime
+        }
+        else 
+        {
+            Log-ScheduledTask -Message "ERROR: Relative end time required for continuous job. Please provide a relative time for the EndTime parameters such as "+00:15:00". Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+            Start-Sleep -Seconds 4
+            exit
+        }
 
-        $trigger = New-ScheduledTaskTrigger -Daily -At $DailyTimeFormat 
     }
     else 
     {
-        Log-ScheduledTask -Message "ERROR: Please specify either '-Once' or '-Daily' parameter (but not both). Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+        Log-ScheduledTask -Message "ERROR: Please specify only '-Once','-Daily', or '-Continuous' parameter. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
         Start-Sleep -Seconds 4
         exit
     }
 
+    #Verify RepeatCollections is only used for Continuous scenarios
+    if ($RepeatCollections -gt 0 -and $Continuous -ieq $false)
+    {
+        Log-ScheduledTask -Message "ERROR: RepeatCollections parameter passed but Continuous switch omitted. RepeatCollections only valid for Continuous scenarios. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+        Start-Sleep -Seconds 4
+        exit
+    }
+
+    Log-ScheduledTask -Message "$NumberOfFilesToRetain folders will be retained based on -DeleteFolderOrNew" -WriteToConsole $false      
+    #Verify RepeatCollections is greater than number of files to retain and not null
+    if (($RepeatCollections -le $NumberOfFilesToRetain) -and ($Continuous -ieq $true))
+    {
+        Log-ScheduledTask -Message "ERROR: -RepeatCollections ($RepeatCollections) is less than or equal to -DeleteFolderOrNew ($NumberOfFilesToRetain) file retention setting. RepeatCollection value must be greater than files retained. Exiting..." -WriteToConsole $true -ConsoleMsgColor "Red"
+        Start-Sleep -Seconds 4
+        exit
+    }
     
 
     ################ Verify Not Duplicated Job ################
@@ -434,7 +697,7 @@ try
 
     if ($LogScoutScheduleTaskExists)
     {
-        Log-ScheduledTask -Message "SQL Logscout task already exists. Would you like to delete associated tasks and continue? Provide Y or N." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+        Log-ScheduledTask -Message "SQL LogScout task already exists. Would you like to delete associated tasks and continue? Provide Y or N." -WriteToConsole $true -ConsoleMsgColor "Yellow"
         
         $delete_task = $null
 
@@ -459,7 +722,7 @@ try
         }
         else 
         {
-            Unregister-ScheduledTask -TaskName $CmdTaskName -Confirm:$false
+            Unregister-ScheduledTask -TaskName $CmdTaskName -Confirm:$false -ErrorAction Stop
         }
 
      
@@ -468,8 +731,8 @@ try
     #If cleanup task exists for provided input, remove it
     if ($LogScoutCleanupScheduleTaskExists)
     {
-        Log-ScheduledTask -Message "SQL Logscout *Cleanup* task already exists. Removing the task." -WriteToConsole $true -ConsoleMsgColor "Yellow"
-        Unregister-ScheduledTask -TaskName $CleanupTaskName -Confirm:$false
+        Log-ScheduledTask -Message "SQL LogScout *Cleanup* task already exists. Removing the task." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+        Unregister-ScheduledTask -TaskName $CleanupTaskName -Confirm:$false -ErrorAction Stop
     }
 
 
@@ -519,41 +782,52 @@ try
 
     ################ Create SQL LogScout Main Job ################
     $LogScoutPathRoot = $LogScoutPath
-    $LogScoutPath = $LogScoutPath +'\SQL_LogScout.cmd'
+    $LogScoutPath = $LogScoutPath +'\SQL_LogScout.ps1'
+    $IncompleteShutdownPath = $gBinPath  + '\CleanupIncompleteShutdown.ps1'
 
-    #CMD looks for input for -Execute as C:\SQL_LogScout_v4.5_Signed\SQL_LogScout_v4.5_Signed\SQL_LogScout.cmd
-    #The start date parameter is not provided below to New-ScheduledTaskAction as the job is invoked based on the task trigger above which does take the StartTime parameter. 
-    #To reduce likelihood of issue, 2000 date is hardcoded.
-    $actions = (New-ScheduledTaskAction -Execute $LogScoutPath -Argument "$Scenario $SQLInstance `"$OutputPath`" `"$DeleteFolderOrNew`" `"2000-01-01`" `"$endtime`" `"Quiet`"" -WorkingDirectory "$LogScoutPathRoot")
-
-
-    #Set to run whether user is logged on or not.
-    $principal = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
-
-
-    $settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
-    $task = New-ScheduledTask -Action $actions -Principal $principal -Trigger $trigger -Settings $settings
- 
-
-    #Write-Host "`nCreating '$CmdTaskName'... "
-    Log-ScheduledTask -Message "Creating '$CmdTaskName'... "
-    Register-ScheduledTask -TaskName $CmdTaskName -InputObject $task | Out-Null
-
-
-    Log-ScheduledTask -Message "Success! Created Windows Task $CmdTaskName" -WriteToConsole $true -ConsoleMsgColor "Magenta"
-    Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
-    
-    $JobCreated = Get-ScheduledTask -TaskName $CmdTaskName | Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
-    if ($null -ine $JobCreated)
+    try 
     {
-        foreach ($item in $JobCreated)
-        {
-        
-            Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
-       
-        }
+        #CMD looks for input for -Execute as C:\SQL_LogScout_v4.5_Signed\SQL_LogScout_v4.5_Signed\SQL_LogScout.cmd
+        #The start date parameter is not provided below to New-ScheduledTaskAction as the job is invoked based on the task trigger above which does take the StartTime parameter. 
+        $actions = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ("-File `"" + $LogScoutPath + "`" -Scenario " + $Scenario + " -ServerName " + $SQLInstance + " -CustomOutputPath `"" + $OutputPath + "`" -DeleteExistingOrCreateNew `"" + $DeleteFolderOrNew + "`" -DiagStartTime `"" + $global:gScheduledTaskStartTime + "`" -DiagStopTime `"" + $EndTime + "`" -InteractivePrompts `"Quiet`" -RepeatCollections " + [string]$RepeatCollections) -WorkingDirectory $LogScoutPathRoot
 
-    }    
+
+
+        #Set to run whether user is logged on or not.
+        $principal = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
+
+
+        $settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
+        $task = New-ScheduledTask -Action $actions -Principal $principal -Trigger $trigger -Settings $settings
+    
+
+        #Write-Host "`nCreating '$CmdTaskName'... "
+        Log-ScheduledTask -Message "Creating '$CmdTaskName'... "
+
+        Register-ScheduledTask -TaskName $CmdTaskName -InputObject $task -ErrorAction Stop | Out-Null
+    
+
+
+
+        Log-ScheduledTask -Message "Success! Created Windows Task $CmdTaskName" -WriteToConsole $true -ConsoleMsgColor "Magenta"
+        Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
+        
+        $JobCreated = Get-ScheduledTask -TaskName $CmdTaskName -ErrorAction Stop| Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
+        if ($null -ine $JobCreated)
+        {
+            foreach ($item in $JobCreated)
+            {
+            
+                Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
+        
+            }
+
+        }    
+    }
+    catch 
+    {
+        ScheduledTaskHandleCatchBlock -function_name "ScheduleSQLLogScoutTask" -err_rec $PSItem -exit $true
+    }
 
 
     #future use: Get-ScheduledTask -TaskName $CmdTaskName | Select-Object -ExpandProperty Triggers | Select-Object -Property StartBoundary, ExecutonTimeLimit, Enabled -ExpandProperty Repetition
@@ -563,183 +837,112 @@ try
 
  ################ Create SQL LogScout Cleanup Job To Prevent Stale Windows Task Entries ################
 
-
-    #If CreateCleanupJob is omitted, we can prompt user.
-    if (($Once -ieq $true) -and ($null -ieq $CreateCleanupJob))
-    {
-        Log-ScheduledTask -Message "CreateCleanupJob omitted or provided as false"
-        
-        #Hardcode cleanup job running 11 hours if user didn't pass parameter. Only valid if user is using -Once.
-        $CleanupDelay = '660'
+    try {
+    
+        #If CreateCleanupJob is omitted, we can prompt user.
+        if (($Once -ieq $true) -and ($null -ieq $CreateCleanupJob))
+        {
+            Log-ScheduledTask -Message "CreateCleanupJob omitted or provided as false"
             
-        [datetime]$CleanupTaskExecutionTime = $StartTime.AddMinutes($CleanupDelay)
-        $triggercleanup = New-ScheduledTaskTrigger -Once -At $CleanupTaskExecutionTime
+            #Hardcode cleanup job running 11 hours if user didn't pass parameter. Only valid if user is using -Once.
+            $CleanupDelay = '660'
+                
+            [datetime]$CleanupTaskExecutionTime = $global:gScheduledTaskStartTime.AddMinutes($CleanupDelay)
 
-        Log-ScheduledTask -Message "SQL Logscout task was created and was set to execute once." -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "Would you like to create a second job that will delete itself" -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "and the SQL LogScout task 11 hours after the provided endtime?" -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
-        Log-ScheduledTask -Message "Provide Y or N." -WriteToConsole $true -ConsoleMsgColor "Yellow"
-        
-        [string]$create_delete_task = $null
-
-        while ( ($create_delete_task -ne "Y") -and ($create_delete_task -ne "N") )
-        {
-            $create_delete_task  = Read-Host "Automatically delete existing task 11 hours after scheduled endtime (Y/N)?"
-
-            $create_delete_task  = $create_delete_task.ToString().ToUpper()
-            if ( ($create_delete_task  -ne "Y") -and ($create_delete_task  -ne "N"))
-            {
-                Write-Host "Please provide 'Y' or 'N' to proceed"
-            }
-        }
-
-        if ($create_delete_task -ieq 'N')
-        {
-            Log-ScheduledTask -Message "You declined to automatically delete the job. Please perform manual cleanup in Task Scheduler after logs are collected." -WriteToConsole $true -ConsoleMsgColor "DarkYellow"
-        }
-        else 
-        {
-            #2 action task to delete the logscout task and the cleanup job itself to be run 11 hours later
-            $actionscleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CmdTaskName`" /F")
-            $actions2cleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CleanupTaskName`" /F")
-            $principalcleanup = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
-            $settingscleanup = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
-            #Actions are sequential
-            $taskcleanup = New-ScheduledTask -Action $actionscleanup,$actions2cleanup -Principal $principalcleanup -Trigger $triggercleanup -Settings $settingscleanup
-        
-            Log-ScheduledTask -Message ("Creating " + $CleanupTaskName)
-            Register-ScheduledTask -TaskName $CleanupTaskName  -InputObject $taskcleanup | Out-Null
-        
-        
-            Log-ScheduledTask -Message "Success! Created Windows Task for SQL LogScout Cleanup ""$CleanupTaskName""" -WriteToConsole $true -ConsoleMsgColor "Magenta"
+            Log-ScheduledTask -Message "SQL LogScout task was created and was set to execute once." -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "Would you like to create a second job that will delete itself" -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "and the SQL LogScout task 11 hours after the provided endtime?" -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "This will terminate ALL SQL LogScout sessions for the specified SQL Server instance" -WriteToConsole $true -ConsoleMsgColor "Green"
             Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
+            Log-ScheduledTask -Message "Provide Y or N." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+            
+            [string]$create_delete_task = $null
 
-            $CleanupTaskProperties = Get-ScheduledTask -TaskName $CleanupTaskName  | Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
-
-            if ($null -ine $CleanupTaskProperties)
+            while ( ($create_delete_task -ne "Y") -and ($create_delete_task -ne "N") )
             {
-                foreach ($item in $CleanupTaskProperties)
+                $create_delete_task  = Read-Host "Automatically delete existing task 11 hours after scheduled endtime (Y/N)?"
+
+                $create_delete_task  = $create_delete_task.ToString().ToUpper()
+                if ( ($create_delete_task  -ne "Y") -and ($create_delete_task  -ne "N"))
                 {
-                
-                    Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
-            
+                    Write-Host "Please provide 'Y' or 'N' to proceed"
                 }
-        
-            }    
-        }
-    }
-    #If set to run daily and CreateCleanupJob is null, prompt
-    elseif (($Daily -ieq $true) -and ($null -ieq $CreateCleanupJob)) 
-    {
-        #Prompt user to delete and ask for a date/time to remove
-        Log-ScheduledTask -Message "SQL Logscout task invoked to run daily." -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "Would you like to create a second job that will delete itself" -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "and the SQL LogScout task at the provided time?" -WriteToConsole $true -ConsoleMsgColor "Green"
-        Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
-        #change time to be number of days.
-        Log-ScheduledTask -Message "Enter the number of days after the start time for" -WriteToConsole $true -ConsoleMsgColor "Yellow"
-        Log-ScheduledTask -Message "the cleanup job to run such as '60', or 'N'." -WriteToConsole $true -ConsoleMsgColor "Yellow"
-        Log-ScheduledTask -Message "If you wish to run indefinitely, provide 'N' and perform manual cleanup." -WriteToConsole $true -ConsoleMsgColor "Yellow"
-        [string]$daily_delete_task = $null
-
-        #Check to make sure the value is a postive int or N.
-        while ( ($daily_delete_task -inotmatch "^\d+$") -and ($daily_delete_task -ne "N") )
-        {
-            $daily_delete_task = Read-Host "Please provide response to cleanup job (NumberOfDays/N)?"
-
-            $daily_delete_task = $daily_delete_task.ToString().ToUpper()
-            if ( ($daily_delete_task -inotmatch "^\d+$") -and ($daily_delete_task -ne "N"))
-            {
-                Write-Host "Please provide Number of Days or 'N' to proceed"
-            }
-        }
-        if ($daily_delete_task -ieq 'N')
-        {
-            Log-ScheduledTask -Message "You declined to automatically delete the job. Please perform manual cleanup in Task Scheduler after logs are collected." -WriteToConsole $true -ConsoleMsgColor "DarkYellow"
-        }
-        else 
-        {
-            $daily_delete_task = [int]$daily_delete_task
-                #Calculate stoptime based on minutes provided to determine end time of LogScout
-            if ($daily_delete_task -lt 1)
-            {
-                $daily_delete_task = 1
             }
 
-            [datetime] $TimeForCleanup = $StartTime
-            [datetime] $TimeForCleanup = $TimeForCleanup.AddDays($daily_delete_task)
-
-            $triggercleanup = New-ScheduledTaskTrigger -Once -At $TimeForCleanup 
-            
-            #2 action task to delete the logscout task and the cleanup job itself to be run 11 hours later
-            $actionscleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CmdTaskName`" /F")
-            $actions2cleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CleanupTaskName`" /F")
-            $principalcleanup = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
-            $settingscleanup = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
-            #Actions are sequential
-            $taskcleanup = New-ScheduledTask -Action $actionscleanup,$actions2cleanup -Principal $principalcleanup -Trigger $triggercleanup -Settings $settingscleanup
-        
-            Log-ScheduledTask -Message ("Creating " + $CleanupTaskName)
-            Register-ScheduledTask -TaskName $CleanupTaskName  -InputObject $taskcleanup | Out-Null
-        
-        
-            Log-ScheduledTask -Message "Success! Created Windows Task for SQL LogScout Cleanup ""$CleanupTaskName""" -WriteToConsole $true -ConsoleMsgColor "Magenta"
+            if ($create_delete_task -ieq 'N')
+            {
+                Log-ScheduledTask -Message "You declined to automatically delete the job. Please perform manual cleanup in Task Scheduler after logs are collected." -WriteToConsole $true -ConsoleMsgColor "DarkYellow"
+            }
+            else 
+            {
+                CreateCleanupJobTask($CleanupTaskExecutionTime)
+            }
+        }
+        #If set to run daily and CreateCleanupJob is null, prompt
+        elseif (($Daily -ieq $true -or $Continuous -ieq $true) -and ($null -ieq $CreateCleanupJob)) 
+        {
+            #Prompt user to delete and ask for a date/time to remove
+            Log-ScheduledTask -Message "SQL LogScout task invoked to run daily or continuous." -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "Would you like to create a second job that will delete itself" -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "and the SQL LogScout task at the provided time?" -WriteToConsole $true -ConsoleMsgColor "Green"
+            Log-ScheduledTask -Message "This will terminate ALL SQL LogScout sessions for the specified SQL Server instance" -WriteToConsole $true -ConsoleMsgColor "Green"
             Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
+            #change time to be number of days.
+            Log-ScheduledTask -Message "Enter the number of days after the start time for" -WriteToConsole $true -ConsoleMsgColor "Yellow"
+            Log-ScheduledTask -Message "the cleanup job to run such as '60', or 'N'." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+            Log-ScheduledTask -Message "If you wish to preserve the created task, type 'N' and clean it up manually." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+            [string]$daily_delete_task = $null
 
-            $CleanupTaskProperties = Get-ScheduledTask -TaskName $CleanupTaskName  | Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
-
-            if ($null -ine $CleanupTaskProperties)
+            #Check to make sure the value is a postive int or N.
+            while ( ($daily_delete_task -inotmatch "^\d+$") -and ($daily_delete_task -ne "N") )
             {
-                foreach ($item in $CleanupTaskProperties)
+                $daily_delete_task = Read-Host "Please provide response to cleanup job (NumberOfDays/N)?"
+
+                $daily_delete_task = $daily_delete_task.ToString().ToUpper()
+                if ( ($daily_delete_task -inotmatch "^\d+$") -and ($daily_delete_task -ne "N"))
                 {
-                
-                    Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
-               
+                    Write-Host "Please provide Number of Days or 'N' to proceed"
                 }
-        
-            }    
+            }
+            if ($daily_delete_task -ieq 'N')
+            {
+                Log-ScheduledTask -Message "You declined to automatically delete the job. Please perform manual cleanup in Task Scheduler after logs are collected." -WriteToConsole $true -ConsoleMsgColor "DarkYellow"
+            }
+            else 
+            {
+                $daily_delete_task = [int]$daily_delete_task
+                    #Calculate stoptime based on minutes provided to determine end time of LogScout
+                if ($daily_delete_task -lt 1)
+                {
+                    $daily_delete_task = 1
+                }
+
+                [datetime] $TimeForCleanup = $global:gScheduledTaskStartTime
+                [datetime] $TimeForCleanup = $TimeForCleanup.AddDays($daily_delete_task)
+
+                CreateCleanupJobTask($TimeForCleanup)
+            }
+        }
+
+
+        #If user explicitly passes parameters, allows us to silently create. We check earlier that they passed the other parameters with CreateCleanupJob
+        elseif ($CreateCleanupJob -ieq $true)
+        {
+            #user provided parameters for cleanup task, so don't prompt and just create the job.
+            Log-ScheduledTask -Message "Cleanup job parameters provided. Creating cleanup task silently." -WriteToConsole $true -ConsoleMsgColor "Green"
+
+            CreateCleanupJobTask($CleanupJobTime)
+        }
+
+        #If user explicitly said to not create the job, just log a message and don't create the cleanup job.
+        elseif  ($CreateCleanupJob -ieq $false)
+        {
+            Log-ScheduledTask -Message "CreateCleanupJob provided as false. Not creating cleanup task. Please clean up Windows Task Scheudler manually." -WriteToConsole $true -ConsoleMsgColor "Yellow"
         }
     }
-
-
-    #If user explicitly passes parameters, allows us to silently create. We check earlier that they passed the other parameters with CreateCleanupJob
-    elseif ($CreateCleanupJob -ieq $true)
+    catch 
     {
-        #user provided parameters for cleanup task, so don't prompt and just create the job.
-        Log-ScheduledTask -Message "Cleanup job parameters provided. Creating cleanup task silently." -WriteToConsole $true -ConsoleMsgColor "Green"
-
-        $triggercleanup = New-ScheduledTaskTrigger -Once -At $CleanupJobTime
-        $actionscleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CmdTaskName`" /F")
-        $actions2cleanup = (New-ScheduledTaskAction -Execute schtasks.exe -Argument "/Delete /TN `"$CleanupTaskName`" /F")
-        $principalcleanup = New-ScheduledTaskPrincipal -UserId $global:CurrentUserAccount -LogonType $LogonTypeInt -RunLevel Highest
-        $settingscleanup = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries
-        #Actions are sequential
-        $taskcleanup = New-ScheduledTask -Action $actionscleanup,$actions2cleanup -Principal $principalcleanup -Trigger $triggercleanup -Settings $settingscleanup
-
-        Log-ScheduledTask -Message ("Creating " + $CleanupTaskName)
-        Register-ScheduledTask -TaskName $CleanupTaskName  -InputObject $taskcleanup | Out-Null
-
-
-        Log-ScheduledTask -Message "Success! Created Windows Task for SQL LogScout Cleanup ""$CleanupTaskName""" -WriteToConsole $true -ConsoleMsgColor "Magenta"
-        Log-ScheduledTask -Message "------------------------" -WriteToConsole $true
-
-        $CleanupTaskProperties = Get-ScheduledTask -TaskName $CleanupTaskName  | Select-Object -Property TaskName, State -ExpandProperty Actions | Select-Object TaskName, State, Execute, Arguments
-        if ($null -ine $CleanupTaskProperties)
-                {
-                    foreach ($item in $CleanupTaskProperties)
-                    {
-                    
-                        Log-ScheduledTask -Message ($item.TaskName.ToString() + " | " + $item.State.ToString() + " | " + $item.Execute.ToString() + " | " + $item.Arguments.ToString())
-                
-                    }
-            
-                }    
-    }
-    #If user explicitly said to not create the job, just log a message and don't create the cleanup job.
-    elseif  ($CreateCleanupJob -ieq $false)
-    {
-        Log-ScheduledTask -Message "CreateCleanupJob provided as false. Not creating cleanup task. Please clean up Windows Task Scheudler manually." -WriteToConsole $true -ConsoleMsgColor "Yellow"
+        ScheduledTaskHandleCatchBlock -function_name "ScheduleSQLLogScoutTask" -err_rec $PSItem -exit $true
     }
     
 
@@ -750,5 +953,5 @@ try
 
 catch 
 {
-    HandleCatchBlock -function_name "ScheduleSQLLogScoutTask" -err_rec $PSItem
+    ScheduledTaskHandleCatchBlock -function_name "ScheduleSQLLogScoutTask" -err_rec $PSItem -exit $true
 }

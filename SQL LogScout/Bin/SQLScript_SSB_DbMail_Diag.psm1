@@ -1,25 +1,12 @@
-/*
-Author:		EricBu@Microsoft.com and wcarroll@microsoft.com
-Purpose:	Service Broker Script for PSSDiag
-Date:		05/18/2015
-Note:		Set osql -w 8000 in order to display entire definition of activation stored procedures. Save Output as text. 
-Version:	2.0 
-Change List:
-	EricBu - Changed table delimiter so tables can be imported via SQL Nexus Custom Row Importer
-	EricBu - Changed all code to NOLOCKs to reduce blocking
-	EricBu - Changed sys.database query to only return databases with SSB activated.
-	EricBu - Changed sys.dm_broker_queue_monitors to show current state, last activation, current backlog in transmission queue
-	EricBu - Changed COUNT(*) to point to meta data rather than table to reduce data collection time/size as we don't need the count to be 100% accurate.
-	EricBu - Changed output to be more readable.
-	EricBu - Changed the sys.transmission_queue output to remove the Message field which likely will have PPI information in it.
-	EricBu - Added DB_NAME() column to sys.transmission and sys.conversation_endpoints queries, so custom importer will import all data from each SSB DB and we can query on them.
-	EricBu - Added time to track how long it takes to gather data from each database. We may spot performance issues with gathering data this way.
-	EricBu - Changed context of the Queue Monitor Query to the Database Context
-	EricBu - Added GROUPing Counts to sys.transmission_queue and sys.conversation_endpoints.
-	EricBu - Fixed DATEDIFF() call for the SSB Database specific time.
-*/
 
+    function SSB_DbMail_Diag_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+        [String] $collectorName = "SSB_DbMail_Diag"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 USE master
 go
 
@@ -27,9 +14,14 @@ SET NOCOUNT ON
 SET QUOTED_IDENTIFIER ON;
 DECLARE @StartTime datetime
 select @@version as 'Version'
+PRINT '' 
+
 select GETDATE() as 'RunDateTime', GETUTCDATE() as 'RunUTCDateTime', SYSDATETIMEOFFSET() as 'SysDateTimeOffset'
+PRINT '' 
 
 select @@servername as 'ServerName'
+PRINT '' 
+
 PRINT '-- sys.databases --' 
 select * from master.sys.databases where is_broker_enabled = 1 and name not in('tempdb', 'model', 'AdventureWorks', 'AdventureWorksDW')
 PRINT ''
@@ -86,7 +78,7 @@ BEGIN
 	SELECT @SCI = 0; -- service_contract_id
 	select @dbname = RTRIM(@dbname);
 	EXEC ('USE [' + @dbname + ']');
-	SELECT @cmd3 = N'SELECT @SCI_OUT = MAX(service_contract_id) FROM ' + @dbname + '.sys.service_contracts';
+	SELECT @cmd3 = N'SELECT @SCI_OUT = MAX(service_contract_id) FROM [' + @dbname + '].sys.service_contracts';
 	EXEC sp_executesql @cmd3, N'@SCI_OUT INT OUTPUT', @SCI_OUT = @SCI OUTPUT; 
 	IF @SCI > 7
 		BEGIN
@@ -109,7 +101,7 @@ BEGIN
 		EXEC ('SELECT * FROM ' + @dbname + '.sys.service_contracts');
 		
 		-- PRINT ''
-		-- print '-- sys.service_contract_usages --' 
+		-- PRINT '-- sys.service_contract_usages --' 
 		-- EXEC ('SELECT * FROM ' + @dbname + '.sys.service_contract_usages');
 		
 		PRINT ''
@@ -149,7 +141,7 @@ BEGIN
 			CONVERT(VARCHAR(512),subject) AS subject,
 			expiry_date,
 			start_date,
-			''0x'' + CONVERT(VARCHAR(64),thumbprint,2) AS thumbprint,
+			''0x'' + CONVERT(VARCHAR(64),thumbPRINT,2) AS thumbPRINT,
 			CONVERT(VARCHAR(256), attested_by) AS attested_by,
 			pvt_key_last_backup_date,
 			key_length
@@ -202,13 +194,13 @@ BEGIN
 		
 		PRINT ''
 		PRINT 'TOP 500'
-		print '-- sys.transmission_queue --' 
+		PRINT '-- sys.transmission_queue --' 
 		EXEC ('USE ' + @dbname + ';SELECT top 500 conversation_handle, to_service_name, to_broker_instance, from_service_name, 
 			service_contract_name, enqueue_time, message_sequence_number, message_type_name, is_conversation_error, 
 			is_end_of_dialog, priority, transmission_status, DB_NAME() as DB_Name FROM ' + @dbname + '.sys.transmission_queue with (nolock) order by enqueue_time, message_sequence_number');
 		
 		PRINT ''
-		print 'sys.conversation_endpoints (total count, group count, and top 500)'
+		PRINT 'sys.conversation_endpoints (total count, group count, and top 500)'
 		-- Using count against MetaData columns rather than COUNT(*) becuase it is faster, and we dont' need exact counts
 		PRINT '-- TOTAL COUNT sys.conversation_endpoints --'
 		EXEC ('SELECT p.rows as CE_Count FROM ' + @dbname + '.sys.objects as o join ' + @dbname + '.sys.partitions as p on p.object_id = o.object_id  where o.name = ''sysdesend''')
@@ -240,7 +232,7 @@ BEGIN
 			select @len = len(@proc) - 8;
 			select @proc = substring(@proc, 8, @len)
 			select @proc
-			EXEC ("select definition from " + @dbname + ".sys.sql_modules where definition like '%" + @proc + "%'")
+			EXEC (`"select definition from `" + @dbname + `".sys.sql_modules where definition like '%`" + @proc + `"%'`")
 			FETCH NEXT FROM tproc_cursor INTO @proc;
 		END;
 		CLOSE tproc_cursor;
@@ -265,4 +257,175 @@ CLOSE tnames_cursor;
 DEALLOCATE tnames_cursor;
 
 
+PRINT 'Getting Database Mail Information'
+PRINT ''
 
+PRINT '-- sysmail_event_log_sysmail_faileditems --'
+SELECT er.log_id, 
+    er.event_type,
+    er.log_date, 
+    er.description, 
+    er.process_id, 
+    er.mailitem_id, 
+    er.account_id, 
+    er.last_mod_date, 
+    er.last_mod_user,
+    fi.send_request_user,
+    fi.send_request_date,
+    fi.recipients, 
+	fi.subject, 
+	fi.body
+FROM msdb.dbo.sysmail_event_log er 
+    LEFT JOIN msdb.dbo.sysmail_faileditems fi
+ON er.mailitem_id = fi.mailitem_id
+ORDER BY log_date DESC;
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_mailitems --'
+SELECT mailitem_id,
+       profile_id,
+       recipients,
+       copy_recipients,
+       blind_copy_recipients,
+       subject,
+	   from_address,
+       body,
+       body_format,
+       importance,
+       sensitivity,
+       file_attachments,
+       attachment_encoding,
+       query,
+       execute_query_database,
+       attach_query_result_as_file,
+       query_result_header,
+       query_result_width,
+       query_result_separator,
+       exclude_query_output,
+       append_query_error,
+       send_request_date,
+       send_request_user,
+       sent_account_id,
+       CASE sent_status 
+          WHEN 0 THEN 'unsent' 
+          WHEN 1 THEN 'sent' 
+          WHEN 3 THEN 'retrying' 
+          ELSE 'failed' 
+       END as sent_status_description,
+	   sent_status,     
+       sent_date,
+       last_mod_date,
+       last_mod_user
+FROM msdb.dbo.sysmail_mailitems;
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_account --'
+SELECT 
+  account_id         ,
+  name               ,
+  description        ,
+  email_address      ,
+  display_name       ,
+  replyto_address    ,
+  last_mod_datetime  ,
+  last_mod_user    
+FROM msdb.dbo.sysmail_account;
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+
+PRINT '-- sysmail_configuration --'
+SELECT
+  paramname          ,
+  paramvalue         ,
+  description        ,
+  last_mod_datetime  ,
+  last_mod_user      
+FROM msdb.dbo.sysmail_configuration;
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_log --'
+SELECT 
+  log_id            ,
+  event_type        ,
+  log_date          ,
+  description       ,
+  process_id        ,
+  mailitem_id       ,
+  account_id        ,
+  last_mod_date     ,
+  last_mod_user     
+FROM msdb.dbo.sysmail_log; 
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_profile --'
+SELECT 
+  profile_id           ,    
+  name                 ,    
+  description          ,    
+  last_mod_datetime    ,    
+  last_mod_user            
+FROM msdb.dbo.sysmail_profile
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_profileaccount --'
+SELECT 
+  profile_id             ,
+  account_id             ,
+  sequence_number        ,
+  last_mod_datetime      ,
+  last_mod_user          
+FROM 
+msdb.dbo.sysmail_profileaccount
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_server --'
+SELECT 
+  account_id				,
+  servertype				,
+  servername				,
+  port						,
+  username					,
+  credential_id				,
+  use_default_credentials	,
+  enable_ssl				,
+  flags						,
+  timeout					,
+  last_mod_datetime			,
+  last_mod_user
+FROM 
+msdb.dbo.sysmail_server
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

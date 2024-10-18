@@ -47,6 +47,9 @@ $global:DetailFile = ""
 [System.Collections.ArrayList]$global:IOFiles = New-Object -TypeName System.Collections.ArrayList
 [System.Collections.ArrayList]$global:LightPerfFiles = New-Object -TypeName System.Collections.ArrayList
 [System.Collections.ArrayList]$global:ProcessMonitorFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:ServiceBrokerDbMailFiles = New-Object -TypeName System.Collections.ArrayList
+[System.Collections.ArrayList]$global:NeverEndingQueryFiles = New-Object -TypeName System.Collections.ArrayList
+
 
 function CopyArray([System.Collections.ArrayList]$Source, [System.Collections.ArrayList]$Destination)
 {
@@ -58,7 +61,7 @@ function CopyArray([System.Collections.ArrayList]$Source, [System.Collections.Ar
 
 
 
-#Function for inclusions to search the logs (debug and regular) for a string and add to array if found as we expect the file to be written.
+#Function for inclusions and exclusions to search the logs (debug and regular) for a string and add to array if found as we expect the file to be written.
 function ModifyArray()
 {
     param
@@ -69,52 +72,54 @@ function ModifyArray()
             [Parameter(Position=1, Mandatory=$true)]
             [string] $TextToFind,
 
-            [Parameter(Position=2, Mandatory=$true)]
+            [Parameter(Position=2, Mandatory=$false)]
             [System.Collections.ArrayList] $ArrayToEdit,
 
-            [Parameter(Position=3, Mandatory=$true)]
+            [Parameter(Position=3, Mandatory=$false)]
             [string] $ReferencedLog
         )
 
-    if ($ActionType -eq 'Add')
-    {
         #Check the default log first as there less records than debug log.
-        if (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind)
+        #If we didn't find in default log, then check debug log for the provided string.
+        [Boolean] $fTextFound = (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind) -OR
+        (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
+
+        #we check for $null ArrayEdit since it is mandatory
+
+        if ($null -eq $ArrayToEdit) 
+        {
+            WriteToConsoleAndFile -Message "ArrayToEdit should not be null"
+            return
+        }
+    if ($fTextFound) 
+    {
+        if ($ActionType -eq 'Add')
         {
             [void]$ArrayToEdit.Add($ReferencedLog)
+            WriteToConsoleAndFile -Message "Adding value '$ReferencedLog' to array"
+
         }
 
-        #If we didn't find in default log, then check debug log for the provided string.
-        elseif (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
+        elseif ($ActionType -eq 'Remove')
         {
-            [void]$ArrayToEdit.Add($ReferencedLog)
-        }
-    }
 
-    elseif ($ActionType -eq 'Remove')
-    {
-        #Check the default log first as there less records than debug log.
-        if (Select-String -Path $global:sqllogscout_latest_output_internal_logpath -Pattern $TextToFind)
-        {
             [void]$ArrayToEdit.Remove($ReferencedLog)
-        }
+            WriteToConsoleAndFile -Message "Removing value '$ReferencedLog' from array"
 
-        #If we didn't find in default log, then check debug log for the provided string.
-        elseif (Select-String -Path $global:sqllogscout_latest_output_internal_debuglogpath -Pattern $TextToFind)
+        } elseif ($ActionType -eq "Clear")
         {
-            [void]$ArrayToEdit.Remove($ReferencedLog)
+            [void]$ArrayToEdit.Clear()
+            WriteToConsoleAndFile -Message "Removing all values from array"
+        } 
+
+        #We didn't find the provided text so don't add to array. We don't expect the file.
+        else
+        {
+            WriteToConsoleAndFile -Message "Improper use of ModifyArray(). Value passed: $ActionType" -ForegroundColor Red
         }
     }
-
-    #We didn't find the provided text so don't add to array. We don't expect the file.
-    else
-    {
-        WriteToConsoleAndFile -Message "Improper use of ModifyArray(). Value passed: $ModifyArray" -ForegroundColor Red
-    }
-
     
 }
-
 
 function BuildBasicFileArray([bool]$IsNoBasic)
 {
@@ -126,7 +131,7 @@ function BuildBasicFileArray([bool]$IsNoBasic)
 		'RunningDrivers.csv',
 		'RunningDrivers.txt',
 		'SystemInfo_Summary.out',
-		'MiscPssdiagInfo.out',
+		'MiscDiagInfo.out',
 		'TaskListServices.out',
 		'TaskListVerbose.out',
 		'PowerPlan.out',
@@ -143,13 +148,28 @@ function BuildBasicFileArray([bool]$IsNoBasic)
         'Perfmon.out',
         'DNSClientInfo.out',
         'IPConfig.out',
-        'NetTCPandUDPConnections.out'
+        'NetTCPandUDPConnections.out',
+        'SQL_AzureVM_Information.out',
+        'Environment_Variables.out',
+        'azcmagent-logs'
 	)
 
 	# inclusions and exclusions to the array
     ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "_SQLDIAG"
     ModifyArray -ActionType "Remove" -TextToFind "Azcmagent not found" -ArrayToEdit $global:BasicFiles -ReferencedLog "azcmagent-logs"
     ModifyArray -ActionType "Remove" -TextToFind "Will not collect SQLAssessmentAPI" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLAssessmentAPI"
+    ModifyArray -ActionType "Remove" -TextToFind "No SQLAgent log files found" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLAGENT"
+    ModifyArray -ActionType "Remove" -TextToFind "SQL_AzureVM_Information will not be collected" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQL_AzureVM_Information.out"
+    ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog ".mdmp"
+    ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLDUMPER_ERRORLOG.log"
+    ModifyArray -ActionType "Add" -TextToFind "HADR /AG is enabled on this system" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOnDiagScript.out"
+    ModifyArray -ActionType "Add" -TextToFind "Found AlwaysOn_health files" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOn_health"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "cluster.log"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "ClusterInfo.out"
+    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "ClusterRegistryHive.out"
+    ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "FDLAUNCHERRORLOG"
+    ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "_FD"
+    ModifyArray -ActionType "Add" -TextToFind "FulText-Search Log file *SQLFT* copied." -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLFT"
 
     #calculate count of expected files
     $ExpectedFiles = $global:BasicFiles
@@ -167,10 +187,9 @@ function BuildGeneralPerfFileArray([bool]$IsNoBasic)
         'HighCPU_perfstats.out',
         'PerfStats.out',
         'PerfStatsSnapshotStartup.out',
-        'Query Store.out',
+        'QueryStore.out',
         'TempDB_and_Tran_Analysis.out',
         'linked_server_config.out',
-        'SSB_diag.out'
         'PerfStatsSnapshotShutdown.out',
         'Top_CPU_QueryPlansXml_Shutdown_'
 	)
@@ -201,10 +220,9 @@ function BuildDetailedPerfFileArray([bool]$IsNoBasic)
         'HighCPU_perfstats.out',
         'PerfStats.out',
         'PerfStatsSnapshotStartup.out',
-        'Query Store.out',
+        'QueryStore.out',
         'TempDB_and_Tran_Analysis.out',
         'linked_server_config.out',
-        'SSB_diag.out'
         'PerfStatsSnapshotShutdown.out',
         'Top_CPU_QueryPlansXml_Shutdown_'
      )
@@ -260,6 +278,8 @@ function BuildAlwaysOnFileArray([bool]$IsNoBasic)
         'xevent_LogScout_target',
         'Perfmon.out',
         'cluster.log',
+        'ClusterInfo.out',
+        'ClusterRegistryHive.out'
         'GetAGTopology.xml'
      )
 
@@ -272,6 +292,12 @@ function BuildAlwaysOnFileArray([bool]$IsNoBasic)
     # inclusions and exclusions to the array
     ModifyArray -ActionType "Remove" -TextToFind "AlwaysOn_Data_Movement Xevents is not supported on SQL Server version"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_Data_Movement_target"
     ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "cluster.log"
+    ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "ClusterRegistryHive.out"
+    ModifyArray -ActionType "Remove" -TextToFind "This is Not a Windows Cluster!"  -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "ClusterInfo.out"
+    ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "GetAGTopology.xml"
+    ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_Data_Movement_target"
+    ModifyArray -ActionType "Remove" -TextToFind "HADR is off, skipping data movement and AG Topology" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "xevent_LogScout_target"
+    ModifyArray -ActionType "Add" -TextToFind "Found AlwaysOn_health files" -ArrayToEdit $global:AlwaysOnFiles -ReferencedLog "AlwaysOn_health"
     
     #calculate count of expected files
     $ExpectedFiles = $global:AlwaysOnFiles
@@ -397,7 +423,9 @@ function BuildSetupFileArray([bool]$IsNoBasic)
 	@(
         'Setup_Bootstrap',
         '_HKLM_CurVer_Uninstall.txt',
-        '_HKLM_MicrosoftSQLServer.txt'
+        '_HKLM_MicrosoftSQLServer.txt',
+        '_MissingMsiMsp_Detailed.txt',
+        '_MissingMsiMsp_Summary.txt'
     )
 
 
@@ -480,10 +508,9 @@ function BuildLightPerfFileArray([bool]$IsNoBasic)
         'HighCPU_perfstats.out',
         'PerfStats.out',
         'PerfStatsSnapshotStartup.out',
-        'Query Store.out',
+        'QueryStore.out',
         'TempDB_and_Tran_Analysis.out',
         'linked_server_config.out',
-        'SSB_diag.out',
         'PerfStatsSnapshotShutdown.out',
         'Top_CPU_QueryPlansXml_Shutdown_'
     )
@@ -518,6 +545,44 @@ function BuildProcessMonitorFileArray([bool]$IsNoBasic)
 
     #calculate count of expected files
     $ExpectedFiles = $global:ProcessMonitorFiles
+    return $ExpectedFiles
+}
+
+function BuildNeverEndingQueryFileArray([bool]$IsNoBasic)
+{
+    $global:NeverEndingQueryFiles =
+    @(
+        'NeverEndingQuery_perfstats.out',
+        'NeverEnding_HighCPU_QueryPlansXml_',
+        'NeverEnding_statistics_QueryPlansXml_'
+    )
+
+    if ($true -ne $IsNoBasic) 
+        {
+            #add the basic array files
+            CopyArray -Source $global:BasicFiles -Destination $global:NeverEndingQueryFiles
+        }
+    ModifyArray -ActionType "Clear" -TextToFind "NeverEndingQuery Exit without collection" -ArrayToEdit $global:NeverEndingQueryFiles 
+
+    return $global:NeverEndingQueryFiles
+}
+function BuildServiceBrokerDbMailFileArray([bool]$IsNoBasic)
+{
+
+    $global:ServiceBrokerDbMailFiles =
+	@(
+        'Perfmon.out',
+        'SSB_DbMail_Diag.out',
+        'xevent_LogScout_target'
+     )
+
+    #network trace does not collect basic scenario logs with it
+
+    # inclusions and exclusions to the array
+    #...
+
+    #calculate count of expected files
+    $ExpectedFiles = $global:ServiceBrokerDbMailFiles
     return $ExpectedFiles
 }
 
@@ -605,6 +670,8 @@ function CreateTestResultsFile ([string[]]$ScenarioArray)
             "IO"            {$fileScenString +="IO"}
             "LightPerf"     {$fileScenString +="LPf"}
             "ProcessMonitor"{$fileScenString +="PrM"}
+            "ServiceBrokerDBMail"{$fileScenString +="Ssb"}
+            "NeverEndingQuery" {$fileScenString +="NEQ"}
         }
 
         $fileScenString +="_"
@@ -621,30 +688,55 @@ function CreateTestResultsFile ([string[]]$ScenarioArray)
         $FileName = "FileValidation_" + $fileScenString + (Get-Date -Format "MMddyyyyHHmmss").ToString() + ".txt"
         $global:DetailFile = $global:sqllogscout_testing_infrastructure_output_folder + "\" + $FileName
 
+        Write-Host "Creating file validation log in folder '$global:DetailFile'"
         New-Item -ItemType File -Path  $global:sqllogscout_testing_infrastructure_output_folder -Name $FileName | Out-Null
     }
 
 }
 
-function CreateLogFilesMissingLog
+function Set-TestInfraOutputFolder()
 {
-    $PathToFileMissingLogFile =  $global:sqllogscout_testing_infrastructure_output_folder + 'LogFileMissing.LOG'
+    $present_directory = Convert-Path -Path "."   #this gets the current directory called \TestingInfrastructure
 
-    # this creates the LogFileMissing.log if output and/or internal folders/files are missing
+	#create the testing infrastructure output folder
+    $folder = New-Item -Path $present_directory -Name "Output" -ItemType Directory -Force
+    $global:sqllogscout_testing_infrastructure_output_folder = $folder.FullName
+
+    #create the LogFileMissing.log if output and/or internal folders/files are missing
+    $PathToFileMissingLogFile =  $global:sqllogscout_testing_infrastructure_output_folder + '\LogScoutFolderOrFileMissing.LOG'
+
+    # get the latest output folder that contains SQL LogScout logs
+    $latest = Get-ChildItem -Path $global:sqllogscout_root_directory -Filter "output*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    
+    #if no output folder is found, then we cannot continue
+    if ([String]::IsNullOrWhiteSpace($latest))
+    {
+        Write-Host "No 'output*' folder(s) found'. Cannot continue" -ForegroundColor Red
+        Write-Output "No 'output*' folder(s) found'. Cannot continue"  | Out-File -FilePath $PathToFileMissingLogFile -Append
+        return $false
+    }
+
+    #set the path to the latest output folder
+    $global:sqllogscout_latest_output_folder = ($global:sqllogscout_root_directory + "\"+ $latest + "\")
+
+    #check if the \output folder exists
     if (!(Test-Path -Path $global:sqllogscout_latest_output_folder ))
     {
-        $OutputFolderCheckLogMessage = "Files are missing or folder " + $global:sqllogscout_latest_output_folder + " does not exist"
+        $OutputFolderCheckLogMessage = "Folder '" + $global:sqllogscout_latest_output_folder + "' does not exist"
         $OutputFolderCheckLogMessage = $OutputFolderCheckLogMessage.replace("`n", " ")
-        Write-Host $OutputFolderCheckLogMessage -ForegroundColor Red
 
+        Write-Host $OutputFolderCheckLogMessage -ForegroundColor Red
         Write-Output $OutputFolderCheckLogMessage  | Out-File -FilePath $PathToFileMissingLogFile -Append
 
         return $false
     }
 
+    #check if the \internal folder exists
+    $global:sqllogscout_latest_internal_folder = ($global:sqllogscout_latest_output_folder + "internal\")
+
     if (!(Test-Path -Path $global:sqllogscout_latest_internal_folder ))
     {
-        $OutputInternalFolderCheckLogMessage = "Files are missing or folder " + $global:sqllogscout_latest_internal_folder + " does not exist"
+        $OutputInternalFolderCheckLogMessage = "Folder '" + $global:sqllogscout_latest_internal_folder + "' does not exist"
         $OutputInternalFolderCheckLogMessage = $OutputInternalFolderCheckLogMessage.replace("`n", " ")
 
         Write-Host $OutputInternalFolderCheckLogMessage -ForegroundColor Red
@@ -653,22 +745,11 @@ function CreateLogFilesMissingLog
         return $false
     }
 
-    return $true
-}
-
-function Set-TestInfraOutputFolder()
-{
-    # get the latest output folder that contains SQL LogScout logs
-    $latest = Get-ChildItem -Path $global:sqllogscout_root_directory -Filter "output*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    $global:sqllogscout_latest_output_folder = ($global:sqllogscout_root_directory + "\"+ $latest + "\")
-    $global:sqllogscout_latest_internal_folder = ($global:sqllogscout_latest_output_folder + "internal\")
+    #get the path to the latest SQL LogScout log and debug log files
 	$global:sqllogscout_latest_output_internal_logpath = ($global:sqllogscout_latest_internal_folder + $global:sqllogscout_log)
     $global:sqllogscout_latest_output_internal_debuglogpath = ($global:sqllogscout_latest_internal_folder + $global:sqllogscoutdebug_log)
-    $present_directory = Convert-Path -Path "."   #this gets the current directory called \TestingInfrastructure
 
-	#create the testing infrastructure output folder
-    $folder = New-Item -Path $present_directory -Name "Output" -ItemType Directory -Force
-    $global:sqllogscout_testing_infrastructure_output_folder = $folder.FullName
+    return $true
 }
 
 #--------------------------------------------------------Scenario check Start ------------------------------------------------------------
@@ -676,6 +757,7 @@ function Set-TestInfraOutputFolder()
 function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBasic)
 {
     $summary_out_string = ""
+    $return_val = $true
 
     try
     {
@@ -756,6 +838,16 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
                 $ExpectedFiles = BuildProcessMonitorFileArray -IsNoBasic $IsNoBasic
                 $ExpectedFileCount = $global:ProcessMonitorFiles.Count
             }
+            "ServiceBrokerDbMail"
+            {
+                $ExpectedFiles = BuildServiceBrokerDbMailFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:ServiceBrokerDbMailFiles.Count
+            }
+            "NeverEndingQuery"
+            {
+                $ExpectedFiles = BuildNeverEndingQueryFileArray -IsNoBasic $IsNoBasic
+                $ExpectedFileCount = $global:NeverEndingQueryFiles.Count
+            }
         }
 
 
@@ -814,6 +906,8 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
             WriteToConsoleAndFile -Message ("Status: FAILED") -ForegroundColor Red
 
             $summary_out_string =  ($summary_out_string + " "*(60 - $summary_out_string.Length) +"FAILED!!! (See '$global:DetailFile' for more details)")
+
+            $return_val = $false
         }
         else
         {
@@ -823,6 +917,8 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
             WriteToConsoleAndFile -Message ("Summary: All expected log files for scenario '$scenario_string' are present in your latest output folder!!")
 
             $summary_out_string =  ($summary_out_string + " "*(60 - $summary_out_string.Length) +"SUCCESS")
+
+            $return_val = $true
         }
 
         #write to Summary.txt if ConsistenQualityTests has been executed
@@ -847,6 +943,11 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
         WriteToConsoleAndFile -Message $msg
         WriteToConsoleAndFile -Message "`n************************************************************************************************`n"
 
+        #send out success of failure message: true (success) or false (failed)
+        #if the expected file count is not equal to the actual file count, then fail
+        #if the expected file count is equal to the actual file count, then pass
+        return $return_val
+
     } # end of try
     catch
     {
@@ -856,7 +957,7 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
         $error_linenum = $PSItem.InvocationInfo.ScriptLineNumber
         $error_offset = $PSItem.InvocationInfo.OffsetInLine
         Write-LogError "Function $mycommand failed with error:  $error_msg (line: $error_linenum, $error_offset)"
-        return
+        return $false
     }
 
 }
@@ -865,9 +966,14 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
 
 function main()
 {
+    $ret = $true
 
     # Call Function to set global variables that represent the various SQLLogScout output folder structures like debug, internal, output, testinginfra etc.
-    Set-TestInfraOutputFolder
+    if (!(Set-TestInfraOutputFolder))
+    {
+        Write-Host "Cannot continue test due to missing folders. Exiting..." -ForegroundColor Red
+        return
+    }
 
     #if SQL LogScout has been run longer than 2 days ago, prompt to re-run
     $currentDate = [DateTime]::Now.AddDays(-2)
@@ -875,11 +981,6 @@ function main()
 
     try
     {
-        #in case SQLLogScout collected logs are missing
-        if (!(CreateLogFilesMissingLog))
-        {
-            return
-        }
 
         # get the latest sqllogscoutlog file and full path
         $sqllogscoutlog = Get-Childitem -Path $global:sqllogscout_latest_output_internal_logpath -Filter $global:sqllogscout_log
@@ -930,26 +1031,28 @@ function main()
                     }
 
                     #validate the file
-                    FileCountAndFileTypeValidation -scenario_string $str_scn -IsNoBasic $nobasic
+                    $ret = FileCountAndFileTypeValidation -scenario_string $str_scn -IsNoBasic $nobasic
                 }
             }
             else
             {
                 WriteToConsoleAndFile -Message "No valid Scenario found to process. Exiting"
-                return
+                return $false
 
             }
         }
         else
         {
-            "The collected files are old......." | Out-File -FilePath $global:DetailFile -Append
             Write-Host 'The collected files are old. Please re-run the SQL LogScout and collect more recent logs.......' -ForegroundColor Red
+            return $false
         }
 
         Write-Host "`n`n"
         $msg = "Testing has been completed, the reports are at: " + $global:sqllogscout_testing_infrastructure_output_folder
         Write-Host $msg
 
+        #send out success of failure message: true (success) or false (failed) that came from FileCountAndFileTypeValidation
+        return $ret
 
     }
     catch
@@ -959,7 +1062,7 @@ function main()
         Write-Host $_.Exception.Message
         $error_linenum = $PSItem.InvocationInfo.ScriptLineNumber
         $error_offset = $PSItem.InvocationInfo.OffsetInLine
-        Write-LogError "Function $mycommand failed with error:  $error_msg (line: $error_linenum, $error_offset)"
+        Write-LogError "Function '$mycommand' in 'FileCountAndTypeValidation.ps1' failed with error:  $error_msg (line: $error_linenum, $error_offset)"
     }
 }
 

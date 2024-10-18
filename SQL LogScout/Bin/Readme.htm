@@ -338,11 +338,115 @@ trace and Command prompt are affected.</p>
 <h1 id="how-to-use">How to use</h1>
 <p>There are 3 possible ways to run and interact with SQL LogScout:</p>
 <ul>
-<li>Batch file</li>
+<li>PowerShell script</li>
 <li>GUI</li>
-<li>PowerShell file</li>
+<li>Batch file (backwards compatibility)</li>
 </ul>
-<h2 id="use-batch-file">Use batch file</h2>
+<h2 id="use-powershell-script">Use PowerShell script</h2>
+<ol type="1">
+<li><p>Place the downloaded files on a disk volume where diagnostic logs
+will be captured. An sub-folder will be created automatically by the
+tool when you start it. Or you can choose a different destination path
+later.</p>
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">:warning: WARNING</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Please make sure that the SQL Server
+startup account has <strong>write</strong> permissions to the folder you
+selected. Typically folders like %USERPROFILE%, %USERPROFILE%AND
+%USERPROFILE%folders are <strong>not</strong> write-accessible by the
+SQL Server service account by default.</td>
+</tr>
+</tbody>
+</table></li>
+<li><p>Open a Command Prompt as an Administrator and change to the
+folder where SQL LogScout files reside. For example:</p>
+<pre class="console"><code>cd d:\sqllogscout</code></pre></li>
+<li><p>Start PowerShell (PS). For example you can run</p>
+<pre class="console"><code>powershell.exe</code></pre>
+<p><strong>Note:</strong> Avoid the use of <a
+href="https://learn.microsoft.com/powershell/scripting/windows-powershell/ise/introducing-the-windows-powershell-ise">PowerShell
+ISE</a> as it is not updated and doesn’t support some features that SQL
+LogScout uses. A check is performed for ISE usage upon execution and if
+it is detected as a host environment, SQL LogScout will raise an error
+and exit.</p></li>
+<li><p>Run the following PS script by itself or by using <a
+href="#parameters">parameters</a>. For example:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">PS</span> <span class="op">&gt;</span> <span class="op">.</span>\SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;Basic&quot;</span> <span class="op">-</span>ServerName <span class="st">&quot;Win2022machine\inst2022&quot;</span></span></code></pre></div></li>
+</ol>
+<p><strong>Note:</strong> Using the PowerShell script
+<code>SQL_LogScout.ps1</code> is the recommended way to run SQL
+LogScout, but <code>SQL_LogScout.cmd</code> is supported for backwards
+compatibility. The introduction of <code>SQL_LogScount.ps1</code> was
+brought about for several reasons:</p>
+<ol type="1">
+<li>The ability to invoke SQL LogScout with named parameters in any
+order and with the option to omit parameters that aren’t required. The
+.CMD file has been inflexible in this respect.</li>
+<li>The introduction of a new feature RepeatCollections or continuous
+mode and the ability to retain a certain number of output folders when
+run with continuous mode.<br />
+</li>
+<li>The ability to digitally sign the PS1 file and thus improved
+security</li>
+</ol>
+<h2 id="use-graphical-user-interface-gui">Use graphical user interface
+(GUI)</h2>
+<ol type="1">
+<li>Place the downloaded files on a disk volume where diagnostic logs
+will be captured. An sub-folder will be created automatically by the
+tool when you start it</li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">:warning: WARNING</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Please make sure that the SQL Server
+startup account has <strong>write</strong> permissions to the folder you
+selected. Typically folders like %USERPROFILE%, %USERPROFILE%AND
+%USERPROFILE%folders are <strong>not</strong> write-accessible by the
+SQL Server service account by default.</td>
+</tr>
+</tbody>
+</table>
+<ol type="1">
+<li><p>Open a PowerShell prompot or a Command Prompt as an Administrator
+and change to the folder where SQL LogScout files reside. For
+example:</p>
+<pre class="console"><code>cd d:\sqllogscout</code></pre></li>
+<li><p>Start the tool via <code>SQL_LogScout.ps1</code> before or while
+the issue is occurring and follow the menus</p>
+<pre class="console"><code>SQL_LogScout.ps1</code></pre></li>
+<li><p>When prompted
+<code>Would you like to use GUI mode ?&gt; (Y/N):</code> type ‘y’ and
+you will be presented with a GUI</p></li>
+<li><p>Pick one or more <a href="#scenarios">Scenarios</a> from a list
+(based on the issue under investigation).</p></li>
+<li><p>Select from which SQL instance you want to diagnose</p></li>
+<li><p>Select whether to overwrite an existing folder with data or let
+it default to creating a new folder</p></li>
+<li><p>Stop the collection when you are ready (by typing “stop” or
+“STOP”). In some Scenarios (e.g. Basic) the collection stops
+automatically when it finishes collecting static logs</p></li>
+</ol>
+<h2 id="use-batch-file-backward-compatibility">Use batch file (backward
+compatibility)</h2>
 <ol type="1">
 <li><p>Place the downloaded files on a disk volume where diagnostic logs
 will be captured. An sub-folder will be created automatically by the
@@ -383,86 +487,13 @@ automatically when it finishes collecting static logs</p>
 <p>NOTE: You can use <a href="#parameters">parameters</a> to automate
 the execution and bypass interactive menus. For example:</p>
 <pre class="console"><code>SQL_LogScout.cmd GeneralPerf+Memory server_name</code></pre>
-<p>For more information see <a href="#examples">Examples</a></p></li>
-</ol>
-<h2 id="use-graphical-user-interface-gui">Use graphical user interface
-(GUI)</h2>
-<ol type="1">
-<li>Place the downloaded files on a disk volume where diagnostic logs
-will be captured. An sub-folder will be created automatically by the
-tool when you start it</li>
-</ol>
-<table>
-<colgroup>
-<col style="width: 100%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">:warning: WARNING</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">Please make sure that the SQL Server
-startup account has <strong>write</strong> permissions to the folder you
-selected. Typically folders like %USERPROFILE%, %USERPROFILE%AND
-%USERPROFILE%folders are <strong>not</strong> write-accessible by the
-SQL Server service account by default.</td>
-</tr>
-</tbody>
-</table>
-<ol type="1">
-<li><p>Open a Command Prompt as an Administrator and change to the
-folder where SQL LogScout files reside. For example:</p>
-<pre class="console"><code>cd d:\sqllogscout</code></pre></li>
-<li><p>Start the tool via <code>SQL_LogScout.cmd</code> before or while
-the issue is occurring and follow the menus</p>
-<pre class="console"><code>SQL_LogScout.cmd</code></pre></li>
-<li><p>When prompted
-<code>Would you like to use GUI mode ?&gt; (Y/N):</code> type ‘y’ and
-you will be presented with a GUI</p></li>
-<li><p>Pick one or more <a href="#scenarios">Scenarios</a> from a list
-(based on the issue under investigation).</p></li>
-<li><p>Select from which SQL instance you want to diagnose</p></li>
-<li><p>Select whether to overwrite an existing folder with data or let
-it default to creating a new folder</p></li>
-<li><p>Stop the collection when you are ready (by typing “stop” or
-“STOP”). In some Scenarios (e.g. Basic) the collection stops
-automatically when it finishes collecting static logs</p></li>
-</ol>
-<h2 id="use-powershell-script">Use PowerShell script</h2>
-<ol type="1">
-<li><p>Place the downloaded files on a disk volume where diagnostic logs
-will be captured. An sub-folder will be created automatically by the
-tool when you start it</p>
-<table>
-<colgroup>
-<col style="width: 100%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">:warning: WARNING</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">Please make sure that the SQL Server
-startup account has <strong>write</strong> permissions to the folder you
-selected. Typically folders like %USERPROFILE%, %USERPROFILE%AND
-%USERPROFILE%folders are <strong>not</strong> write-accessible by the
-SQL Server service account by default.</td>
-</tr>
-</tbody>
-</table></li>
-<li><p>Open a Command Prompt as an Administrator and change to the
-folder where SQL LogScout files reside. For example:</p>
-<pre class="console"><code>cd d:\sqllogscout</code></pre></li>
-<li><p>Start PowerShell (PS). For example you can run</p>
-<pre class="console"><code>powershell.exe</code></pre></li>
-<li><p>Run the following PS script by itself or by using <a
-href="#parameters">parameters</a>. For example:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">PS</span> <span class="op">&gt;</span> <span class="op">.</span>\SQLLogScoutPs<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario Basic <span class="op">-</span>ServerName <span class="st">&quot;Win2022machine\inst2022&quot;</span> <span class="op">-</span>DiagStopTime <span class="st">&quot;10-27-2022 19:15&quot;</span></span></code></pre></div></li>
+<p>For more information see <a href="#examples">Examples</a></p>
+<p>NOTE: If you need to run SQL LogScout in a continuous mode, please <a
+href="#use-powershell-script">use the PowerShell script</a> option</p>
+<p>IMPORTANT: Using the SQL_LogScout.cmd is an option that is still
+available, but may be discontinued in future versions. Consider using
+SQL_LogScout.ps1 PowerShell file for new scripting or automation
+tasks.</p></li>
 </ol>
 <h2 id="automate-data-collection">Automate data collection</h2>
 <p>SQL LogScout can be executed with multiple parameters allowing for
@@ -474,10 +505,14 @@ full automation and no interaction with menus. You can:</p>
 <li>Use Quiet mode to accept all prompts automatically</li>
 <li>Choose the destination output folder (custom location, delete
 default or create a new one folder)</li>
+<li>Use the RepeatCollections (continuous mode) option to run SQL
+LogScout multiple times</li>
 </ul>
-<p>See <a href="#parameters">Parameters</a> and <a
-href="#e-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode">Example
-E</a> for detailed information.</p>
+<p>See <a href="#parameters">Parameters</a>, <a
+href="#f-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode">Example
+F</a> and <a
+href="#g-execute-sql-logscout-in-continuous-mode-repeatcollections-and-keep-a-set-number-of-output-folders">Example
+G</a> for detailed information.</p>
 <h2 id="interrupt-execution">Interrupt execution</h2>
 <p>If the need arises, you can interrupt the execution of SQL LogScout
 by pressing <strong>CTRL+C</strong> at any time. In some cases you may
@@ -503,11 +538,14 @@ LogScout completes.</td>
 </tbody>
 </table>
 <h2 id="parameters">Parameters</h2>
-<p>SQL_LogScout.cmd accepts several optional parameters. Because this is
-a batch file, you have to specify the parameters in the sequence listed
-below. Also, you cannot omit parameters. For example if you would like
-to specify the server instance (3rd parameter), you must specify the
-Scenario parameter before it.</p>
+<p><code>SQL_LogScout.ps1</code> and <code>SQL_LogScout.cmd</code>
+accepts several optional parameters. If you are using the PS1 PowerShell
+script, you can pass named parameters and omit most of them or specify
+them in any order. However, if you are using
+<code>SQL_LogScout.cmd</code> because this is a batch file, you have to
+specify all the parameters in the sequence listed below and cannot omit
+parameters. For example if you would like to specify the server instance
+(3rd parameter), you must specify the Scenario parameter before it.</p>
 <h3 id="scenario">Scenario</h3>
 <p>Possible values are:</p>
 <ul>
@@ -525,6 +563,7 @@ Scenario parameter before it.</p>
 <li>IO</li>
 <li>LightPerf</li>
 <li>ProcessMonitor</li>
+<li>NeverEndingQuery</li>
 <li>MenuChoice - this directs SQL LogScout to present an interactive
 menu with Scenario choices. The option is available in cases where
 multiple parameters are used with SQL_LogScout.cmd. Combining MenuChoice
@@ -567,34 +606,65 @@ collected. An <em>folder or </em>_ddMMyyhhmmss* would still be created
 under this custom path. Possible values are:</p>
 <ul>
 <li>PromptForCustomDir - will cause the user to be prompted whether to
-specify a custom path</li>
+specify a custom path. This is the default value for the parameter.</li>
 <li>UsePresentDir - will use the present directory where SQL LogScout is
 copied (no custom path)</li>
 <li>An existing path (e.g. D:) - will use the specified path for data
 collection. <strong>Note:</strong> Do not use a trailing backslash at
 the end. For example “D:\” will lead to an error.</li>
 </ul>
+<p>If RepeatCollections mode is used, then the CustomOutputPath must be
+either set to ‘UsePresentDir’ or you can specify an existing valid
+path.</p>
 <h3 id="deleteexistingorcreatenew">DeleteExistingOrCreateNew</h3>
 <p>Possible values are:</p>
 <ul>
-<li>DeleteDefaultFolder - will cause the default folder to be deleted
-and recreated</li>
-<li>NewCustomFolder - will cause the creation of a new folder in the
-format *_ddMMyyhhmmss*. If a previous collection created an folder, then
-that folder will be preserved when NewCustomFolder option is used.</li>
+<li>DeleteDefaultFolder - causes the default folder to be deleted and
+recreated. This options specifies that the folder is overwritten. If the
+<code>RepeatCollections</code> parameter is combined with this value,
+then only the latest collection is preserved in the folder.</li>
+<li>NewCustomFolder - causes the creation of a new folder in the format
+*_ddMMyyhhmmss*. If a previous collection created an folder, then that
+folder will be preserved when NewCustomFolder option is used. If the
+<code>RepeatCollections</code> parameter is combined with this value,
+then multiple folders are created until the RepeatCollections
+stops.</li>
+<li>&lt;Number&gt; - a positive integer (e.g. 3) that specifies how many
+output folders to keep when you run SQL LogScout in continuous mode
+(RepeatCollections). This option is only available when you use
+<code>SQL_LogScout.ps1</code> file to run the application. It only works
+when RepeatCollections parameter is greater than 0. If you specify 0,
+then the number will be reset so that 1 (one) output folder is retained.
+If you specify a number larger than or equal to the RepeatCollections
+value, then all folders will be preserved (no deletion). This option
+behaves as if you specified the <code>NewCustomFolder</code> value,
+i.e. a new folder is created for each run of SQL LogScout.</li>
 </ul>
 <h3 id="diagstarttime">DiagStartTime</h3>
-<p>Specify the time when you want SQL LogScout to start data collection
-in the future. If the time is older than or equal to current time, data
-collection starts immediately. Format to use is “yyyy-MM-dd hh:mm:ss”
-(in quotes). For example: “2020-10-27 19:26:00” or “07-07-2021” (if you
-want to specify a date in the past without regard for a time).</p>
+<p>Specify the exact or relative time when you want SQL LogScout to
+start data collection in the future. If the time is older than or equal
+to current time, data collection starts immediately. For exact time, the
+format to use is “yyyy-MM-dd hh:mm:ss” (in quotes). For example:
+“2020-10-27 19:26:00” or “07-07-2021” (if you want to specify a date in
+the past without regard for a time). For relative time, the format to
+use is “+00:15:00”, which indicates start SQL LogScout 15 minutes from
+now. Relative time values can be between 00:00:00 and 11:59:59 (12
+hours). If you need to go beyond 12 hours from the current moment, use
+exact time or <a
+href="#schedule-sql-logscout-as-a-task-to-automate-execution">schedule a
+task</a>.</p>
 <h3 id="diagstoptime">DiagStopTime</h3>
-<p>Specify the time when you want SQL LogScout to stop data collection
-in the future. If the time is older than or equal to current time, data
-collection stops immediately. Format to use is “yyyy-MM-dd hh:mm:ss” (in
-quotes). For example: “2020-10-27 19:26:00” or “07-07-2021” (if you want
-to specify a date in the past without regard for a time).</p>
+<p>Specify the exact or relative time when you want SQL LogScout to stop
+data collection in the future. If the time is older than or equal to
+current time, data collection stops immediately. Format to use is
+“yyyy-MM-dd hh:mm:ss” (in quotes). For example: “2020-10-27 19:26:00” or
+“07-07-2021” (if you want to specify a date in the past without regard
+for a time). For relative time, the format to use is “+01:17:00”, which
+indicates stop SQL LogScout 1 hour and 17 minutes from now. Relative
+time values can be between 00:00:00 and 11:59:59 (12 hours). If you need
+to go beyond 12 hours from the current moment, use exact time or <a
+href="#schedule-sql-logscout-as-a-task-to-automate-execution">schedule a
+task</a>.</p>
 <h3 id="interactiveprompts">InteractivePrompts</h3>
 <p>Possible values are:</p>
 <ul>
@@ -604,6 +674,27 @@ agreement to proceed.</li>
 <li>Noisy - (default) shows prompts requesting user input where
 necessary</li>
 </ul>
+<p>When RepeatCollections mode is used, the InteractivePrompts parameter
+is hard-coded to ‘Quiet’.</p>
+<h3 id="repeatcollections">RepeatCollections</h3>
+<p>RepeatCollections is a parameter that allows you to run SQL LogScout
+continuously. This means after SQL LogScout shuts down, it can start
+back up automatically, up to the value specified here. This is an
+integer value that allows you to specify how many times you want SQL
+LogScout to run. If you are not sure how many times and would like to
+run it “indefinitely”, you can specify a large number, say 10,000 times,
+and you can shut it down manually using CTRL+C. The very first execution
+is not counted in this number; the parameter accounts for repeat
+executions. In other words, if you specify RepeatCollections=3, SQL
+LogScout will run once plus three repetitions, or 4 times altogether.
+This option would typically be combined with other parameters used for
+automation like DiagStartTime, DiagStopTime, InteractivePrompts,
+etc.</p>
+<h3 id="help">help</h3>
+<p>You can use this parameter to display help information on how to call
+SQL_LogScout. The way to invoke this is use
+<code>SQL_LogScout.ps1 -help</code>. This parameter is used as a
+stand-alone parameter without combining it with any others.</p>
 <h2 id="graphical-user-interface-gui">Graphical User Interface
 (GUI)</h2>
 <p>The GUI is a feature added in version 5.0 of SQL LogScout. It allows
@@ -615,10 +706,12 @@ following in the GUI:</p>
 <li>Select the target SQL Server instance</li>
 <li>Select the destination log output folder. The default option here is
 to create a new folder under the Log location you choose. The new folder
-is of the format _datetime. See <strong>-DeleteFolderOrNew</strong>
+is named \Output if such folder doesn’t exist or the name is of the
+format _datetime if \Output exists. See <a
+href="#deleteexistingorcreatenew"><strong>DeleteExistingOrCreateNew</strong></a>
 parameter and <code>NewCustomFolder</code> value as a reference. If you
-check the <code>Overwrite Existing Logs</code> option, an folder will be
-created or overwritten if another copy existed before.</li>
+check the <code>Overwrite Existing Logs</code> option, the existing
+\Output folder is overwritten.</li>
 <li>Perfmon counters and SQL Server Extended events. Certain scenarios
 allow you to collect Perfmon counters and Xevent data (see <a
 href="#scenarios">Scenarios</a> for more information). As you select
@@ -642,35 +735,50 @@ LogScout (most common execution)</h3>
 <p>This is the most common method to execute SQL LogScout which allows
 you to pick your choices from a menu of options</p>
 <div class="sourceCode" id="cb13"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span></span></code></pre></div>
-<h3
-id="b.-execute-sql-logscout-using-a-specific-scenario-and-debug-level">B.
-Execute SQL LogScout using a specific scenario and debug level</h3>
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span></span></code></pre></div>
+<h3 id="b.-execute-sql-logscout-using-a-specific-scenario">B. Execute
+SQL LogScout using a specific scenario</h3>
 <p>This command starts the diagnostic collection specifying the
 GeneralPerf scenario.</p>
 <div class="sourceCode" id="cb14"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> GeneralPerf</span></code></pre></div>
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;GeneralPerf&quot;</span></span></code></pre></div>
 <h3 id="c.-execute-sql-logscout-by-specifying-folder-creation-option">C.
 Execute SQL LogScout by specifying folder creation option</h3>
 <p>Execute SQL LogScout using the DetailedPerf Scenario, specifies the
 Server name, use the present directory and folder option to delete the
 default folder if present</p>
 <div class="sourceCode" id="cb15"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> DetailedPerf <span class="st">&quot;DbSrv\SQL2019&quot;</span> <span class="st">&quot;UsePresentDir&quot;</span> <span class="st">&quot;DeleteDefaultFolder&quot;</span></span></code></pre></div>
-<h3 id="d.-execute-sql-logscout-with-start-and-stop-times">D. Execute
-SQL LogScout with start and stop times</h3>
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;DetailedPerf&quot;</span> <span class="op">-</span>ServerName <span class="st">&quot;DbSrv\SQL2019&quot;</span> <span class="op">-</span>CustomOutputPath <span class="st">&quot;UsePresentDir&quot;</span> <span class="op">-</span>DeleteExistingOrCreateNew <span class="st">&quot;DeleteDefaultFolder&quot;</span></span></code></pre></div>
+<h3
+id="d.-execute-sql-logscout-with-start-and-stop-times-absolute-values">D.
+Execute SQL LogScout with start and stop times (absolute values)</h3>
 <p>The following example collects the AlwaysOn scenario against the
 “DbSrv” default instance, prompts user to choose a custom path and a new
 custom subfolder, and sets the stop time to some time in the future,
 while setting the start time in the past to ensure the collectors start
 without delay.</p>
 <div class="sourceCode" id="cb16"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> AlwaysOn <span class="st">&quot;DbSrv&quot;</span> PromptForCustomDir NewCustomFolder <span class="st">&quot;2000-01-01 19:26:00&quot;</span> <span class="st">&quot;2020-10-29 13:55:00&quot;</span></span></code></pre></div>
-<p><strong>Note:</strong> All parameters are required if you need to
-specify the last parameter. For example, if you need to specify stop
-time, the 5 prior parameters have to be passed.</p>
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario AlwaysOn <span class="op">-</span>ServerName <span class="st">&quot;DbSrv&quot;</span> <span class="op">-</span>CustomOutputPath <span class="st">&quot;PromptForCustomDir&quot;</span> <span class="op">-</span>DeleteExistingOrCreateNew <span class="st">&quot;NewCustomFolder&quot;</span> <span class="op">-</span>DiagStartTime <span class="st">&quot;2000-01-01 19:26:00&quot;</span> <span class="op">-</span>DiagStopTime <span class="st">&quot;2020-10-29 13:55:00&quot;</span></span></code></pre></div>
+<p>This is how you would do the same using the .CMD file.</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> AlwaysOn <span class="st">&quot;DbSrv&quot;</span> PromptForCustomDir NewCustomFolder <span class="st">&quot;2000-01-01 19:26:00&quot;</span> <span class="st">&quot;2020-10-29 13:55:00&quot;</span></span></code></pre></div>
 <h3
-id="e.-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode">E.
+id="e.-execute-sql-logscout-with-relative-start-and-stop-times-time-offset">E.
+Execute SQL LogScout with relative start and stop times (time
+offset)</h3>
+<p>The following example collects the Replication and LightPerf
+scenarios without getting Basic logs against the “DbSrv” named instance,
+uses the current directory as root and overwrites the subfolder. Then
+uses relative time from current time to set the start time 3 minutes
+from now and stop time to seven minutes from now.</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;Replication+LightPerf+NoBasic&quot;</span> <span class="op">-</span>ServerName <span class="st">&quot;DbSrv\SQL2022&quot;</span> <span class="op">-</span>CustomOutputPath <span class="st">&quot;UsePresentDir&quot;</span> <span class="op">-</span>DeleteExistingOrCreateNew <span class="st">&quot;DeleteDefaultFolder&quot;</span> <span class="op">-</span>DiagStartTime <span class="st">&quot;+00:03:00&quot;</span> <span class="op">-</span>DiagStopTime <span class="st">&quot;+00:07:00&quot;</span></span></code></pre></div>
+<p><strong>Note:</strong> If you are using SQL_LogScout.cmd, all
+parameters are required when you need to specify the last parameter. For
+example, if you need to specify stop time, the 5 prior parameters have
+to be passed.</p>
+<h3
+id="f.-execute-sql-logscout-with-multiple-scenarios-and-in-quiet-mode">F.
 Execute SQL LogScout with multiple scenarios and in Quiet mode</h3>
 <p>The example collects data for GeneralPerf, AlwaysOn, and
 BackupRestore scenarios against the “DbSrv” default instance, re-uses
@@ -679,10 +787,28 @@ the stop time to some time in the future, while setting the start time
 in the past to ensure the collectors start without delay. It also
 automatically accepts the prompts by using Quiet mode and helps a full
 automation with no interaction.</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> GeneralPerf+AlwaysOn+BackupRestore DbSrv <span class="st">&quot;d:\log&quot;</span> DeleteDefaultFolder <span class="st">&quot;01-01-2000&quot;</span> <span class="st">&quot;04-01-2021 17:00&quot;</span> Quiet</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;GeneralPerf+AlwaysOn+BackupRestore&quot;</span> <span class="op">-</span>ServerName <span class="st">&quot;DbSrv&quot;</span> <span class="op">-</span>CustomOutputPath <span class="st">&quot;d:\log&quot;</span> <span class="op">-</span>DeleteExistingOrCreateNew <span class="st">&quot;DeleteDefaultFolder&quot;</span> <span class="op">-</span>DiagStartTime <span class="st">&quot;01-01-2000&quot;</span> <span class="op">-</span>DiagStopTime <span class="st">&quot;04-01-2021 17:00&quot;</span> <span class="op">-</span>InteractivePrompts <span class="st">&quot;Quiet&quot;</span></span></code></pre></div>
+<p>When you use SQL_LogScout.cmd (available for backwards
+compatibility), pass the parameters in order</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ex">SQL_LogScout.cmd</span> GeneralPerf+AlwaysOn+BackupRestore DbSrv <span class="st">&quot;d:\log&quot;</span> DeleteDefaultFolder <span class="st">&quot;01-01-2000&quot;</span> <span class="st">&quot;04-01-2021 17:00&quot;</span> Quiet</span></code></pre></div>
 <p><strong>Note:</strong> Selecting Quiet mode implicitly selects “Y” to
 all the screens that requires your agreement to proceed.</p>
+<h3
+id="g.-execute-sql-logscout-in-continuous-mode-repeatcollections-and-keep-a-set-number-of-output-folders">G.
+Execute SQL LogScout in continuous mode (RepeatCollections) and keep a
+set number of output folders</h3>
+<p>The example collects data for Memory scenario without Basic logs
+against the default instance. It runs SQL LogScout 11 times (one initial
+run and 10 repeat runs), and keeps only the last 2 output folders of the
+11 collections. It starts collection 2 seconds after the initialization
+and runs for 10 seconds.</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\SQL_LogScout<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;Memory+NoBasic&quot;</span> <span class="op">-</span>ServerName <span class="st">&quot;.&quot;</span> <span class="op">-</span>RepeatCollections 10  <span class="op">-</span>CustomOutputPath <span class="st">&quot;UsePresentDir&quot;</span> <span class="op">-</span>DeleteExistingOrCreateNew 2 <span class="op">-</span>DiagStartTime <span class="st">&quot;+00:00:02&quot;</span> <span class="op">-</span>DiagStopTime <span class="st">&quot;+00:00:10&quot;</span></span></code></pre></div>
+<p><strong>Note:</strong> You can only use
+<code>SQL_LogScout.ps1</code>, and not <code>SQL_LogScout.cmd</code> for
+RepeatCollections mode.</p>
 <h1 id="scenarios">Scenarios</h1>
 <p>Scenarios are sets of log collections for specific issues that you
 may encounter. For example, the IO scenario captures I/O-related
@@ -703,15 +829,26 @@ configuration, log info, etc)</li>
 <li>Running filter drivers</li>
 <li>Event logs (system and application in both .CSV and .TXT
 formats)</li>
+<li>Full-Text Search Log files and output file with Full-Text
+metadata</li>
+<li>SQL Server dumps found in the errorlog directory. We collect up to
+20 dumps if they were created in the last 2 months and are less than 100
+MB in size.</li>
+<li>Memory dump .txt files (most recent 200 files)</li>
 <li>IPConfig, DNSClientInfo, and TCP and UDP endpoints</li>
 <li>SQL Errorlogs</li>
 <li>SQL Agent logs</li>
+<li>SystemHealth XELs</li>
 <li>Polybase logs</li>
-<li>Azure Arc Agent logs (if SQL Server enabled for Azure Arc)</li>
+<li>Azure Arc Agent logs (if SQL Server enabled for Azure Arc). More
+info available at <a
+href="https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service?tabs=windows">Azure
+Instance Metadata Service</a></li>
+<li><a
+href="https://learn.microsoft.com/azure/virtual-machines/instance-metadata-service?tabs=windows">SQL
+Azure VM Information</a> (if SQL Server is Azure Virtual Machine)</li>
 <li>Performance Monitor counters for SQL Server instance and general OS
 counters - just a few snapshots for a few seconds.</li>
-<li><a
-href="https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health">AlwaysOn_health.xel</a></li>
 <li><a
 href="https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-health-diagnostics-log">MSSQLSERVER_SQLDIAG.xel</a></li>
 <li><a
@@ -720,6 +857,21 @@ VSS Writer Log (SQL Server 2019 and later)</a></li>
 <li><a
 href="https://docs.microsoft.com/sql/tools/sql-assessment-api/sql-assessment-api-overview">SQL
 Assessment API</a> log</li>
+<li>Environment variables full list</li>
+<li><a
+href="https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog">Windows
+Cluster logs</a> in local server time, if running on a WSFC or HADR is
+enabled.</li>
+<li>Cluster resource information (name, nodes, groups, shared volumes,
+network interfaces, quorum, physical disks, etc), if running on a
+WSFC</li>
+<li>Windows Cluster HKEY_LOCAL_MACHINEregistry hive in .HIV format</li>
+<li>Always On diagnostic info (SQL DMVs/system views), if running on a
+HADR/AG system and the AlwaysOn scenario isn’t explicitly enabled</li>
+<li><a
+href="https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health">AlwaysOn_health.xel</a>,
+if running on a HADR/AG system and the AlwaysOn scenario isn’t
+explicitly enabled</li>
 </ul>
 <h2 id="generalperf-scenario">1. GeneralPerf scenario</h2>
 <p>Collects all the Basic scenario logs as well as some long-term,
@@ -730,15 +882,16 @@ continuous logs (until SQL LogScout is stopped).</p>
 counters</li>
 <li>Extended Event (XEvent) trace captures batch-level
 starting/completed events, errors warnings, log growth/shrink, lock
-escalation and timeout, deadlock, login/logout</li>
+escalation and timeout, deadlock, login/logout. The extended events
+collection is configured to use the rollover option and collects up to
+50 XEL files, each 500 MB in size : max_file_size=(500),
+max_rollover_files=(50).</li>
 <li>List of actively-running SQL traces and Xevents</li>
 <li>Snapshots of SQL DMVs that track waits/blocking and high CPU
 queries</li>
 <li>Query Data Store (QDS) info (if that is active)</li>
 <li>Tempdb contention info from SQL DMVs/system views</li>
 <li>Linked Server metadata (SQL DMVs/system views)</li>
-<li>Service Broker configuration information (SQL DMVs/system
-views)</li>
 </ul>
 <p><em>Note:</em> If you combine GeneralPerf with DetailedPerf scenario,
 then the GeneralPerf will be disabled and only DetailedPerf will be
@@ -767,11 +920,15 @@ configuration information from DMVs</p>
 <ul>
 <li>Basic scenario</li>
 <li>Always On diagnostic info (SQL DMVs/system views)</li>
+<li><a
+href="https://docs.microsoft.com/sql/database-engine/availability-groups/windows/always-on-extended-events#bkmk_alwayson_health">AlwaysOn_health.xel</a></li>
 <li>Always On <a
 href="https://techcommunity.microsoft.com/t5/sql-server-support/troubleshooting-data-movement-latency-between-synchronous-commit/ba-p/319141">Data
 Movement Latency Xevent</a> and the AG topology XML file required for <a
 href="https://learn.microsoft.com/archive/blogs/psssql/aglatency-report-tool-introduction">AG
-latency</a> analysis.</li>
+latency</a> analysis. The extended events collection is configured to
+use the rollover option and collects up to 50 XEL files, each 500 MB in
+size : max_file_size=(500), max_rollover_files=(50).</li>
 <li>Core Xevents trace (RPC and Batch started and completed,
 login/logout, errors)</li>
 <li>Performance Monitor counters for SQL Server instance and general OS
@@ -779,9 +936,10 @@ counters</li>
 <li>Windows Cluster HKEY_LOCAL_MACHINEregistry hive in .HIV format</li>
 <li><a
 href="https://docs.microsoft.com/en-us/powershell/module/failoverclusters/get-clusterlog">Windows
-Cluster logs</a> in local server time</li>
+Cluster logs</a> in local server time, if running on a WSFC</li>
 <li>Cluster resource information (name, nodes, groups, shared volumes,
-network interfaces, quorum, physical disks, etc)</li>
+network interfaces, quorum, physical disks, etc), if running on a
+WSFC</li>
 </ul>
 <h2 id="network-trace-scenario">5. Network Trace scenario</h2>
 <p>Collects a network trace from the machine where SQL LogScout is
@@ -795,6 +953,7 @@ memory-related data points</p>
 <li>Performance Monitor counters for SQL Server instance and general OS
 counters</li>
 <li>Memory diagnostic info from SQL DMVs/system views</li>
+<li>In-Memory OLTP related SQL DMVs/system views</li>
 </ul>
 <h2 id="generate-memory-dumps-scenario">7. Generate Memory Dumps
 scenario</h2>
@@ -803,6 +962,9 @@ of processes (SQL Server, SSAS, SSIS, SSRS, SQL Agent). If multiple
 dumps are selected, the number of dumps and the interval between them is
 customizable. Also the type of dump is offered as a choice (mini dump,
 mini with indirect memory, filtered (SQL Server), full.</p>
+<p>You also have the option to defer generating the dump until a later
+time. At the Stop prompt, if you type “MemDump” it will produce one or
+more memory dumps based on the configuration saved earlier.</p>
 <h2 id="windows-performance-recorder-wpr-scenario">8. Windows
 Performance Recorder (WPR) scenario</h2>
 <p>Allows you to collect a <a
@@ -845,7 +1007,13 @@ and 45 seconds.</td>
 Server components:</p>
 <ul>
 <li>Basic scenario logs</li>
-<li>All SQL Setup logs from the Bootstrap folders on the system.</li>
+<li>All SQL Setup logs from the SQL Server Bootstrap folders on the
+system.</li>
+<li>Missing MSI/MSP output files showing what installation packages may
+be missing. The summary file shows the only missing and potentially
+corrupt packages and the detailed one provides details on each SQL
+Server MSI/MSP and if it’s in place, missing, or corrupt and what
+actions can be taken.</li>
 </ul>
 <h2 id="backuprestore-scenario">10. BackupRestore scenario</h2>
 <p>Collects various logs related to backup and restore activities in SQL
@@ -853,7 +1021,9 @@ Server. These logs include:</p>
 <ul>
 <li>Basic scenario</li>
 <li>Backup and restore-related Xevent (backup_restore_progress_trace and
-batch start end xevents)</li>
+batch start end xevents). The extended events collection is configured
+to use the rollover option and collects up to 50 XEL files, each 500 MB
+in size : max_file_size=(500), max_rollover_files=(50).</li>
 <li>Enables backup and restore related TraceFlags to produce information
 in the Errorlog</li>
 <li>Performance Monitor counters for SQL Server instance and general OS
@@ -889,6 +1059,38 @@ registry related issues. This collector requires that you have Procmon
 downloaded and unzipped in a folder of your choice. SQL LogScout will
 prompt you to provide the path to that folder. You don’t need to wrap
 the path in quotes even if there are spaces in the path name.</p>
+<h2 id="service-broker-and-database-mail">14. Service Broker and
+Database mail</h2>
+<p>Collect logs to help troubleshoot SQL Service Broker and Database
+mail scenarios. The scenarion includes the following logs:</p>
+<ul>
+<li>Basic scenario</li>
+<li>Service Broker configuration information (SQL DMVs/system
+views)</li>
+<li>Performance Monitor counters for SQL Server instance and general OS
+counters</li>
+<li>Extended events (Xevents) for SQL Server Service Broker. The
+extended events collection is configured to use the rollover option and
+collects up to 50 XEL files, each 500 MB in size : max_file_size=(500),
+max_rollover_files=(50).</li>
+</ul>
+<h2 id="never-ending-query">15. Never Ending Query</h2>
+<p>Collect logs to help troubleshoot Never Ending Query scenarios. The
+scenario includes the following logs:</p>
+<ul>
+<li>Basic scenario</li>
+<li>Never Ending Query Perfstats (SQL DMVs/system views)</li>
+<li>Performance Monitor counters for SQL Server instance and general OS
+counters</li>
+<li>XML Plans for top 5 High CPU consuming queries</li>
+<li>XML Plans for all Never Ending queries</li>
+</ul>
+<p>A never-ending query is considered a query that is driving CPU due to
+execution for a long time, and not one that is waiting for a long-time.
+This scenario will consider only queries that have consumed 60 seconds
+of more of CPU time. For more information, see <a
+href="https://learn.microsoft.com/en-us/troubleshoot/sql/database-engine/performance/troubleshoot-never-ending-query">Troubleshoot
+queries that seem to never end in SQL Server</a></p>
 <h1 id="output-folders">Output folders</h1>
 <p><strong>Output folder</strong>: All the diagnostic log files are
 collected in the (or _ddMMyyhhmmss) folder. These include Perfmon log
@@ -911,14 +1113,14 @@ stores the main activity log file for SQL LogScout (##SQLLOGSCOUT.LOG).
 If the main script produces some errors in the console, those are
 redirected to a file ##STDERR.LOG which is also moved to folder at the
 end of execution if the file is non-zero in size.</p>
-<h2 id="schedule-sql-logscout-as-a-task-to-automate-execution">Schedule
-SQL LogScout as a task to automate execution</h2>
+<h1 id="schedule-sql-logscout-as-a-task-to-automate-execution">Schedule
+SQL LogScout as a task to automate execution</h1>
 <p>SQL LogScout can be scheduled as a task in Windows Task Scheduler.
 This allows you to run SQL LogScout at a defined time even if you are
 not physically present to do this manually. You can schedule the task to
 execute once or daily at the same time. To schedule a task use the
-<code>ScheduleSQLLogScoutAsTask.ps1</code> script. The script accepts
-the following parameters:</p>
+<code>ScheduleSQLLogScoutAsTask.ps1</code> script located in the folder.
+The script accepts the following parameters:</p>
 <ul>
 <li><strong>-LogScoutPath</strong> - this is the executable path to the
 <code>SQL_LogScout.cmd</code> file. It defaults to the current path you
@@ -943,46 +1145,72 @@ allows you to create multiple scheduled tasks. If you pass a value which
 already exists, you will be prompted to overwrite or keep original task.
 Default value is “SQL LogScout Task”.</li>
 <li><strong>-DeleteFolderOrNew</strong> - this controls the sub-folder
-name where the output data goes. Options for it are
-<code>DeleteDefaultFolder</code>, which causes the default folder to be
-deleted and recreated or <code>NewCustomFolder</code> which causes the
-creation of a new folder in the format _ddMMyyhhmmss. For more
-information see, <code>DeleteExistingOrCreateNew</code> in <a
-href="#parameters">Parameters</a>.</li>
+name where the output data goes. For more information see,
+<code>DeleteExistingOrCreateNew</code> in <a
+href="#parameters">Parameters</a>. Options for it are:
+<ul>
+<li><code>DeleteDefaultFolder</code>, which causes the default folder to
+be deleted and recreated.</li>
+<li><code>NewCustomFolder</code> which causes the creation of a new
+folder in the format _ddMMyyhhmmss. If omitted, this is the default
+behavior.</li>
+<li>&lt;Number&gt; - a positive integer (e.g. 3) that specifies how many
+output folders to keep when you run SQL LogScout in continuous mode
+(RepeatCollections).</li>
+</ul></li>
 <li><strong>-StartTime</strong> - this is the start time of the
 scheduled task in Windows Task Scheduler. If the <code>-Once</code>
-parameter is used together with this, only a single execution will occur
-on the specified date and time. If <code>-Daily</code> parameter is
-used, then the task will execute daily on the specified hour. Valid
-format for this parameter is “yyyy-MM-dd hh:mm:ss” (in quotes). For
-example: “2020-10-27 19:26:00”</li>
-<li><strong>-DurationInMins</strong> - this specifies how long, in
-minutes, the SQL LogScout will run before it stops. Specify an integer
-value for example “10”. This will calculate the stop time for SQL
-LogScout and pass it as a parameter to <code>DiagStopTime</code>.</li>
+parameter is used, only a single execution will occur on the specified
+date and time. If <code>-Daily</code> parameter is used, then the task
+will execute daily on the specified hour and minute. Valid format for
+this parameter is either relative time such as “+01:15:30” (in quotes)
+for 1 hour, 15 minutes, and 30 seconds from the current time of
+execution or datetime such as “2020-10-27 19:26:00” with format
+“yyyy-MM-dd hh:mm:ss” (in quotes). If omitted, it will be 2 minutes
+after the current time to prevent race conditions.</li>
+<li><strong>-EndTime</strong> - this specifies how long each SQL
+LogScout execution will run before it stops. Valid format for this
+parameter is either relative time such as “+01:15:30” (in quotes) for 1
+hour, 15 minutes, and 30 seconds from the current time of execution or
+datetime such as “2020-10-27 19:26:00” with format “yyyy-MM-dd hh:mm:ss”
+(in quotes). When used with the <code>-Continuous</code> switch, you
+must use a relative <code>-EndTime</code> (for example “+00:30:00” ).
+Also <code>-DeleteFolderOrNew</code> determines at the end of the
+duration whether to create a new folder or overwrite previous data.</li>
+<li>Execution behavior switches below. Only choose one.</li>
 <li><strong>-Once</strong> - you can request the scheduled task to run a
-single time at the specified <code>-StartTime</code>. Use either this
-parameter or <code>-Daily</code> but not both.</li>
+single time at the specified <code>-StartTime</code>.</li>
 <li><strong>-Daily</strong> - you can request the scheduled task to run
 daily at the specified <code>-StartTime</code> (the date part will be
 ignored for daily executions, after the very first one, only the time is
-honored). Use either this parameter or <code>-Once</code> but not
-both.</li>
+honored).</li>
+<li><strong>-Continuous</strong> - you can have SQL_LogScout start at
+<code>-StartTime</code> and loop for as many times as defined in
+<code>-RepeatCollections</code>. For example, if <code>-StartTime</code>
+is “+01:00:00” and <code>-EndTime</code> is “+00:15:00” with
+<code>-RepeatCollections</code> set to 4, then SQL_LogScout starts 1
+hour from script execution time, stops and restarts 15 minutes after
+start and does that 5 times in total. (1 initial run and 4 repeat runs).
+This option requires that you use the <code>-RepeatCollections</code>
+parameter also and specify a valid value to it.</li>
 <li><strong>-CreateCleanupJob</strong> - Without a cleanup task, the SQL
 LogScout Windows Task will remain after collection. This parameter
 allows you to create a job that will clean itself up after invocation.
 This is an optional parameter that defaults to $null. If you provide
 $true, you must also pass <code>-CleanupJobTime</code>. If $false is
 passed, we will not create the job or prompt and manual cleanup is
-required.</li>
+required. As a part of cleanup, the Windows Task cleanup job runs
+<code>.\CleanupIncompleteShutdown.ps1</code> to prevent lingering
+connections and passes <code>-EndActiveConsoles</code> to terminate all
+SQL_LogScout sessions on the same server to the specific SQL Server
+instance used.</li>
 <li><strong>-CleanupJobTime</strong> - Required only when
 <code>-CreateCleanupJob</code> is used. The date passed to this field
 should be after the LogScout collection has completed, which is not
-between <code>-StartTime</code> and the endtime calculated from
-<code>-DurationInMins</code>. If you pass a date to this field, you must
-also pass $true to <code>-CreateCleanupJob</code>. If
-<code>-CreateCleanupJob</code> is omitted, the value passed to this
-parameter is ignored.</li>
+between <code>-StartTime</code> from <code>-EndTime</code>. If you pass
+a date to this field, you must also pass $true to
+<code>-CreateCleanupJob</code>. If <code>-CreateCleanupJob</code> is
+omitted, the value passed to this parameter is ignored.</li>
 <li><strong>-LogonType</strong> - Defaults to null and prompts the user
 for input if omitted. Accepted values are <code>Interactive</code> and
 <code>S4U</code>. This is the value passed to create both the main SQL
@@ -996,12 +1224,30 @@ used to determine if <code>Interactive</code> or <code>S4U</code> is
 used. For more information, see <a
 href="https://learn.microsoft.com/en-us/windows/win32/api/taskschd/ne-taskschd-task_logon_type">Task
 Schedule Logon Type</a>.</li>
+<li><strong>-RepeatCollections</strong> - Used in combination with
+<code>-Continuous</code>, this parameter dictates how many times
+SQL_LogScout is run repeatedly. If you need to run this long-term over
+many days or months even, you can specify a large value as this
+parameter is of integer data type (see <a
+href="https://learn.microsoft.com/dotnet/api/system.int32.maxvalue">Int32.MaxValue</a>).</li>
 </ul>
-<p>Here is an example of how to schedule</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ScheduleSQLLogScoutAsTask<span class="op">.</span><span class="fu">ps1</span>  <span class="op">-</span>StartTime <span class="st">&quot;2022-08-30 10:55&quot;</span> <span class="op">-</span>Scenario GeneralPerf <span class="op">-</span>SQLInstance SQLmachine\sql2017 <span class="op">-</span>DeleteFolderOrNew DeleteDefaultFolder <span class="op">-</span>Once <span class="op">-</span>DurationInMins 3</span></code></pre></div>
-<p>If the scheduled task with the same name already exists, you will get
-the option to overwrite it with a new one.</p>
+<p>Examples:</p>
+<ol type="1">
+<li>Run SQL_LogScout one time for the GeneralPerf scenario, starting at
+05/06/2024 at 2:18 PM ending after 10 minutes (2:28 PM). The Output
+folder is overwritten (if it exists already). User will be logged in
+during execution.</li>
+</ol>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ScheduleSQLLogScoutAsTask<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;GeneralPerf&quot;</span> <span class="op">-</span>SQLInstance <span class="st">&quot;.\SQLInstanceName&quot;</span> <span class="op">-</span>StartTime <span class="st">&quot;2024-05-06 14:18&quot;</span> <span class="op">-</span>EndTime <span class="st">&quot;+00:10:00&quot;</span> <span class="op">-</span>Once <span class="op">-</span>DeleteFolderOrNew <span class="st">&quot;DeleteDefaultFolder&quot;</span> <span class="op">-</span>LogonType <span class="st">&quot;S4U&quot;</span></span></code></pre></div>
+<ol start="2" type="1">
+<li>Run SQL_LogScout starting 6 hours from now, running continously for
+48 executions recycling the logs every 30 minutes. The total run time
+would be 24 hours (48 runs * 30 minutes). A new folder is created for
+each execution and the user isn’t to be logged in during runtime.</li>
+</ol>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ScheduleSQLLogScoutAsTask<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;GeneralPerf&quot;</span> <span class="op">-</span>SQLInstance <span class="st">&quot;.\SQLInstanceName&quot;</span> <span class="op">-</span>StartTime <span class="st">&quot;+06:00:00&quot;</span> <span class="op">-</span>EndTime <span class="st">&quot;+00:30:00&quot;</span> <span class="op">-</span>Continuous <span class="op">-</span>DeleteFolderOrNew <span class="st">&quot;NewCustomFolder&quot;</span> <span class="op">-</span>LogonType <span class="st">&quot;Interactive&quot;</span> <span class="op">-</span>RepeatCollections 47</span></code></pre></div>
 <h1 id="logging">Logging</h1>
 <h3 id="sqllogscout.log-file">##SQLLOGSCOUT.LOG file</h3>
 <p>SQL LogScout logs the flow of activity in two files ##SQLLOGSCOUT.LOG
@@ -1024,7 +1270,34 @@ investigate any issues with SQL LogScout and examine the flow of
 execution in detail. This file can be found in the *** folder. In
 addition, the %temp% folder stores copies of ##SQLLOGSCOUT_DEBUG.LOG
 from the last 10 executions.</p>
-<h1 id="permissions">Permissions</h1>
+<h3
+id="sql_logscout_repeated_execution_yyyymmddhhmmss.txt">SQL_LogScout_Repeated_Execution_yyyyMMddhhmmss.txt</h3>
+<p>This file is created when repeated collections (continuous mode) is
+used. It logs the number of repetitions, the number of folders to be
+preserved, the names of output folders created by the repeated mode. It
+is created in the Windows <strong>%temp%</strong> folder (commonly
+C:\&lt;user&gt;).</p>
+<h3
+id="sqllogscout_scheduledtask_yyyymmddhhmmss.log">##SQLLogScout_ScheduledTask_yyyyMMddhhmmss.log</h3>
+<p>This file is created when the functionality to automate the
+SQL_LogScout collection task through Windows Task Scheduler is used.
+This file can be found in the user’s <strong>%temp%</strong> folder
+where you can find copies of the latest 10 executions of the task
+scheduling script <code>ScheduleSQLLogScoutAsTask.ps1</code>.</p>
+<h3
+id="sqllogscout_cleanupincompleteshutdown_yyyymmddhhmmss.log">##SQLLogScout_CleanupIncompleteShutdown_yyyyMMddhhmmss.log</h3>
+<p>This file is created when the functionality to cleanup an incomplete
+shutdown of SQL_LogScout is used. The last 10 instances of this file can
+be found in the user’s <strong>%temp%</strong> folder.</p>
+<h1 id="targeted-sql-instances">Targeted SQL instances</h1>
+<p>Diagnostic data is collected from the SQL instance you selected
+locally on the machine where SQL LogScout runs. SQL LogScout does not
+capture data on remote machines. You are prompted to pick a SQL Server
+instance you want to target. The SQL Server-specific data collection
+comes from a single instance only.</p>
+<h1 id="security">Security</h1>
+<p>The following is security-related information:</p>
+<h2 id="permissions">Permissions</h2>
 <ul>
 <li><p><strong>Windows</strong>: Local Administrator permissions on the
 machine are required to collect most system-related logs</p></li>
@@ -1034,24 +1307,19 @@ Server data. If you are using the Replication scenario, the account
 running SQLLogScout will need the <code>db_datareader</code> permission
 on the distribution database(s).</p></li>
 </ul>
-<h1 id="targeted-sql-instances">Targeted SQL instances</h1>
-<p>Diagnostic data is collected from the SQL instance you selected
-locally on the machine where SQL LogScout runs. SQL LogScout does not
-capture data on remote machines. You are prompted to pick a SQL Server
-instance you want to target. The SQL Server-specific data collection
-comes from a single instance only.</p>
-<h1 id="security">Security</h1>
+<h2 id="digitally-signed-files-and-hash-computed">Digitally signed files
+and hash computed</h2>
 <p>SQL LogScout is released with digitally-signed Powershell files. For
 other files, SQL LogScout calculates a SHA512 hash and compares it to
 the expected value of each file. If the stored hash does not match the
 calculated hash on disk, then SQL LogScout will not run.</p>
 <p>To manually validate script signature, you may execute the
 following:</p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Get-ChildItem</span> <span class="op">&lt;</span>SQL LogScout unzipped folder<span class="op">&gt;</span><span class="dt">\*</span>.ps<span class="pp">*</span>1 <span class="kw">|</span> <span class="ex">Get-AuthenticodeSignature</span> <span class="kw">|</span> <span class="ex">Format-List</span> <span class="at">-Property</span> Path, Status, StatusMessage, SignerCertificate<span class="kw">`</span></span></code></pre></div>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Get-ChildItem</span> <span class="op">&lt;</span>SQL LogScout unzipped folder<span class="op">&gt;</span><span class="dt">\*</span>.ps<span class="pp">*</span>1 <span class="kw">|</span> <span class="ex">Get-AuthenticodeSignature</span> <span class="kw">|</span> <span class="ex">Format-List</span> <span class="at">-Property</span> Path, Status, StatusMessage, SignerCertificate<span class="kw">`</span></span></code></pre></div>
 <p>Example:</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Get-ChildItem</span> <span class="at">-Path</span> <span class="st">&quot;c:\SQL_LogScout\*&quot;</span> <span class="at">-Recurse</span> <span class="at">-Include</span> <span class="st">&quot;*.ps*1&quot;</span> <span class="kw">|</span> <span class="ex">Get-AuthenticodeSignature</span> <span class="kw">|</span> <span class="ex">Format-List</span> <span class="at">-Property</span> Path, Status, StatusMessage, SignerCertificate</span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Get-ChildItem</span> <span class="at">-Path</span> <span class="st">&quot;c:\SQL_LogScout\*&quot;</span> <span class="at">-Recurse</span> <span class="at">-Include</span> <span class="st">&quot;*.ps*1&quot;</span> <span class="kw">|</span> <span class="ex">Get-AuthenticodeSignature</span> <span class="kw">|</span> <span class="ex">Format-List</span> <span class="at">-Property</span> Path, Status, StatusMessage, SignerCertificate</span></code></pre></div>
 <p>For each file:</p>
 <ol type="1">
 <li>Confirm the path and filename in <code>Path</code> property.</li>
@@ -1064,186 +1332,191 @@ indicate that Microsoft Corporation is the subject of the
 certificate.</li>
 </ol>
 <p>Example output for successful validation:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Path</span>              : C:<span class="dt">\S</span>QL_LogScout_v4.1.11_Signed<span class="dt">\S</span>QLLogScoutPs.ps1</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="ex">Status</span>            : Valid</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="ex">StatusMessage</span>     : Signature verified.</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="ex">SignerCertificate</span> : [Subject]</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>                      <span class="va">CN</span><span class="op">=</span>Microsoft <span class="ex">Corporation,</span> O=Microsoft Corporation, L=Redmond, S=Washington, C=US</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Issuer]</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>                      <span class="va">CN</span><span class="op">=</span>Microsoft <span class="ex">Code</span> Signing PCA 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US</span>
-<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Serial</span> Number]</span>
-<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">33000001DF6BF02E92A74AB4D00000000001DF</span></span>
-<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Not</span> Before]</span>
-<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">12/15/2020</span> 6:31:45 PM</span>
-<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Not</span> After]</span>
-<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">12/2/2021</span> 6:31:45 PM</span>
-<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Thumbprint]</span></span>
-<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">ABDCA79AF9DD48A0EA702AD45260B3C03093FB4B</span></span></code></pre></div>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="ex">Path</span>              : C:<span class="dt">\S</span>QL_LogScout_v4.1.11_Signed<span class="dt">\S</span>QLLogScoutPs.ps1</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="ex">Status</span>            : Valid</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="ex">StatusMessage</span>     : Signature verified.</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a><span class="ex">SignerCertificate</span> : [Subject]</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>                      <span class="va">CN</span><span class="op">=</span>Microsoft <span class="ex">Corporation,</span> O=Microsoft Corporation, L=Redmond, S=Washington, C=US</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Issuer]</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>                      <span class="va">CN</span><span class="op">=</span>Microsoft <span class="ex">Code</span> Signing PCA 2011, O=Microsoft Corporation, L=Redmond, S=Washington, C=US</span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Serial</span> Number]</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">33000001DF6BF02E92A74AB4D00000000001DF</span></span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Not</span> Before]</span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">12/15/2020</span> 6:31:45 PM</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Not</span> After]</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">12/2/2021</span> 6:31:45 PM</span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>                    <span class="ex">[Thumbprint]</span></span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>                      <span class="ex">ABDCA79AF9DD48A0EA702AD45260B3C03093FB4B</span></span></code></pre></div>
+<h2 id="encrypted-connection-to-sql-server">Encrypted connection to SQL
+Server</h2>
+<p>SQL LogScout negotiates connection encryption with the SQL Server it
+collects data from. It does so by using
+“Encrypt=True;TrustServerCertificate=true;” and “sqlcmd -C -N”
+values.</p>
 <h1 id="sample-output">Sample output</h1>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>     <span class="ex">======================================================================================================</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####   #####  #          #                      #####</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>             <span class="co">#     # #     # #          #        ####   ####  #     #  ####   ####  #    # #####</span></span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>             <span class="co">#       #     # #          #       #    # #    # #       #    # #    # #    #   #</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####  #     # #          #       #    # #       #####  #      #    # #    #   #</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>                   <span class="co"># #   # # #          #       #    # #  </span><span class="al">###</span><span class="co">       # #      #    # #    #   #</span></span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>             <span class="co">#     # #    #  #          #       #    # #    # #     # #    # #    # #    #   #</span></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #</span></span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>     <span class="ex">======================================================================================================</span></span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="ex">Launching</span> SQL LogScout...</span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="ex">Copyright</span> <span class="er">(</span><span class="ex">c</span><span class="kw">)</span> <span class="ex">2021</span> Microsoft Corporation. All rights reserved.</span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="ex">THE</span> SOFTWARE IS PROVIDED <span class="st">&quot;AS IS&quot;</span>, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR</span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>    <span class="ex">IMPLIED,</span> INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,</span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>    <span class="ex">FITNESS</span> FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE</span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>    <span class="ex">AUTHORS</span> OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER</span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>    <span class="ex">LIABILITY,</span> WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,</span>
-<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>    <span class="ex">OUT</span> OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN</span>
-<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>    <span class="ex">THE</span> SOFTWARE.</span>
-<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.148 INFO    Initializing log C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\#</span>#SQLLOGSCOUT.LOG </span>
-<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:26.230 INFO    SQL LogScout version: 4.5.33 </span>
-<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:26.302 INFO    The Present folder for this collection is C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2 </span>
-<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.479 INFO    Prompt CustomDir Console Input: n </span>
-<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.551 INFO     </span>
-<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.560 WARN    It appears that output folder <span class="st">&#39;C:\temp\log scout\Test 2\output\&#39;</span> has been used before. </span>
-<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.562 WARN    You can choose to: </span>
-<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.562 WARN     <span class="at">-</span> Delete <span class="er">(</span><span class="ex">D</span><span class="kw">)</span> <span class="ex">the</span> <span class="dt">\o</span>utput folder contents and recreate it </span>
-<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.572 WARN     <span class="at">-</span> Create a new <span class="er">(</span><span class="ex">N</span><span class="kw">)</span> <span class="ex">folder</span> using <span class="dt">\O</span>utput_ddMMyyhhmmss format. </span>
-<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.572 WARN       You can delete the new folder manually in the future </span>
-<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:31.954 INFO    Output folder Console input: d </span>
-<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.118 WARN    Deleted C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\ </span>and its contents </span>
-<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.126 INFO    Output path: C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\ </span></span>
-<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.126 INFO    Error  path is C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\ </span></span>
-<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.168 INFO    Validating attributes for non-Powershell script files </span>
-<span id="cb22-37"><a href="#cb22-37" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.648 INFO     </span>
-<span id="cb22-38"><a href="#cb22-38" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.656 INFO    Initiating diagnostics collection...  </span>
-<span id="cb22-39"><a href="#cb22-39" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.659 INFO    Please select one of the following scenarios:</span>
-<span id="cb22-40"><a href="#cb22-40" aria-hidden="true" tabindex="-1"></a> </span>
-<span id="cb22-41"><a href="#cb22-41" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.659 INFO     </span>
-<span id="cb22-42"><a href="#cb22-42" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.669 INFO    ID   Scenario </span>
-<span id="cb22-43"><a href="#cb22-43" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.669 INFO    <span class="at">--</span>   <span class="at">---------------</span> </span>
-<span id="cb22-44"><a href="#cb22-44" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.677 INFO    0    Basic </span>
-<span id="cb22-45"><a href="#cb22-45" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.679 INFO    1    GeneralPerf </span>
-<span id="cb22-46"><a href="#cb22-46" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.679 INFO    2    DetailedPerf </span>
-<span id="cb22-47"><a href="#cb22-47" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.687 INFO    3    Replication </span>
-<span id="cb22-48"><a href="#cb22-48" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    4    AlwaysOn </span>
-<span id="cb22-49"><a href="#cb22-49" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    5    NetworkTrace </span>
-<span id="cb22-50"><a href="#cb22-50" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    6    Memory </span>
-<span id="cb22-51"><a href="#cb22-51" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    7    DumpMemory </span>
-<span id="cb22-52"><a href="#cb22-52" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.697 INFO    8    WPR </span>
-<span id="cb22-53"><a href="#cb22-53" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    9    Setup </span>
-<span id="cb22-54"><a href="#cb22-54" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    10   BackupRestore </span>
-<span id="cb22-55"><a href="#cb22-55" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    11   IO </span>
-<span id="cb22-56"><a href="#cb22-56" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    12   LightPerf </span>
-<span id="cb22-57"><a href="#cb22-57" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.709 INFO     </span>
-<span id="cb22-58"><a href="#cb22-58" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.709 WARN    Type one or more Scenario IDs <span class="er">(</span><span class="ex">separated</span> by <span class="st">&#39;+&#39;</span><span class="kw">)</span> <span class="cf">for</span> which <span class="ex">you</span> want to collect diagnostic data. Then press Enter </span>
-<span id="cb22-59"><a href="#cb22-59" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.077 INFO    Scenario Console input: 1+4+10 </span>
-<span id="cb22-60"><a href="#cb22-60" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.208 INFO    The scenarios selected are: <span class="st">&#39;GeneralPerf AlwaysOn BackupRestore Basic&#39;</span> </span>
-<span id="cb22-61"><a href="#cb22-61" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.665 INFO    Discovered the following SQL Server instance<span class="er">(</span><span class="ex">s</span><span class="kw">)</span></span>
-<span id="cb22-62"><a href="#cb22-62" aria-hidden="true" tabindex="-1"></a> </span>
-<span id="cb22-63"><a href="#cb22-63" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.665 INFO     </span>
-<span id="cb22-64"><a href="#cb22-64" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.676 INFO    ID  SQL Instance Name </span>
-<span id="cb22-65"><a href="#cb22-65" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.678 INFO    <span class="at">--</span>  <span class="at">----------------</span> </span>
-<span id="cb22-66"><a href="#cb22-66" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.679 INFO    0    DbServerMachine </span>
-<span id="cb22-67"><a href="#cb22-67" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.679 INFO    1    DbServerMachine<span class="dt">\S</span>QL2014 </span>
-<span id="cb22-68"><a href="#cb22-68" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO    2    DbServerMachine<span class="dt">\S</span>QL2017 </span>
-<span id="cb22-69"><a href="#cb22-69" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO    3    DbServerMachine<span class="dt">\S</span>QL2019 </span>
-<span id="cb22-70"><a href="#cb22-70" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO     </span>
-<span id="cb22-71"><a href="#cb22-71" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 WARN    Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter </span>
-<span id="cb22-72"><a href="#cb22-72" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:11.899 INFO    SQL Instance Console input: 3 </span>
-<span id="cb22-73"><a href="#cb22-73" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:11.911 INFO    You selected instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> to collect diagnostic data.  </span>
-<span id="cb22-74"><a href="#cb22-74" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.022 INFO    Confirmed that MYDOMAIN<span class="dt">\J</span>oseph has VIEW SERVER STATE on SQL Server Instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> </span>
-<span id="cb22-75"><a href="#cb22-75" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.022 INFO    Confirmed that MYDOMAIN<span class="dt">\J</span>oseph has ALTER ANY EVENT SESSION on SQL Server Instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> </span>
-<span id="cb22-76"><a href="#cb22-76" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.735 WARN    At least one of the selected <span class="st">&#39;GeneralPerf AlwaysOn BackupRestore Basic&#39;</span> scenarios collects Xevent traces </span>
-<span id="cb22-77"><a href="#cb22-77" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.751 WARN    The service account <span class="st">&#39;NT Service\MSSQL$SQL2019&#39;</span> for SQL Server instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> must have write/modify permissions on the <span class="st">&#39;C:\temp\log scout\Test 2\output\&#39;</span> folder </span>
-<span id="cb22-78"><a href="#cb22-78" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.751 WARN    The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an <span class="pp">*</span>.XEL file exists that you can open and read in SSMS </span>
-<span id="cb22-79"><a href="#cb22-79" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.822 INFO    Access verification Console input: y </span>
-<span id="cb22-80"><a href="#cb22-80" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.841 INFO    LogmanConfig.txt copied to  C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\L</span>ogmanConfig.txt </span>
-<span id="cb22-81"><a href="#cb22-81" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.922 INFO    Basic collectors will execute on shutdown </span>
-<span id="cb22-82"><a href="#cb22-82" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.934 INFO    Collecting logs for <span class="st">&#39;GeneralPerf&#39;</span> scenario </span>
-<span id="cb22-83"><a href="#cb22-83" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.964 INFO    Executing Collector: Perfmon </span>
-<span id="cb22-84"><a href="#cb22-84" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:17.055 INFO    Executing Collector: Xevent_Core_AddSession </span>
-<span id="cb22-85"><a href="#cb22-85" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:17.088 INFO    Executing Collector: Xevent_General_AddSession </span>
-<span id="cb22-86"><a href="#cb22-86" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.130 INFO    Executing Collector: Xevent_General_Target </span>
-<span id="cb22-87"><a href="#cb22-87" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.152 INFO    Executing Collector: Xevent_General_Start </span>
-<span id="cb22-88"><a href="#cb22-88" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.214 INFO    Executing Collector: ExistingProfilerXeventTraces </span>
-<span id="cb22-89"><a href="#cb22-89" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:21.313 INFO    Executing Collector: HighCPU_perfstats </span>
-<span id="cb22-90"><a href="#cb22-90" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:21.364 INFO    Executing Collector: SQLServerPerfStats </span>
-<span id="cb22-91"><a href="#cb22-91" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:23.441 INFO    Executing Collector: SQLServerPerfStatsSnapshotStartup </span>
-<span id="cb22-92"><a href="#cb22-92" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:23.492 INFO    Executing Collector: Query Store </span>
-<span id="cb22-93"><a href="#cb22-93" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.552 INFO    Executing Collector: TempDBAnalysis </span>
-<span id="cb22-94"><a href="#cb22-94" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.601 INFO    Executing Collector: linked_server_config </span>
-<span id="cb22-95"><a href="#cb22-95" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.652 INFO    Executing Collector: SSB_diag </span>
-<span id="cb22-96"><a href="#cb22-96" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.708 INFO    Collecting logs for <span class="st">&#39;AlwaysOn&#39;</span> scenario </span>
-<span id="cb22-97"><a href="#cb22-97" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.740 INFO    Executing Collector: AlwaysOnDiagScript </span>
-<span id="cb22-98"><a href="#cb22-98" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.788 INFO    Executing Collector: Xevent_CoreAddSesion </span>
-<span id="cb22-99"><a href="#cb22-99" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.809 INFO    Executing Collector: Xevent_AlwaysOn_Data_Movement </span>
-<span id="cb22-100"><a href="#cb22-100" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.853 INFO    Executing Collector: AlwaysOn_Data_Movement_target </span>
-<span id="cb22-101"><a href="#cb22-101" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.881 INFO    Executing Collector: AlwaysOn_Data_Movement_Start </span>
-<span id="cb22-102"><a href="#cb22-102" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.922 INFO    Executing Collector: AlwaysOnHealthXevent </span>
-<span id="cb22-103"><a href="#cb22-103" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:28.007 INFO    Collecting logs for <span class="st">&#39;BackupRestore&#39;</span> scenario </span>
-<span id="cb22-104"><a href="#cb22-104" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:28.023 INFO    Executing Collector: Xevent_BackupRestore_AddSession </span>
-<span id="cb22-105"><a href="#cb22-105" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.070 INFO    Executing Collector: EnableTraceFlag </span>
-<span id="cb22-106"><a href="#cb22-106" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.088 INFO    Executing collector: SetVerboseSQLVSSWriterLog</span>
-<span id="cb22-107"><a href="#cb22-107" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.159 WARN    To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process.</span>
-<span id="cb22-108"><a href="#cb22-108" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.697 INFO    Console Input: n </span>
-<span id="cb22-109"><a href="#cb22-109" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.705 INFO    You have chosen not to restart SQLWriter Service. No verbose logging will be collected for SQL VSS Writer <span class="er">(</span><span class="ex">2019</span> or later<span class="kw">)</span></span>
-<span id="cb22-110"><a href="#cb22-110" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.737 INFO    Executing Collector: VSSAdmin_Providers </span>
-<span id="cb22-111"><a href="#cb22-111" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.778 INFO    Executing Collector: VSSAdmin_Shadows </span>
-<span id="cb22-112"><a href="#cb22-112" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.832 INFO    Executing Collector: VSSAdmin_Shadowstorage </span>
-<span id="cb22-113"><a href="#cb22-113" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.873 INFO    Executing Collector: VSSAdmin_Writers </span>
-<span id="cb22-114"><a href="#cb22-114" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.924 INFO    Please type <span class="st">&#39;STOP&#39;</span> to terminate the diagnostics collection when you finished capturing the issue </span>
-<span id="cb22-115"><a href="#cb22-115" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.012 INFO    StopCollection Console input: stop </span>
-<span id="cb22-116"><a href="#cb22-116" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.014 INFO    Shutting down the collector </span>
-<span id="cb22-117"><a href="#cb22-117" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.032 INFO    Executing shutdown command: Xevents_Stop </span>
-<span id="cb22-118"><a href="#cb22-118" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.073 INFO    Executing shutdown command: Xevents_Alwayson_Data_Movement_Stop </span>
-<span id="cb22-119"><a href="#cb22-119" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.098 INFO    Executing shutdown command: Disable_BackupRestore_Trace_Flags</span>
-<span id="cb22-120"><a href="#cb22-120" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.145 INFO    Executing shutdown command: PerfmonStop </span>
-<span id="cb22-121"><a href="#cb22-121" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:46.228 INFO    Executing shutdown command: KillActiveLogscoutSessions </span>
-<span id="cb22-122"><a href="#cb22-122" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.277 INFO    Collecting logs for <span class="st">&#39;Basic&#39;</span> scenario </span>
-<span id="cb22-123"><a href="#cb22-123" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.298 INFO    Executing Collector: TaskListVerbose </span>
-<span id="cb22-124"><a href="#cb22-124" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.339 INFO    Executing Collector: TaskListServices </span>
-<span id="cb22-125"><a href="#cb22-125" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.407 INFO    Executing Collector: FLTMC_Filters </span>
-<span id="cb22-126"><a href="#cb22-126" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.464 INFO    Executing Collector: FLTMC_Instances </span>
-<span id="cb22-127"><a href="#cb22-127" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.533 INFO    Executing Collector: SystemInfo_Summary </span>
-<span id="cb22-128"><a href="#cb22-128" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.618 INFO    Executing Collector: MiscPssdiagInfo </span>
-<span id="cb22-129"><a href="#cb22-129" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.681 INFO    Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel </span>
-<span id="cb22-130"><a href="#cb22-130" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:50.501 INFO    Executing Collector: PolybaseLogs </span>
-<span id="cb22-131"><a href="#cb22-131" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:50.533 INFO    Executing Collector: SQLAssessmentAPI </span>
-<span id="cb22-132"><a href="#cb22-132" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:09.554 INFO    Executing Collector: UserRights </span>
-<span id="cb22-133"><a href="#cb22-133" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:12.266 INFO    Executing Collector: RunningDrivers </span>
-<span id="cb22-134"><a href="#cb22-134" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:14.217 INFO    Executing Collector: PowerPlan </span>
-<span id="cb22-135"><a href="#cb22-135" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:14.308 INFO    Executing Collector: WindowsHotfixes </span>
-<span id="cb22-136"><a href="#cb22-136" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:16.694 INFO    Executing Collector: GetEventLogs </span>
-<span id="cb22-137"><a href="#cb22-137" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:16.707 INFO    Gathering Application EventLog in TXT and CSV format   </span>
-<span id="cb22-138"><a href="#cb22-138" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:23.218 INFO       Produced 10000 records in the EventLog </span>
-<span id="cb22-139"><a href="#cb22-139" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:29.011 INFO       Produced 20000 records in the EventLog </span>
-<span id="cb22-140"><a href="#cb22-140" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:35.914 INFO       Produced 30000 records in the EventLog </span>
-<span id="cb22-141"><a href="#cb22-141" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO       Produced 39129 records in the EventLog </span>
-<span id="cb22-142"><a href="#cb22-142" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO    Application EventLog in TXT and CSV format completed! </span>
-<span id="cb22-143"><a href="#cb22-143" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO    Gathering System EventLog in TXT and CSV format   </span>
-<span id="cb22-144"><a href="#cb22-144" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:50.913 INFO       Produced 10000 records in the EventLog </span>
-<span id="cb22-145"><a href="#cb22-145" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:59.494 INFO       Produced 20000 records in the EventLog </span>
-<span id="cb22-146"><a href="#cb22-146" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.839 INFO       Produced 26007 records in the EventLog </span>
-<span id="cb22-147"><a href="#cb22-147" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.842 INFO    System EventLog in TXT and CSV format completed! </span>
-<span id="cb22-148"><a href="#cb22-148" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.879 INFO    Executing Collector: PerfStatsSnapshotShutdown</span>
-<span id="cb22-149"><a href="#cb22-149" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.888 INFO    Executing collector: GetSQLVSSWriterLog</span>
-<span id="cb22-150"><a href="#cb22-150" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.900 INFO    SQLWriter Service has been restarted</span>
-<span id="cb22-151"><a href="#cb22-151" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.917 INFO    Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... </span>
-<span id="cb22-152"><a href="#cb22-152" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:08.518 INFO    Ending data collection </span>
-<span id="cb22-153"><a href="#cb22-153" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:08.533 WARN    Launching cleanup and exit routine... please wait </span>
-<span id="cb22-154"><a href="#cb22-154" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:13.780 INFO    Thank you for using SQL LogScout! </span>
-<span id="cb22-155"><a href="#cb22-155" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-156"><a href="#cb22-156" aria-hidden="true" tabindex="-1"></a><span class="ex">Checking</span> for console execution errors logged into .<span class="dt">\#</span>#STDERR.LOG...</span>
-<span id="cb22-157"><a href="#cb22-157" aria-hidden="true" tabindex="-1"></a><span class="ex">Removed</span> .<span class="dt">\#</span>#STDERR.LOG which was 0 bytes</span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>     <span class="ex">======================================================================================================</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####   #####  #          #                      #####</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>             <span class="co">#     # #     # #          #        ####   ####  #     #  ####   ####  #    # #####</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>             <span class="co">#       #     # #          #       #    # #    # #       #    # #    # #    #   #</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####  #     # #          #       #    # #       #####  #      #    # #    #   #</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>                   <span class="co"># #   # # #          #       #    # #  </span><span class="al">###</span><span class="co">       # #      #    # #    #   #</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>             <span class="co">#     # #    #  #          #       #    # #    # #     # #    # #    # #    #   #</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>              <span class="co">#####   #### # #######    #######  ####   ####   #####   ####   ####   ####    #</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>     <span class="ex">======================================================================================================</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="ex">Launching</span> SQL LogScout...</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a><span class="ex">Copyright</span> <span class="er">(</span><span class="ex">c</span><span class="kw">)</span> <span class="ex">2021</span> Microsoft Corporation. All rights reserved.</span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>    <span class="ex">THE</span> SOFTWARE IS PROVIDED <span class="st">&quot;AS IS&quot;</span>, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR</span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>    <span class="ex">IMPLIED,</span> INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,</span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a>    <span class="ex">FITNESS</span> FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE</span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a>    <span class="ex">AUTHORS</span> OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER</span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a>    <span class="ex">LIABILITY,</span> WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,</span>
+<span id="cb27-19"><a href="#cb27-19" aria-hidden="true" tabindex="-1"></a>    <span class="ex">OUT</span> OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN</span>
+<span id="cb27-20"><a href="#cb27-20" aria-hidden="true" tabindex="-1"></a>    <span class="ex">THE</span> SOFTWARE.</span>
+<span id="cb27-21"><a href="#cb27-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-22"><a href="#cb27-22" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.148 INFO    Initializing log C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\#</span>#SQLLOGSCOUT.LOG </span>
+<span id="cb27-23"><a href="#cb27-23" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:26.230 INFO    SQL LogScout version: 4.5.33 </span>
+<span id="cb27-24"><a href="#cb27-24" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:26.302 INFO    The Present folder for this collection is C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2 </span>
+<span id="cb27-25"><a href="#cb27-25" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.479 INFO    Prompt CustomDir Console Input: n </span>
+<span id="cb27-26"><a href="#cb27-26" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.551 INFO     </span>
+<span id="cb27-27"><a href="#cb27-27" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.560 WARN    It appears that output folder <span class="st">&#39;C:\temp\log scout\Test 2\output\&#39;</span> has been used before. </span>
+<span id="cb27-28"><a href="#cb27-28" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.562 WARN    You can choose to: </span>
+<span id="cb27-29"><a href="#cb27-29" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.562 WARN     <span class="at">-</span> Delete <span class="er">(</span><span class="ex">D</span><span class="kw">)</span> <span class="ex">the</span> <span class="dt">\o</span>utput folder contents and recreate it </span>
+<span id="cb27-30"><a href="#cb27-30" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.572 WARN     <span class="at">-</span> Create a new <span class="er">(</span><span class="ex">N</span><span class="kw">)</span> <span class="ex">folder</span> using <span class="dt">\O</span>utput_ddMMyyhhmmss format. </span>
+<span id="cb27-31"><a href="#cb27-31" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:30.572 WARN       You can delete the new folder manually in the future </span>
+<span id="cb27-32"><a href="#cb27-32" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:31.954 INFO    Output folder Console input: d </span>
+<span id="cb27-33"><a href="#cb27-33" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.118 WARN    Deleted C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\ </span>and its contents </span>
+<span id="cb27-34"><a href="#cb27-34" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.126 INFO    Output path: C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\ </span></span>
+<span id="cb27-35"><a href="#cb27-35" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.126 INFO    Error  path is C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\ </span></span>
+<span id="cb27-36"><a href="#cb27-36" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.168 INFO    Validating attributes for non-Powershell script files </span>
+<span id="cb27-37"><a href="#cb27-37" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.648 INFO     </span>
+<span id="cb27-38"><a href="#cb27-38" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.656 INFO    Initiating diagnostics collection...  </span>
+<span id="cb27-39"><a href="#cb27-39" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.659 INFO    Please select one of the following scenarios:</span>
+<span id="cb27-40"><a href="#cb27-40" aria-hidden="true" tabindex="-1"></a> </span>
+<span id="cb27-41"><a href="#cb27-41" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.659 INFO     </span>
+<span id="cb27-42"><a href="#cb27-42" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.669 INFO    ID   Scenario </span>
+<span id="cb27-43"><a href="#cb27-43" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.669 INFO    <span class="at">--</span>   <span class="at">---------------</span> </span>
+<span id="cb27-44"><a href="#cb27-44" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.677 INFO    0    Basic </span>
+<span id="cb27-45"><a href="#cb27-45" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.679 INFO    1    GeneralPerf </span>
+<span id="cb27-46"><a href="#cb27-46" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.679 INFO    2    DetailedPerf </span>
+<span id="cb27-47"><a href="#cb27-47" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.687 INFO    3    Replication </span>
+<span id="cb27-48"><a href="#cb27-48" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    4    AlwaysOn </span>
+<span id="cb27-49"><a href="#cb27-49" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    5    NetworkTrace </span>
+<span id="cb27-50"><a href="#cb27-50" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    6    Memory </span>
+<span id="cb27-51"><a href="#cb27-51" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.689 INFO    7    DumpMemory </span>
+<span id="cb27-52"><a href="#cb27-52" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.697 INFO    8    WPR </span>
+<span id="cb27-53"><a href="#cb27-53" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    9    Setup </span>
+<span id="cb27-54"><a href="#cb27-54" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    10   BackupRestore </span>
+<span id="cb27-55"><a href="#cb27-55" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    11   IO </span>
+<span id="cb27-56"><a href="#cb27-56" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.699 INFO    12   LightPerf </span>
+<span id="cb27-57"><a href="#cb27-57" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.709 INFO     </span>
+<span id="cb27-58"><a href="#cb27-58" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:03:32.709 WARN    Type one or more Scenario IDs <span class="er">(</span><span class="ex">separated</span> by <span class="st">&#39;+&#39;</span><span class="kw">)</span> <span class="cf">for</span> which <span class="ex">you</span> want to collect diagnostic data. Then press Enter </span>
+<span id="cb27-59"><a href="#cb27-59" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.077 INFO    Scenario Console input: 1+4+10 </span>
+<span id="cb27-60"><a href="#cb27-60" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.208 INFO    The scenarios selected are: <span class="st">&#39;GeneralPerf AlwaysOn BackupRestore Basic&#39;</span> </span>
+<span id="cb27-61"><a href="#cb27-61" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.665 INFO    Discovered the following SQL Server instance<span class="er">(</span><span class="ex">s</span><span class="kw">)</span></span>
+<span id="cb27-62"><a href="#cb27-62" aria-hidden="true" tabindex="-1"></a> </span>
+<span id="cb27-63"><a href="#cb27-63" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.665 INFO     </span>
+<span id="cb27-64"><a href="#cb27-64" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.676 INFO    ID  SQL Instance Name </span>
+<span id="cb27-65"><a href="#cb27-65" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.678 INFO    <span class="at">--</span>  <span class="at">----------------</span> </span>
+<span id="cb27-66"><a href="#cb27-66" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.679 INFO    0    DbServerMachine </span>
+<span id="cb27-67"><a href="#cb27-67" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.679 INFO    1    DbServerMachine<span class="dt">\S</span>QL2014 </span>
+<span id="cb27-68"><a href="#cb27-68" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO    2    DbServerMachine<span class="dt">\S</span>QL2017 </span>
+<span id="cb27-69"><a href="#cb27-69" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO    3    DbServerMachine<span class="dt">\S</span>QL2019 </span>
+<span id="cb27-70"><a href="#cb27-70" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 INFO     </span>
+<span id="cb27-71"><a href="#cb27-71" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:02.686 WARN    Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter </span>
+<span id="cb27-72"><a href="#cb27-72" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:11.899 INFO    SQL Instance Console input: 3 </span>
+<span id="cb27-73"><a href="#cb27-73" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:11.911 INFO    You selected instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> to collect diagnostic data.  </span>
+<span id="cb27-74"><a href="#cb27-74" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.022 INFO    Confirmed that MYDOMAIN<span class="dt">\J</span>oseph has VIEW SERVER STATE on SQL Server Instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> </span>
+<span id="cb27-75"><a href="#cb27-75" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.022 INFO    Confirmed that MYDOMAIN<span class="dt">\J</span>oseph has ALTER ANY EVENT SESSION on SQL Server Instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> </span>
+<span id="cb27-76"><a href="#cb27-76" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.735 WARN    At least one of the selected <span class="st">&#39;GeneralPerf AlwaysOn BackupRestore Basic&#39;</span> scenarios collects Xevent traces </span>
+<span id="cb27-77"><a href="#cb27-77" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.751 WARN    The service account <span class="st">&#39;NT Service\MSSQL$SQL2019&#39;</span> for SQL Server instance <span class="st">&#39;DbServerMachine\SQL2019&#39;</span> must have write/modify permissions on the <span class="st">&#39;C:\temp\log scout\Test 2\output\&#39;</span> folder </span>
+<span id="cb27-78"><a href="#cb27-78" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:12.751 WARN    The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an <span class="pp">*</span>.XEL file exists that you can open and read in SSMS </span>
+<span id="cb27-79"><a href="#cb27-79" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.822 INFO    Access verification Console input: y </span>
+<span id="cb27-80"><a href="#cb27-80" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.841 INFO    LogmanConfig.txt copied to  C:<span class="dt">\t</span>emp<span class="dt">\l</span>og scout<span class="dt">\T</span>est 2<span class="dt">\o</span>utput<span class="dt">\i</span>nternal<span class="dt">\L</span>ogmanConfig.txt </span>
+<span id="cb27-81"><a href="#cb27-81" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.922 INFO    Basic collectors will execute on shutdown </span>
+<span id="cb27-82"><a href="#cb27-82" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.934 INFO    Collecting logs for <span class="st">&#39;GeneralPerf&#39;</span> scenario </span>
+<span id="cb27-83"><a href="#cb27-83" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:15.964 INFO    Executing Collector: Perfmon </span>
+<span id="cb27-84"><a href="#cb27-84" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:17.055 INFO    Executing Collector: Xevent_Core_AddSession </span>
+<span id="cb27-85"><a href="#cb27-85" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:17.088 INFO    Executing Collector: Xevent_General_AddSession </span>
+<span id="cb27-86"><a href="#cb27-86" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.130 INFO    Executing Collector: Xevent_General_Target </span>
+<span id="cb27-87"><a href="#cb27-87" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.152 INFO    Executing Collector: Xevent_General_Start </span>
+<span id="cb27-88"><a href="#cb27-88" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:19.214 INFO    Executing Collector: ExistingProfilerXeventTraces </span>
+<span id="cb27-89"><a href="#cb27-89" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:21.313 INFO    Executing Collector: HighCPU_perfstats </span>
+<span id="cb27-90"><a href="#cb27-90" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:21.364 INFO    Executing Collector: SQLServerPerfStats </span>
+<span id="cb27-91"><a href="#cb27-91" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:23.441 INFO    Executing Collector: SQLServerPerfStatsSnapshotStartup </span>
+<span id="cb27-92"><a href="#cb27-92" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:23.492 INFO    Executing Collector: QueryStore </span>
+<span id="cb27-93"><a href="#cb27-93" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.552 INFO    Executing Collector: TempDBAnalysis </span>
+<span id="cb27-94"><a href="#cb27-94" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.601 INFO    Executing Collector: linked_server_config </span>
+<span id="cb27-95"><a href="#cb27-95" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.708 INFO    Collecting logs for <span class="st">&#39;AlwaysOn&#39;</span> scenario </span>
+<span id="cb27-96"><a href="#cb27-96" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.740 INFO    Executing Collector: AlwaysOnDiagScript </span>
+<span id="cb27-97"><a href="#cb27-97" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.788 INFO    Executing Collector: Xevent_CoreAddSesion </span>
+<span id="cb27-98"><a href="#cb27-98" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:25.809 INFO    Executing Collector: Xevent_AlwaysOn_Data_Movement </span>
+<span id="cb27-99"><a href="#cb27-99" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.853 INFO    Executing Collector: AlwaysOn_Data_Movement_target </span>
+<span id="cb27-100"><a href="#cb27-100" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.881 INFO    Executing Collector: AlwaysOn_Data_Movement_Start </span>
+<span id="cb27-101"><a href="#cb27-101" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:27.922 INFO    Executing Collector: AlwaysOnHealthXevent </span>
+<span id="cb27-102"><a href="#cb27-102" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:28.007 INFO    Collecting logs for <span class="st">&#39;BackupRestore&#39;</span> scenario </span>
+<span id="cb27-103"><a href="#cb27-103" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:28.023 INFO    Executing Collector: Xevent_BackupRestore_AddSession </span>
+<span id="cb27-104"><a href="#cb27-104" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.070 INFO    Executing Collector: EnableTraceFlag </span>
+<span id="cb27-105"><a href="#cb27-105" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.088 INFO    Executing collector: SetVerboseSQLVSSWriterLog</span>
+<span id="cb27-106"><a href="#cb27-106" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:30.159 WARN    To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process.</span>
+<span id="cb27-107"><a href="#cb27-107" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.697 INFO    Console Input: n </span>
+<span id="cb27-108"><a href="#cb27-108" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.705 INFO    You have chosen not to restart SQLWriter Service. No verbose logging will be collected for SQL VSS Writer <span class="er">(</span><span class="ex">2019</span> or later<span class="kw">)</span></span>
+<span id="cb27-109"><a href="#cb27-109" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.737 INFO    Executing Collector: VSSAdmin_Providers </span>
+<span id="cb27-110"><a href="#cb27-110" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:36.778 INFO    Executing Collector: VSSAdmin_Shadows </span>
+<span id="cb27-111"><a href="#cb27-111" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.832 INFO    Executing Collector: VSSAdmin_Shadowstorage </span>
+<span id="cb27-112"><a href="#cb27-112" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.873 INFO    Executing Collector: VSSAdmin_Writers </span>
+<span id="cb27-113"><a href="#cb27-113" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:37.924 INFO    Please type <span class="st">&#39;STOP&#39;</span> to terminate the diagnostics collection when you finished capturing the issue </span>
+<span id="cb27-114"><a href="#cb27-114" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.012 INFO    StopCollection Console input: stop </span>
+<span id="cb27-115"><a href="#cb27-115" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.014 INFO    Shutting down the collector </span>
+<span id="cb27-116"><a href="#cb27-116" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.032 INFO    Executing shutdown command: Xevents_Stop </span>
+<span id="cb27-117"><a href="#cb27-117" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.073 INFO    Executing shutdown command: Xevents_Alwayson_Data_Movement_Stop </span>
+<span id="cb27-118"><a href="#cb27-118" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.098 INFO    Executing shutdown command: Disable_BackupRestore_Trace_Flags</span>
+<span id="cb27-119"><a href="#cb27-119" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:43.145 INFO    Executing shutdown command: PerfmonStop </span>
+<span id="cb27-120"><a href="#cb27-120" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:46.228 INFO    Executing shutdown command: KillActiveLogscoutSessions </span>
+<span id="cb27-121"><a href="#cb27-121" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.277 INFO    Collecting logs for <span class="st">&#39;Basic&#39;</span> scenario </span>
+<span id="cb27-122"><a href="#cb27-122" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.298 INFO    Executing Collector: TaskListVerbose </span>
+<span id="cb27-123"><a href="#cb27-123" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.339 INFO    Executing Collector: TaskListServices </span>
+<span id="cb27-124"><a href="#cb27-124" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.407 INFO    Executing Collector: FLTMC_Filters </span>
+<span id="cb27-125"><a href="#cb27-125" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.464 INFO    Executing Collector: FLTMC_Instances </span>
+<span id="cb27-126"><a href="#cb27-126" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.533 INFO    Executing Collector: SystemInfo_Summary </span>
+<span id="cb27-127"><a href="#cb27-127" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.618 INFO    Executing Collector: MiscDiagInfo </span>
+<span id="cb27-128"><a href="#cb27-128" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:47.681 INFO    Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel </span>
+<span id="cb27-129"><a href="#cb27-129" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:50.501 INFO    Executing Collector: PolybaseLogs </span>
+<span id="cb27-130"><a href="#cb27-130" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:04:50.533 INFO    Executing Collector: SQLAssessmentAPI </span>
+<span id="cb27-131"><a href="#cb27-131" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:09.554 INFO    Executing Collector: UserRights </span>
+<span id="cb27-132"><a href="#cb27-132" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:12.266 INFO    Executing Collector: RunningDrivers </span>
+<span id="cb27-133"><a href="#cb27-133" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:14.217 INFO    Executing Collector: PowerPlan </span>
+<span id="cb27-134"><a href="#cb27-134" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:14.308 INFO    Executing Collector: WindowsHotfixes </span>
+<span id="cb27-135"><a href="#cb27-135" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:16.694 INFO    Executing Collector: GetEventLogs </span>
+<span id="cb27-136"><a href="#cb27-136" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:16.707 INFO    Gathering Application EventLog in TXT and CSV format   </span>
+<span id="cb27-137"><a href="#cb27-137" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:23.218 INFO       Produced 10000 records in the EventLog </span>
+<span id="cb27-138"><a href="#cb27-138" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:29.011 INFO       Produced 20000 records in the EventLog </span>
+<span id="cb27-139"><a href="#cb27-139" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:35.914 INFO       Produced 30000 records in the EventLog </span>
+<span id="cb27-140"><a href="#cb27-140" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO       Produced 39129 records in the EventLog </span>
+<span id="cb27-141"><a href="#cb27-141" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO    Application EventLog in TXT and CSV format completed! </span>
+<span id="cb27-142"><a href="#cb27-142" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:41.975 INFO    Gathering System EventLog in TXT and CSV format   </span>
+<span id="cb27-143"><a href="#cb27-143" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:50.913 INFO       Produced 10000 records in the EventLog </span>
+<span id="cb27-144"><a href="#cb27-144" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:05:59.494 INFO       Produced 20000 records in the EventLog </span>
+<span id="cb27-145"><a href="#cb27-145" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.839 INFO       Produced 26007 records in the EventLog </span>
+<span id="cb27-146"><a href="#cb27-146" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.842 INFO    System EventLog in TXT and CSV format completed! </span>
+<span id="cb27-147"><a href="#cb27-147" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.879 INFO    Executing Collector: PerfStatsSnapshotShutdown</span>
+<span id="cb27-148"><a href="#cb27-148" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.888 INFO    Executing collector: GetSQLVSSWriterLog</span>
+<span id="cb27-149"><a href="#cb27-149" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.900 INFO    SQLWriter Service has been restarted</span>
+<span id="cb27-150"><a href="#cb27-150" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:04.917 INFO    Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... </span>
+<span id="cb27-151"><a href="#cb27-151" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:08.518 INFO    Ending data collection </span>
+<span id="cb27-152"><a href="#cb27-152" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:08.533 WARN    Launching cleanup and exit routine... please wait </span>
+<span id="cb27-153"><a href="#cb27-153" aria-hidden="true" tabindex="-1"></a><span class="ex">2021-09-10</span> 11:06:13.780 INFO    Thank you for using SQL LogScout! </span>
+<span id="cb27-154"><a href="#cb27-154" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-155"><a href="#cb27-155" aria-hidden="true" tabindex="-1"></a><span class="ex">Checking</span> for console execution errors logged into .<span class="dt">\#</span>#STDERR.LOG...</span>
+<span id="cb27-156"><a href="#cb27-156" aria-hidden="true" tabindex="-1"></a><span class="ex">Removed</span> .<span class="dt">\#</span>#STDERR.LOG which was 0 bytes</span></code></pre></div>
 <h1 id="test-suite">Test Suite</h1>
 <p>The test suite is intended to be used by developers. The set of tests
 will grow over time. To run a test, simply execute the
@@ -1264,9 +1537,9 @@ call individual tests</li>
 </ul>
 <h2 id="execute-overall-test-suite">Execute overall test suite</h2>
 <p>Here is an example of how to execute the entire test suite:</p>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cd</span> <span class="op">.</span>\Bin\TestingInfrastructure </span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ConsistentQualityTests<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>ServerName <span class="op">&lt;</span>SQL Instance Name<span class="op">&gt;</span> <span class="op">-</span>SqlNexusPath <span class="op">&lt;</span>PathToSQLNexusExe<span class="op">&gt;</span> <span class="op">-</span>SqlNexusDb <span class="op">&lt;</span>SQLNexusDbName<span class="op">&gt;</span> <span class="op">-</span>DoProcmonTest <span class="op">&lt;</span><span class="va">$True</span><span class="op">/</span><span class="va">$False</span><span class="op">&gt;</span></span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cd</span> <span class="op">.</span>\Bin\TestingInfrastructure </span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ConsistentQualityTests<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>ServerName <span class="op">&lt;</span>SQL Instance Name<span class="op">&gt;</span> <span class="op">-</span>SqlNexusPath <span class="op">&lt;</span>PathToSQLNexusExe<span class="op">&gt;</span> <span class="op">-</span>SqlNexusDb <span class="op">&lt;</span>SQLNexusDbName<span class="op">&gt;</span> <span class="op">-</span>DoProcmonTest <span class="op">&lt;</span><span class="va">$True</span><span class="op">/</span><span class="va">$False</span><span class="op">&gt;</span></span></code></pre></div>
 <p>The full test suite may take a about 2 hours to run and test all the
 scenarios.</p>
 <p>Parameters details used in above command:</p>
@@ -1312,9 +1585,9 @@ you may orphan some processes.</td>
 </table>
 <h2 id="examples-of-sql-logscout-tests">Examples of SQL LogScout
 Tests</h2>
-<div class="sourceCode" id="cb24"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TestingInfrastructure </span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="ex">RunIndividualTest.bat</span></span></code></pre></div>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TestingInfrastructure </span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="ex">RunIndividualTest.bat</span></span></code></pre></div>
 <h2 id="sample-testing-output">Sample testing output</h2>
 <pre class="output"><code>TEST: ExecutingCollectors Validation
 Status: SUCCESS
@@ -1336,8 +1609,17 @@ it launched during its execution. There are 3 levels of clean-up:
 regular shutdown, a cleanup action upon exit, and a final process
 termination of any processes launched by SQL LogScout during collection.
 However, on rare occasions you may be left with processes still running.
-One such occasion is if you closed the Commmand Prompt window before SQL
-LogScout completed.</p>
+One such occasion is if you closed the Commmand Prompt or PowerShell
+window before SQL LogScout has completed.</p>
+<p>The parameters for this script are below are optional: -
+<strong>ServerName</strong> - You can provide an exact server name
+similar to the main SQL_LogScout script. This will skip prompting for
+the instance you want to select. - <strong>EndActiveConsoles</strong> -
+Defaults to false. If true, on the machine running this script we will
+identify any processes that are running SQL_LogScout.ps1 with the same
+instance name and kill those sessions. Use with warning. This is
+meaningful if you are running the session on a different user account
+and the console is still active.</p>
 <table>
 <colgroup>
 <col style="width: 100%" />
@@ -1357,36 +1639,45 @@ when SQL LogScout completes.</td>
 </tbody>
 </table>
 <p>If you end up in this situation, you can use the
-<code>CleanupIncompleteShutdown.ps1</code> to terminate any left-over
-processes, as long as you specify the correct SQL Server instance that
-was used by SQL LogScout.</p>
-<p>To execute the script, do the following:</p>
-<div class="sourceCode" id="cb26"><pre
-class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>powershell <span class="op">-</span>File CleanupIncompleteShutdown<span class="op">.</span><span class="fu">ps1</span></span></code></pre></div>
+<code>CleanupIncompleteShutdown.ps1</code> script located in the folder
+to terminate any left-over processes, as long as you specify the correct
+SQL Server instance that was used by SQL LogScout. You can run the
+script without any parameters or use the optional parameters.</p>
+<p>Example passing <code>-ServerName</code> which results in no
+prompt:</p>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\CleanupIncompleteShutdown<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>ServerName <span class="st">&quot;DbServerMachine\SQL2016&quot;</span></span></code></pre></div>
+<p>To execute the script and be prompted for a server name, do the
+following:</p>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>powershell <span class="op">-</span>File CleanupIncompleteShutdown<span class="op">.</span><span class="fu">ps1</span></span></code></pre></div>
 <p>Here is a sample output:</p>
-<pre class="output"><code>======================================================================================
-This script is designed to clean up SQL LogScout processes that may have be left behind if SQL LogScout was closed incorrectly
+<pre class="output"><code>INFO    Created log file C:\Users\ADMINI~1\AppData\Local\Temp\2\##SQLLogScout_CleanupIncompleteShutdown_20241009T1750455751.log
+INFO    Log initialization complete!
+======================================================================================================================================
+This script is designed to clean up SQL LogScout processes that may have been left behind if SQL LogScout was closed incorrectly
+======================================================================================================================================
+   Discovered the following SQL Server instance(s)
 
-======================================================================================
 
-Discovered the following SQL Server instance(s)
+    ID#   SQL Instance Name   Status
+    ---   -----------------   -------
+    0     WIN-5Q53MVQ222R     Running
 
-
-ID      SQL Instance Name
---      ----------------
-0        DbServerMachine\SQL2016
-1        DbServerMachine\SQL2017
-2        DbServerMachine
-
-Please select the ID for SQL instance.: 2
-
-Launching cleanup routine... please wait
-Executing STOP_SQLLogScout_Xevent session. It will stop the Xevent trace in case it was found to be running ...
-Executing STOP_SQLLogScout_AlwaysOn_Data_Movement. It will stop the Xevent trace in case it was found to be running ...
-Executing Disable_BackupRestore_Trace_Flags It will disable the trace flags they were found to be enabled...
-Executing PerfmonStop. It will stop Perfmon started by SQL LogScout in case it was found to be running ...
-Executing NettraceStop. It will stop the network trace in case it was found to be running...
-Executing WPR -cancel. This will stop all WPR traces in case any was found running...
-Executing STOP storport. It will stop a stoport trace if it was found to be running...</code></pre>
+Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter
+SQL Instance Console input: 0
+You selected instance &#39;WIN-5Q53MVQ222R&#39; to collect diagnostic data.
+Testing connection into: &#39;WIN-5Q53MVQ222R&#39;. If connection fails, verify instance name.
+Connection to &#39;WIN-5Q53MVQ222R&#39; successful.
+Launching cleanup routine for instance &#39;WIN-5Q53MVQ222R&#39;... please wait
+Executing &#39;WPR-cancel&#39;. It will stop all WPR traces in case any was found running...
+Executing &#39;StorportStop&#39;. It will stop stoport tracing if it was found to be running...
+Executing &#39;Stop_SQLLogScout_Xevent&#39; session. It will stop the SQLLogScout performance Xevent trace in case it was found to be running...
+Executing &#39;Stop_SQLLogScout_AlwaysOn_Data_Movement&#39;. It will stop the SQLLogScout AlwaysOn Xevent trace in case it was found to be running...
+Executing &#39;Disable_BackupRestore_Trace_Flags&#39; It will disable the trace flags they were found to be enabled...
+xecuting &#39;PerfmonStop&#39;. It will stop Perfmon started by SQL LogScout in case it was found to be running...
+Executing &#39;NetworkTraceStop&#39;. It will stop network tracing initiated by SQLLogScout in case it was found to be running...
+Cleanup script execution completed.
+PS C:\SQL LogScout\Bin&gt;</code></pre>
 </body>
 </html>

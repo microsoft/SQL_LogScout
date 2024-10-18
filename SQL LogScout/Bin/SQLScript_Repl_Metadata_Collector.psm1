@@ -1,3 +1,12 @@
+
+    function Repl_Metadata_Collector_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "Repl_Metadata_Collector"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 -- PSSDIAG Replication Metadata Collector
 --Contributors: jaferebe
 
@@ -27,12 +36,40 @@ RAISERROR('',0,1) WITH NOWAIT
 PRINT '-- repl_msdb_jobs --'
 IF HAS_PERMS_BY_NAME('msdb.dbo.sysjobs', 'object', 'SELECT') = 1
 	SELECT job_id,originating_server_id,name,enabled,description,start_step_id,category_id,owner_sid,delete_level,date_created,date_modified 
-	FROM [msdb].[dbo].[sysjobs]
+	FROM [msdb].[dbo].[sysjobs] WITH(NOLOCK)
 	WHERE category_id <> 0
 ELSE
 	PRINT 'Logging: Skipped [sysjobs]. Principal ' + SUSER_SNAME() + ' does not have SELECT permission ON msdb.dbo.sysjobs'
 	RAISERROR('',0,1) WITH NOWAIT
 GO
+
+-- msdb job history that don't have a blank category (excludes user jobs), we have to sort to get the latest records if there is a verbose history
+PRINT '-- repl_msdb_jobhistory --'
+IF HAS_PERMS_BY_NAME('msdb.dbo.sysjobhistory', 'object', 'SELECT') = 1
+	SELECT TOP (4999) sj.job_id,sj.name,jh.instance_id,jh.step_id,jh.step_name,jh.sql_message_id,jh.sql_severity,CAST(jh.message as nvarchar(256))[message],jh.run_status,jh.run_date,jh.run_time,jh.run_duration,jh.retries_attempted,jh.server
+	FROM [msdb].[dbo].[sysjobs] sj WITH(NOLOCK)
+	INNER JOIN [msdb].[dbo].[sysjobhistory] jh WITH(NOLOCK) ON sj.[job_id] = sj.[job_id]
+	WHERE category_id <> 0
+	ORDER BY jh.run_date desc, jh.run_time desc, jh.job_id asc, jh.step_id desc
+ELSE
+	PRINT 'Logging: Skipped [sysjobhistory]. Principal ' + SUSER_SNAME() + ' does not have SELECT permission ON msdb.dbo.sysjobhistory'
+	RAISERROR('',0,1) WITH NOWAIT
+GO
+
+
+-- msdb job history that don't have a blank category (excludes user jobs), we have to sort to get the latest records if there is a verbose history
+PRINT '-- repl_msdb_msagent_profileandparameters --'
+IF HAS_PERMS_BY_NAME('msdb.dbo.MSagent_profiles', 'object', 'SELECT') = 1
+	SELECT aprof.profile_id,aprof.profile_name,aprof.agent_type,aprof.type,CAST(aprof.description as nvarchar(256)) [description],aprof.def_profile,aparam.parameter_name,aparam.value 
+	FROM msdb..MSagent_profiles aprof WITH(NOLOCK)
+	INNER JOIN msdb..MSagent_parameters aparam WITH(NOLOCK)
+	ON aprof.profile_id = aparam.profile_id
+	ORDER BY aprof.profile_id
+ELSE
+	PRINT 'Logging: Skipped [MSagent_profiles]. Principal ' + SUSER_SNAME() + ' does not have SELECT permission ON msdb.dbo.msagent_profiles'
+	RAISERROR('',0,1) WITH NOWAIT
+GO
+
 
 
 /* Get Replication Database Metadata Tables */
@@ -619,3 +656,37 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 PRINT 'Logging: Replication Collector End Time'
 SELECT [getdate]=getdate()
 RAISERROR('',0,1) WITH NOWAIT
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

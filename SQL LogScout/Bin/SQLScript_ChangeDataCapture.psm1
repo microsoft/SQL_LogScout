@@ -1,3 +1,12 @@
+
+    function ChangeDataCapture_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "ChangeDataCapture"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 /*
 Author:		tzakir@microsoft.com
 Purpose:	Change Data Capture Script for PSSDiag
@@ -38,7 +47,7 @@ DECLARE @cmd3 nvarchar(1024); -- New Command
 FETCH NEXT FROM tnames_cursor INTO @dbname;
 WHILE (@@FETCH_STATUS = 0)
 BEGIN
-
+	
 	select @dbname = RTRIM(@dbname);
 	EXEC ('USE [' + @dbname + ']');
 		BEGIN
@@ -136,3 +145,37 @@ CLOSE tnames_cursor;
 DEALLOCATE tnames_cursor;
 
 go
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    
