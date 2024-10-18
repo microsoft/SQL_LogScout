@@ -1,7 +1,6 @@
 
 #======================================== START OF PERFMON COUNTER FILES SECTION
-
-
+Import-Module .\CommonFunctions.psm1
 
 
 function Get-PerfmonString ([string]$NetNamePlusInstance)
@@ -14,18 +13,20 @@ function Get-PerfmonString ([string]$NetNamePlusInstance)
         #if default instance, this function will return the hostname
         $host_name = $global:host_name
 
-        $instance_name = Get-InstanceNameOnly($NetNamePlusInstance)
+        $instance_name_object = Get-InstanceNameObject($NetNamePlusInstance)
+        $instance_name = $instance_name_object.InstanceName
 
         #if default instance use "SQLServer", else "MSSQL$InstanceName
-        # on a cluster $NetNamePlusInstance would contain the VNN when a default instance 
-        if (($instance_name -eq $host_name) -or ($instance_name -eq $NetNamePlusInstance))
+        # on a cluster $NetNamePlusInstance would contain the VNN when a default instance
+        #Type = 2 or 3: default instance, Type = 1: named instance
+        
+        if ($instance_name_object.Type -eq $global:SQLInstanceType["NamedInstance"]) 
         {
-            $perfmon_str = "SQLServer"
+            $perfmon_str = "MSSQL$"+$instance_name
         }
         else
         {
-            $perfmon_str = "MSSQL$"+$instance_name
-
+            $perfmon_str = "SQLServer"
         }
 
         Write-LogDebug "Perfmon string is: $perfmon_str" -DebugLogLevel 2

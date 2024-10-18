@@ -1,3 +1,12 @@
+
+    function SSB_DbMail_Diag_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "SSB_DbMail_Diag"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 USE master
 go
 
@@ -223,7 +232,7 @@ BEGIN
 			select @len = len(@proc) - 8;
 			select @proc = substring(@proc, 8, @len)
 			select @proc
-			EXEC ("select definition from " + @dbname + ".sys.sql_modules where definition like '%" + @proc + "%'")
+			EXEC (`"select definition from `" + @dbname + `".sys.sql_modules where definition like '%`" + @proc + `"%'`")
 			FETCH NEXT FROM tproc_cursor INTO @proc;
 		END;
 		CLOSE tproc_cursor;
@@ -368,3 +377,55 @@ SELECT
 FROM 
 msdb.dbo.sysmail_profileaccount
 RAISERROR (' ', 0, 1) WITH NOWAIT;
+
+PRINT '-- sysmail_server --'
+SELECT 
+  account_id				,
+  servertype				,
+  servername				,
+  port						,
+  username					,
+  credential_id				,
+  use_default_credentials	,
+  enable_ssl				,
+  flags						,
+  timeout					,
+  last_mod_datetime			,
+  last_mod_user
+FROM 
+msdb.dbo.sysmail_server
+RAISERROR (' ', 0, 1) WITH NOWAIT;
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

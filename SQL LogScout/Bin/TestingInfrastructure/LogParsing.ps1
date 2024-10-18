@@ -30,7 +30,7 @@ param(
     [string]$SummaryFilename = ".\output\SUMMARY.TXT",
 
     [Parameter()]
-    [string]$DetailedFilename = ".\output\SearchForErrors_Detailed.TXT"
+    [string]$DetailedFilename = (".\output\SearchForErrors_" + (Get-Date).ToString("MMddyyyyHHmmss") + "_Detailed.TXT")
     )
 
     try {

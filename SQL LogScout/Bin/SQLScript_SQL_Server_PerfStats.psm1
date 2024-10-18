@@ -1,4 +1,12 @@
 
+    function SQL_Server_PerfStats_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "SQL_Server_PerfStats"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 /*******************************************************************
 perf stats
 
@@ -57,9 +65,40 @@ AS
     select @runtime as runtime, * from sys.dm_tran_active_transactions where transaction_type = 4
     RAISERROR (' ', 0, 1) WITH NOWAIT
 
+    RAISERROR (' ', 0, 1) WITH NOWAIT
+    RAISERROR ('-- exec_connections --', 0, 1) WITH NOWAIT;
+    SELECT TOP 100 CONVERT (varchar(30), @runtime, 126) AS 'runtime'
+        ,  c.session_id
+        , c.most_recent_session_id
+        , c.connect_time
+        , c.net_transport
+        , c.protocol_type
+        , c.protocol_version
+        , c.endpoint_id
+        , c.encrypt_option
+        , c.auth_scheme
+        , c.node_affinity
+        , c.num_reads
+        , c.num_writes
+        , c.last_read
+        , c.last_write
+        , c.net_packet_size
+        , c.client_net_address
+        , c.client_tcp_port
+        , c.local_net_address
+        , c.local_tcp_port
+        , c.connection_id
+        , c.parent_connection_id
+        , c.most_recent_sql_handle
+    FROM sys.dm_exec_connections as C
+    OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
+
+        
+    RAISERROR (' ', 0, 1) WITH NOWAIT
+
       SET @qrydurationwarnthreshold = 500
       
-      -- SERVERPROPERTY ('ProductVersion') returns e.g. "9.00.2198.00" --> 9
+      -- SERVERPROPERTY ('ProductVersion') returns e.g. `"9.00.2198.00`" --> 9
       SET @servermajorversion = REPLACE (LEFT (CONVERT (varchar, SERVERPROPERTY ('ProductVersion')), 2), '.', '')
 
       RAISERROR (@msg, 0, 1) WITH NOWAIT
@@ -86,7 +125,7 @@ AS
       create index ix_dm_os_tasks_session_id on #dm_os_tasks (session_id)
       create index ix_dm_os_tasks_request_id on #dm_os_tasks (request_id)
 
-      select * into #dm_exec_connections from   sys.dm_exec_connections
+      select * into #dm_exec_connections from   sys.dm_exec_connections WHERE net_transport <> 'session'
       create index ix_dm_exec_connections_session_id on #dm_exec_connections (session_id)
 
       select * into #dm_tran_active_transactions from   sys.dm_tran_active_transactions 
@@ -99,18 +138,15 @@ AS
       select * into #dm_os_waiting_tasks  from  sys.dm_os_waiting_tasks
       create index ix_dm_os_waiting_tasks_waiting_task_address on #dm_os_waiting_tasks(waiting_task_address)
 
-      select * into #sysprocesses from master.dbo.sysprocesses 
-      create index ix_sysprocesses_spid on #sysprocesses (spid)
 
 
       SELECT
         sess.session_id, req.request_id, tasks.exec_context_id AS 'ecid', tasks.task_address, req.blocking_session_id, LEFT (tasks.task_state, 15) AS 'task_state', 
         tasks.scheduler_id, LEFT (ISNULL (req.wait_type, ''), 50) AS 'wait_type', LEFT (ISNULL (req.wait_resource, ''), 40) AS 'wait_resource', 
         LEFT (req.last_wait_type, 50) AS 'last_wait_type', 
-        /* sysprocesses is the only way to get open_tran count for sessions w/o an active request (SQLBUD #487091) */
         CASE 
           WHEN req.open_transaction_count IS NOT NULL THEN req.open_transaction_count 
-          ELSE (SELECT open_tran FROM #sysprocesses sysproc WHERE sess.session_id = sysproc.spid) 
+          ELSE sess.open_transaction_count
         END AS open_trans, 
         LEFT (CASE COALESCE(req.transaction_isolation_level, sess.transaction_isolation_level)
           WHEN 0 THEN '0-Read Committed' 
@@ -287,7 +323,7 @@ AS
           PRINT 'DebugPrint: perfstats qry1 - ' + CONVERT (varchar, @queryduration) + 'ms, rowcount=' + CONVERT(varchar, @rowcount) + CHAR(13) + CHAR(10)
 
         /* Resultset #2: Head blocker summary 
-        ** Intra-query blocking relationships (parallel query waits) aren't "true" blocking problems that we should report on here. */
+        ** Intra-query blocking relationships (parallel query waits) aren't `"true`" blocking problems that we should report on here. */
         IF NOT EXISTS (SELECT * FROM #tmp_requests2 WHERE blocking_session_id != 0 AND wait_type NOT IN ('WAITFOR', 'EXCHANGE', 'CXPACKET') AND wait_duration_ms > 0) 
         BEGIN 
           PRINT ''
@@ -366,7 +402,7 @@ AS
             PRINT 'DebugPrint: perfstats qry2 - ' + CONVERT (varchar, @queryduration) + 'ms, rowcount=' + CONVERT(varchar, @rowcount) + CHAR(13) + CHAR(10)
         END
 
-        /* Resultset #3: inputbuffers and query stats for "expensive" queries, head blockers, and "first-tier" blocked spids */
+        /* Resultset #3: inputbuffers and query stats for `"expensive`" queries, head blockers, and `"first-tier`" blocked spids */
         PRINT ''
         RAISERROR ('-- notableactivequeries --', 0, 1) WITH NOWAIT
         SET @querystarttime = GETDATE()
@@ -398,7 +434,7 @@ AS
           AND ( 
             /* We do not want to pull inputbuffers for everyone. The conditions below determine which ones we will fetch. */
             (r.session_id IN (SELECT blocking_session_id FROM #tmp_requests2 WHERE blocking_session_id != 0)) -- head blockers
-            OR (r.blocking_session_id IN (SELECT blocking_session_id FROM #tmp_requests2 WHERE blocking_session_id != 0)) -- "first-tier" blocked requests
+            OR (r.blocking_session_id IN (SELECT blocking_session_id FROM #tmp_requests2 WHERE blocking_session_id != 0)) -- `"first-tier`" blocked requests
             OR (LTRIM (r.wait_type) <> '''' OR r.wait_duration_ms > 500) -- waiting for some resource
             OR (r.open_trans > 5) -- possible orphaned transaction
             OR (r.request_total_elapsed_time > 25000) -- long-running query
@@ -455,7 +491,7 @@ AS
               AND b2.runtime = @runtime
           PRINT 'Updated ' + CONVERT (varchar, @@ROWCOUNT) + ' in-progress blocking chains...'
 
-          -- 3) "Close out" blocking chains that were just resolved
+          -- 3) `"Close out`" blocking chains that were just resolved
           UPDATE tbl_BLOCKING_CHAINS 
           SET blocking_end = @runtime
           FROM tbl_BLOCKING_CHAINS b1
@@ -486,10 +522,9 @@ AS
       print ''
   END TRY
   BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
   END CATCH
-
 GO
 
 
@@ -525,7 +560,7 @@ CREATE PROCEDURE #sp_perf_stats_infrequent @runtime datetime, @prevruntime datet
 
     SELECT @cpu_time_start = cpu_time, @elapsed_time_start = total_elapsed_time FROM sys.dm_exec_sessions WHERE session_id = @@SPID
 
-    /* SERVERPROPERTY ('ProductVersion') returns e.g. "9.00.2198.00" --> 9 */
+    /* SERVERPROPERTY ('ProductVersion') returns e.g. `"9.00.2198.00`" --> 9 */
     SET @servermajorversion = REPLACE (LEFT (CONVERT (varchar, SERVERPROPERTY ('ProductVersion')), 2), '.', '')
 
 
@@ -781,34 +816,7 @@ CREATE PROCEDURE #sp_perf_stats_infrequent @runtime datetime, @prevruntime datet
     SET @queryduration = DATEDIFF (ms, @querystarttime, GETDATE())
     IF @queryduration > @qrydurationwarnthreshold
       PRINT 'DebugPrint: perfstats2 qry17 - ' + CONVERT (varchar, @queryduration) + 'ms' + CHAR(13) + CHAR(10)
-
-
-    /* Resultset #18:  dm_os_ring_buffers for connectivity
-    ** return all rows on first run and then after only new rows in later runs */
-    PRINT ''
-    RAISERROR ('-- dm_os_ring_buffers --', 0, 1) WITH NOWAIT;
-    SET @querystarttime = GETDATE()
-
-    SET @sql = '
-      SELECT /*' + @procname + ':18*/  
-          CONVERT (varchar(30), @runtime, 126) AS runtime, 
-      CONVERT (varchar(23), DATEADD (ms, -1 * (@MSTICKS - [timestamp]), @mstickstime), 126) AS EventTime, 
-      [record] 
-        FROM sys.dm_os_ring_buffers 
-        WHERE ring_buffer_type in (''RING_BUFFER_CONNECTIVITY'',''RING_BUFFER_SECURITY_ERROR'')
-          AND [timestamp] > @lastmsticks 
-        ORDER BY [timestamp]'
-
-    EXEC sp_executesql @sql, N'@runtime datetime, @lastmsticks bigint, @msticks bigint, @mstickstime datetime', @runtime = @runtime, @lastmsticks = @lastmsticks, @msticks = @msticks, @mstickstime = @mstickstime
-
-
-    RAISERROR (' ', 0, 1) WITH NOWAIT;
-    SET @queryduration = DATEDIFF (ms, @querystarttime, GETDATE())
-    SET @lastmsticks = @msticks
-    IF @queryduration > @qrydurationwarnthreshold
-      PRINT 'DebugPrint: perfstats2 qry18 - ' + CONVERT (varchar, @queryduration) + 'ms' + CHAR(13) + CHAR(10)
-
-
+  
     /* Resultset #19: Plan Cache Stats */
     PRINT ''
     RAISERROR ('-- Plan Cache Stats --', 0, 1) WITH NOWAIT;
@@ -884,7 +892,7 @@ CREATE PROCEDURE #sp_perf_stats_infrequent @runtime datetime, @prevruntime datet
     print ''
   END TRY
   BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
   END CATCH
 GO
@@ -952,6 +960,7 @@ BEGIN TRY
 	, rs.forced_grant_count --Total number of forced minimum-memory grants since server startup. NULL for the small-query resource semaphore.
 			FROM sys.dm_exec_requests r
 			JOIN sys.dm_exec_connections c  ON r.connection_id = c.connection_id
+                                      AND c.net_transport <> 'session'
 			JOIN sys.dm_exec_sessions s     ON c.session_id = s.session_id
 			JOIN sys.databases d            ON r.database_id = d.database_id
 			JOIN sys.dm_exec_query_memory_grants mg       ON s.session_id = mg.session_id
@@ -962,7 +971,7 @@ BEGIN TRY
   RAISERROR ('', 0, 1) WITH NOWAIT
 END TRY
 BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
 END CATCH
 
@@ -994,7 +1003,7 @@ CREATE PROCEDURE #sp_perf_stats_reallyinfrequent @runtime datetime, @firstrun in
       print ''
   END TRY
   BEGIN CATCH
-	  PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+	  PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 	  PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
   END CATCH
 GO
@@ -1211,7 +1220,7 @@ AS
   PRINT 'Starting SQL Server Perf Stats Script...'
   SET LANGUAGE us_english
   PRINT '-- Script Source --'
-  SELECT 'SQL Server Perf Stats Script' AS script_name, '$Revision: 16 $ ($Change: ? $)' AS revision
+  SELECT 'SQL Server Perf Stats Script' AS script_name, '`$Revision: 16 `$ (`$Change: ? `$)' AS revision
   PRINT ''
   PRINT '-- Script and Environment Details --'
   PRINT 'Name                     Value'
@@ -1221,9 +1230,9 @@ AS
   PRINT 'SQL Version (SP)         ' + CONVERT (varchar, SERVERPROPERTY ('ProductVersion')) + ' (' + CONVERT (varchar, SERVERPROPERTY ('ProductLevel')) + ')'
   PRINT 'Edition                  ' + CONVERT (varchar, SERVERPROPERTY ('Edition'))
   PRINT 'Script Name              SQL Server Perf Stats Script'
-  PRINT 'Script File Name         $File: SQL_Server_Perf_Stats.sql $'
-  PRINT 'Revision                 $Revision: 16 $ ($Change: ? $)'
-  PRINT 'Last Modified            $Date: 2015/10/15  $'
+  PRINT 'Script File Name         `$File: SQL_Server_Perf_Stats.sql `$'
+  PRINT 'Revision                 `$Revision: 16 `$ (`$Change: ? `$)'
+  PRINT 'Last Modified            `$Date: 2015/10/15  `$'
   PRINT 'Script Begin Time        ' + CONVERT (varchar(30), GETDATE(), 126) 
   PRINT 'Current Database         ' + DB_NAME()
   PRINT '@@SPID                   ' + LTRIM(STR(@@SPID))
@@ -1282,10 +1291,44 @@ AS
     WAITFOR DELAY '0:0:10'
     END TRY
     BEGIN CATCH
-				PRINT 'Exception occured in: "' + OBJECT_NAME(@@PROCID)  + '"'     
+				PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
 				PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
     END CATCH
   END
 GO
 
 EXEC #sp_Run_PerfStats
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    

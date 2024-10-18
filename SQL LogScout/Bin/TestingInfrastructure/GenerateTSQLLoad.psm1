@@ -2,17 +2,21 @@
 [string] $global:TSQLLoadLog
 [string] $global:TSQLLoadLogPath
 
+[string]$parentLocation =  (Get-Item (Get-Location)).Parent.FullName 
+Import-Module -Name ($parentLocation + "\CommonFunctions.psm1")
 
-$TSQLLoadCommonFunction = (Get-Module -Name CommonFunctions).Name
 
-    if ($TSQLLoadCommonFunction -ne "CommonFunctions")
-        {
-            #Since we are in bin and CommonFunctions is in root directory, we need to step out to import module
-            #This is so we can use HandleCatchBlock
-            $CurrentPath = Get-Location
-            [string]$CommonFunctionsModule = (Get-Item $CurrentPath).parent.FullName + "\CommonFunctions.psm1"
-            Import-Module -Name $CommonFunctionsModule
-        }
+function TSQLLoadHandleCatchBlock ([string] $function_name, [System.Management.Automation.ErrorRecord] $err_rec, [bool]$exit_logscout = $false)
+{
+    #This import is needed here to prevent errors that can happen during ctrl+c
+    $error_msg = $err_rec.Exception.Message
+    $error_linenum = $err_rec.InvocationInfo.ScriptLineNumber
+    $error_offset = $err_rec.InvocationInfo.OffsetInLine
+    $error_script = $err_rec.InvocationInfo.ScriptName
+    Write-Error "Function '$function_name' failed with error:  $error_msg (line: $error_linenum, offset: $error_offset, file: $error_script)"    
+
+}
+
 
 
 function Initialize-TSQLLoadLog
@@ -31,13 +35,12 @@ function Initialize-TSQLLoadLog
 
     try
     {
-        $CurrentDirectory = Get-Location
-        $global:TSQLLoadLogPath = (Get-Item $CurrentDirectory).parent.FullName + "\TestingInfrastructure\output\"+(Get-Date).ToString('yyyyMMddhhmmss') + '_'+ $Scenario +'_' 
+        $global:TSQLLoadLogPath = (Get-Item (Get-Location)).Parent.FullName + "\TestingInfrastructure\output\"+(Get-Date).ToString('yyyyMMddhhmmss') + '_'+ $Scenario +'_' 
         $global:TSQLLoadLog = $global:TSQLLoadLogPath + $LogFileName
-        $LogFileExistsTest = Test-Path $global:TSQLLoadLog
+        $LogFileExistsTest = Test-Path -Path $global:TSQLLoadLog
         if ($LogFileExistsTest -eq $False)
         {
-            New-Item -Path $global:TSQLLoadLog -ItemType File -Force| Out-Null
+            New-Item -Path $global:TSQLLoadLog -ItemType File -Force | Out-Null
             
         }
         else {
@@ -46,7 +49,7 @@ function Initialize-TSQLLoadLog
     }
 	catch
 	{
-		HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+		TSQLLoadHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
 	}
 }
 
@@ -64,11 +67,12 @@ function Write-TSQLLoadLog()
         [String]$strMessage = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
         $strMessage += "	: "
         $strMessage += [string]($Message)
-        Add-Content -Path $global:TSQLLoadLog -Value $strMessage
+
+        Add-Content -Path ($global:TSQLLoadLog) -Value $strMessage
     }
 	catch
 	{
-		HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+		TSQLLoadHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
 	}
     
 }
@@ -235,7 +239,7 @@ function TSQLLoadInsertsAndSelectFunction
     
     catch 
     {
-        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        TSQLLoadHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
     }
 }
 
@@ -250,14 +254,14 @@ function TSQLLoadCheckWorkloadExited ()
         while ($false -eq $global:sqlcmd_process_tsqlload.HasExited) 
         ##Logically we should never enter this code as this tsql load should have completed before logscout finished. If we are hung for some reason, we need to terminate the process.
         {
-                Stop-Process $global:sqlcmd_process_tsqlload
-                Write-TSQLLoadLog "TSQLLoadLog : TSQL Load Terminated Due to Long Duration"
+            Stop-Process $global:sqlcmd_process_tsqlload
+            Write-TSQLLoadLog "TSQLLoadLog : TSQL Load Terminated Due to Long Duration"
         }
         Write-TSQLLoadLog "TSQLLoadLog : Process exited as expected" 
     }
 
     catch 
     {
-        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        TSQLLoadHandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
     }
 }

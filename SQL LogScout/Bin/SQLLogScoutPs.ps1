@@ -40,7 +40,7 @@ param
     [Parameter(Position=1,HelpMessage='Choose a plus-sign separated list of one or more of: Basic,GeneralPerf,DetailedPerf,Replication,AlwaysOn,Memory,DumpMemory,WPR,Setup,NoBasic. Or MenuChoice')]
     [string[]] $Scenario=[String]::Empty,
 
-    #servername\instnacename is an optional parameter since there is code that auto-discovers instances
+    #servername\instancename is an optional parameter since there is code that auto-discovers instances
     [Parameter(Position=2)]
     [string] $ServerName = [String]::Empty,
 
@@ -64,18 +64,14 @@ param
     [Parameter(Position=7,HelpMessage='Choose Quiet|Noisy')]
     [string] $InteractivePrompts = "Noisy",
 
-    #scenario is an optional parameter since there is a menu that covers for it if not present. Always keep as the last parameter
-    [Parameter(Position=8,Mandatory=$false,HelpMessage='Test parameter that should not be used for most collections')]
-    [string] $DisableCtrlCasInput = "False"
+    #specify the current repeated execution count 
+    [Parameter(Position=8,HelpMessage='$ExecutionCountObject contains the current execution count and repeat collection count')]
+    [PSCustomObject] $ExecutionCountObject = $(New-Object -TypeName PSObject -Property @{CurrentExecCount = 0; RepeatCollection= -1; OverwriteFldr = $null})
+  
 )
 
 
 #=======================================Globals =====================================
-
-if ($global:gDisableCtrlCasInput -eq "False")
-{
-    [console]::TreatControlCAsInput = $true
-}
 
 [string]$global:present_directory = ""
 [string]$global:output_folder = ""
@@ -112,6 +108,12 @@ if ($global:gDisableCtrlCasInput -eq "False")
 [bool] $global:is_secondary_read_intent_only = $false
 [bool]$global:allow_static_data_because_service_offline = $false
 [string]$global:sql_instance_service_status = ""
+[int] $global:is_clustered = 2 # 0 = not clustered, 1 = clustered, 2 = unknown/starting state
+[String]$global:dump_helper_arguments = "none"
+[String]$global:dump_helper_cmd = ""
+[String]$global:dump_helper_outputfolder = ""
+[int] $global:dump_helper_count = 1
+[int] $global:dump_helper_delay = 0
 
 #constants
 [string] $global:BASIC_NAME = "Basic"
@@ -196,16 +198,20 @@ if ($global:gDisableCtrlCasInput -eq "False")
 [string[]] $global:gScenario
 [string] $global:gServerName
 [string] $global:gDeleteExistingOrCreateNew
-[string] $global:gDiagStartTime
-[string] $global:gDiagStopTime
+$global:gDiagStopTime = New-Object -TypeName PSObject -Property @{DateAndOrTime = ""; Relative = $false}
+$global:gDiagStartTime = New-Object -TypeName PSObject -Property @{DateAndOrTime = ""; Relative = $false}
 [string] $global:gInteractivePrompts
-[string] $global:gDisableCtrlCasInput
+$global:gExecutionCount = New-Object -TypeName PSObject -Property @{CurrentExecCount = 0; RepeatCollection= 0; OverwriteFldr = $false}
 
+#global to hold the base date time
+$global:baseDateTime = [DateTime]::MinValue
 
-$global:ScenarioBitTbl = @{}
-$global:ScenarioMenuOrdinals = @{}
+#global to store sqlcmd full path
+$global:sqlcmdPath = ""
 
 #hashtable to use for lookups bits to names and reverse
+$global:ScenarioBitTbl = @{}
+$global:ScenarioMenuOrdinals = @{}
 
 $global:ScenarioBitTbl.Add($global:BASIC_NAME                , $global:basicBit)
 $global:ScenarioBitTbl.Add($global:GENERALPERF_NAME          , $global:generalperfBit)
@@ -255,8 +261,19 @@ $global:SQLSERVERPROPERTYTBL = @{}
 $global:SqlServerVersionsTbl = @{}
 
 #SQLCMD objects reusing the same connection to query SQL Server where needed is more efficient.
-[System.Data.SqlClient.SqlConnection] $global:SQLConnection
-[System.Data.SqlClient.SqlCommand] $global:SQLCcommand
+[System.Data.Odbc.OdbcConnection] $global:SQLConnection
+[System.Data.Odbc.OdbcCommand] $global:SQLCcommand
+
+#List of SQL Script files to clean upon exit
+$global:tblInternalSQLFiles = @()
+
+#SQLInstanceType is a global hashtable to map the type of SQL instance. Enums are not well supported in PS 4.0 due to using module
+$global:SQLInstanceType = @{
+    "StartingValue" = 0
+    "NamedInstance" = 1
+    "DefaultInstanceVNN" = 2
+    "DefaultInstanceHostName" = 3
+}
 
 #=======================================Start of \OUTPUT and \INTERNAL directories and files Section
 #======================================== START of Process management section
@@ -299,7 +316,6 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
            $DiagStartTimeHlpStr = "`n[-DiagStartTime <string>] "
            $DiagStopTimeHlpStr = "`n[-DiagStopTime <string>] "
            $InteractivePromptsHlpStr = "`n[-InteractivePrompts <string>] "
-           $DisableCtrlCasInputHlpStr = "`n[-DisableCtrlCasInput <string>] "
        
         
 
@@ -313,7 +329,6 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                5 { $DiagStartTimeHlpStr= $DiagStartTimeHlpStr + "< " + $ValidArguments +" >"}
                6 { $DiagStopTimeHlpStr = $DiagStopTimeHlpStr + "< " + $ValidArguments +" >"}
                7 { $InteractivePromptsHlpStr = $InteractivePromptsHlpStr + "< " + $ValidArguments +" >"}
-               8 { $DisableCtrlCasInputHlpStr = $DisableCtrlCasInputHlpStr + "< " + $ValidArguments +" >"}
            }
 
    
@@ -325,9 +340,10 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
        + $delExistingOrCreateNewHlpStr `
        + $DiagStartTimeHlpStr`
        + $DiagStopTimeHlpStr `
-       + $InteractivePromptsHlpStr ` + "`n" `
+       + $InteractivePromptsHlpStr `
+       + $ExecutionCountHlpStr ` + "`n" `
        + "`nExample: `n" `
-       + "  SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore DbSrv `"d:\log`" DeleteDefaultFolder `"01-01-2000`" `"04-01-2021 17:00`" Quiet`n"
+       + "  SQL_LogScout.ps1 -Scenario `"GeneralPerf+AlwaysOn+BackupRestore`" -ServerName `"DbSrv`" -CustomOutputPath `"d:\log`" -DeleteExistingOrCreateNew `"DeleteDefaultFolder`" -DiagStartTime `"01-01-2000`" -DiagStopTime`"04-01-2021 17:00`" -InteractivePrompts `"Quiet`" `n"
 
 
            Microsoft.PowerShell.Utility\Write-Host $HelpString
@@ -337,7 +353,7 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
 
             Microsoft.PowerShell.Utility\Write-Host "
 
-            sql_logscout.cmd [-Scenario <string[]>] [-ServerInstanceConStr <string>] [-CustomOutputPath <string>] [-DeleteExistingOrCreateNew <string>] [-DiagStartTime <string>] [-DiagStopTime <string>] [-InteractivePrompts <string>] [<CommonParameters>]
+            SQL_LogScout.ps1 [-Scenario <string[]>] [-ServerInstanceConStr <string>] [-CustomOutputPath <string>] [-DeleteExistingOrCreateNew <string>] [-DiagStartTime <string>] [-DiagStopTime <string>] [-InteractivePrompts <string>] [<CommonParameters>]
         
             DESCRIPTION
                 SQL LogScout allows you to collect diagnostic logs from your SQL Server 
@@ -353,14 +369,14 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                 This is the most common method to execute SQL LogScout which allows you to pick your choices from a menu of options " -ForegroundColor Green
 
             Microsoft.PowerShell.Utility\Write-Host " "
-            Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd"
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1"
 
             Microsoft.PowerShell.Utility\Write-Host "
                 B. Execute SQL LogScout using a specific scenario. This command starts the diagnostic collection with 
                 the GeneralPerf scenario." -ForegroundColor Green
 
             Microsoft.PowerShell.Utility\Write-Host " "
-            Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd GeneralPerf" 
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"GeneralPerf`"" 
             
             Microsoft.PowerShell.Utility\Write-Host "
                 C. Execute SQL LogScout by specifying folder creation option
@@ -368,7 +384,7 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                 use the present directory and folder option to delete the default \output folder if present" -ForegroundColor Green
 
             Microsoft.PowerShell.Utility\Write-Host " "
-            Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd DetailedPerf SQLInstanceName ""UsePresentDir""  ""DeleteDefaultFolder"" "
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"DetailedPerf`" -ServerName `"SQLInstanceName`" -CustomOutputPath `"UsePresentDir`" -DeleteExistingOrCreateNew `"DeleteDefaultFolder`" "
             
             Microsoft.PowerShell.Utility\Write-Host "
                 D. Execute SQL LogScout with start and stop times
@@ -378,12 +394,20 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                 while setting the start time in the past to ensure the collectors start without delay. " -ForegroundColor Green
 
             Microsoft.PowerShell.Utility\Write-Host " "
-            Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd AlwaysOn ""DbSrv"" ""PromptForCustomDir""  ""NewCustomFolder""  ""2000-01-01 19:26:00"" ""2020-10-29 13:55:00""  "
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"AlwaysOn`" -ServerName `"DbSrv`" -CustomOutputPath `"PromptForCustomDir`"  -DeleteExistingOrCreateNew `"NewCustomFolder`"  -DiagStartTime `"2000-01-01 19:26:00`" -DiagStopTime `"2020-10-29 13:55:00`"  "
+            
+            Microsoft.PowerShell.Utility\Write-Host " 
+                The following example collects the AlwaysOn scenario against the `"DbSrv`"  default instance, 
+                uses the default \output folder under d:\log. Then uses relative time from current time to set the start time 15 minutes from now
+                and stop time to one hour from now. " -ForegroundColor Green
+
+            Microsoft.PowerShell.Utility\Write-Host " "    
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"AlwaysOn`" -ServerName `"DbSrv`" -CustomOutputPath `"d:\log`"  -DeleteExistingOrCreateNew `"DeleteDefaultFolder`"  -DiagStartTime `"+00:15:00`" -DiagStopTime `"+01:00:00`"  "
 
 
             Microsoft.PowerShell.Utility\Write-Host "
-                Note: All parameters are required if you need to specify the last parameter. For example, if you need to specify stop time, 
-                the prior parameters have to be passed.
+                Note: All parameters are required if you need to specify the last parameter when you use SQL_LogScout.cmd. For example, if you need to specify stop time, 
+                the prior parameters have to be passed. However, if you use SQL_LogScout.ps1, parameters can be ommitted and passed without order
 
                 E. Execute SQL LogScout with multiple scenarios and in Quiet mode
 
@@ -392,12 +416,21 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
                 while setting the start time in the past to ensure the collectors start without delay. It also automatically accepts the prompts 
                 by using Quiet mode and helps a full automation with no interaction." -ForegroundColor Green
 
-                Microsoft.PowerShell.Utility\Write-Host " "
-                Microsoft.PowerShell.Utility\Write-Host "               SQL_LogScout.cmd GeneralPerf+AlwaysOn+BackupRestore ""DbSrv"" ""d:\log"" ""DeleteDefaultFolder"" ""01-01-2000"" ""04-01-2021 17:00"" Quiet "
+            Microsoft.PowerShell.Utility\Write-Host " "
+            Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"GeneralPerf+AlwaysOn+BackupRestore`" -ServerName `"DbSrv`" -CustomOutputPath `"d:\log`" -DeleteExistingOrCreateNew `"DeleteDefaultFolder`" -DiagStartTime `"01-01-2000`" -DiagStopTime `"04-01-2021 17:00`" -InteractivePrompts `"Quiet`" "
             
-            Microsoft.PowerShell.Utility\Write-Host "
-                Note: Selecting Quiet mode implicitly selects ""Y"" to all the screens that requires your agreement to proceed."  -ForegroundColor Green
         
+            Microsoft.PowerShell.Utility\Write-Host "
+
+                F. Execute SQL LogScout in continuous mode (RepeatCollections) and keep a set number of output folders
+
+                The example collects data for Memory scenario without Basic logs against the default instance. It runs SQL LogScout 11 times 
+                (one initial run and 10 repeat runs), and keeps only the last 2 output folders of the 11 collections. It starts collection 2 seconds after the initialization 
+                and runs for 10 seconds." -ForegroundColor Green
+
+                Microsoft.PowerShell.Utility\Write-Host " "
+                Microsoft.PowerShell.Utility\Write-Host "               .\SQL_LogScout.ps1 -Scenario `"Memory+NoBasic`" -ServerName `".`" -RepeatCollections 10  -CustomOutputPath `"UsePresentDir`" -DeleteExistingOrCreateNew `"2`" -DiagStartTime `"+00:00:02`" -DiagStopTime `"+00:00:10`"  "
+          
             Microsoft.PowerShell.Utility\Write-Host ""
         }
 
@@ -409,7 +442,6 @@ function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_h
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
    }
 }
-
 
 function ValidateParameters ()
 {
@@ -509,32 +541,53 @@ function ValidateParameters ()
     if (($DiagStartTime -ne "0000") -and ($false -eq [String]::IsNullOrWhiteSpace($DiagStartTime)))
     {
         [DateTime] $dtStartOut = New-Object DateTime
-        if([DateTime]::TryParse($DiagStartTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStartOut) -eq $false)
+
+        #regex for relative time: start with +, then optional 0 in front of hour up to 11 hours, 0 to 59 minutes, 0  to 59 seconds
+        [string] $regexRelativeTime = "^\+(0?[0-9]|1[01]):[0-5][0-9]:[0-5][0-9]$"
+
+        if($true -eq [DateTime]::TryParse($DiagStartTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStartOut))
         {
-            Write-LogError "Parameter 'DiagStartTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`"). Current value '$DiagStartTime' is incorrect."
-            PrintHelp -ValidArguments "yyyy-MM-dd hh:mm:ss" -index 5
+            $global:gDiagStartTime.DateAndOrTime = $DiagStartTime
+            $global:gDiagStartTime.Relative = $false
+        }
+        elseif ($DiagStartTime -match $regexRelativeTime)
+        {
+            $global:gDiagStartTime.DateAndOrTime = $DiagStartTime
+            $global:gDiagStartTime.Relative = $true
+        }
+        else
+        {
+            Write-LogError "Parameter 'DiagStartTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`") or relative start time less than 12 hours (e.g. `"+03:00:05`"). Current value '$DiagStartTime' is incorrect."
+            PrintHelp -ValidArguments "`"yyyy-MM-dd hh:mm:ss`" or `"+hh:mm:ss`"" -index 5
             return $false
         }
-        else 
-        {
-            $global:gDiagStartTime = $DiagStartTime
-        }
     }
-    
 
     #validate DiagStopTime parameter
     if (($DiagStopTime -ne "0000") -and ($false -eq [String]::IsNullOrWhiteSpace($DiagStopTime)))
     {
         [DateTime] $dtStopOut = New-Object DateTime
-        if([DateTime]::TryParse($DiagStopTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStopOut) -eq $false)
+        
+        #regex for relative time: start with +, then optional 0 in front of hour up to 11 hours, 0 to 59 minutes, 0  to 59 seconds
+        [string] $regexRelativeTime = "^\+(0?[0-9]|1[01]):[0-5][0-9]:[0-5][0-9]$"
+
+        #if the time is a valid datetime use it
+        if($true -eq ([DateTime]::TryParse($DiagStopTime, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$dtStopOut)))
         {
-            Write-LogError "Parameter 'DiagStopTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`"). Current value '$DiagStopTime' is incorrect."
-            PrintHelp -ValidArguments "yyyy-MM-dd hh:mm:ss" -index 6
-            return $false
+            $global:gDiagStopTime.DateAndOrTime = $DiagStopTime
+            $global:gDiagStopTime.Relative = $false
+        }   
+        # if relative time e.g. "+03:50:12", then us it
+        elseif (($DiagStopTime -match $regexRelativeTime )) 
+        {
+            $global:gDiagStopTime.DateAndOrTime = $DiagStopTime
+            $global:gDiagStopTime.Relative = $true
         }
         else
         {
-            $global:gDiagStopTime  = $DiagStopTime
+            Write-LogError "Parameter 'DiagStopTime' accepts DateTime values (e.g. `"2021-07-07 17:14:00`") or relative stop time less than 12 hours (e.g. `"+03:00:05`"). Current value '$DiagStopTime' is incorrect."
+            PrintHelp -ValidArguments "`"yyyy-MM-dd hh:mm:ss`" or `"+hh:mm:ss`"" -index 6
+            return $false
         }
     }
 
@@ -559,24 +612,35 @@ function ValidateParameters ()
         return $false
     }
 
-    #validate DisableCtrlCasInput parameter
     
-    if ($DisableCtrlCasInput -eq "True")
+    #set ExecutionCount parameter 
+
+    #first set the value for OverwriteFldr based on user selection
+    if ($global:gDeleteExistingOrCreateNew -eq "DeleteDefaultFolder")
     {
-        #If DisableCtrlCasInput is true, then pass as true
-        $global:gDisableCtrlCasInput = "True"
+        $global:gExecutionCount.OverwriteFldr = $true
+    }
+    elseif ($global:gDeleteExistingOrCreateNew -eq "NewCustomFolder") 
+    {
+        $global:gExecutionCount.OverwriteFldr  = $false
     }
 
+    #set the current execution count and repeat collection value
+    if ($ExecutionCountObject.CurrentExecCount -lt 0)
+    {
+        $global:gExecutionCount.CurrentExecCount = 0
+        $global:gExecutionCount.RepeatCollection = 0
+    }
     else 
     {
-        #any value other than True or null/whitespace, set value to false.
-        $global:gDisableCtrlCasInput = "False"
+        $global:gExecutionCount.CurrentExecCount = $ExecutionCountObject.CurrentExecCount
+        $global:gExecutionCount.RepeatCollection = $ExecutionCountObject.RepeatCollection
     }
+    
 
     # return true since we got to here
     return $true
 }
-
 
 #print copyright message
 CopyrightAndWarranty
@@ -589,4 +653,3 @@ if ($ret -eq $true)
 {
     Start-SQLLogScout
 }
-

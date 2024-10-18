@@ -1,4 +1,12 @@
 
+    function TempDB_and_Tran_Analysis_Query([Boolean] $returnVariable = $false)
+    {
+        Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+        [String] $collectorName = "TempDB_and_Tran_Analysis"
+        [String] $fileName = $global:internal_output_folder + $collectorName + ".sql"
+
+        $content =  "
 SET NOCOUNT ON
 USE tempdb
 GO
@@ -78,6 +86,7 @@ BEGIN
 	  ON su.session_id = s.session_id
     LEFT OUTER JOIN sys.dm_exec_connections c
 	  on su.session_id = c.session_id
+    AND c.net_transport <> 'session'
 	OUTER APPLY sys.dm_exec_sql_text (c.most_recent_sql_handle) as t
     WHERE (internal_objects_alloc_page_count +	internal_objects_dealloc_page_count + user_objects_alloc_page_count + user_objects_dealloc_page_count + su.user_objects_deferred_dealloc_page_count) !=0
     ORDER BY (user_objects_alloc_page_count + internal_objects_alloc_page_count) DESC
@@ -182,6 +191,7 @@ BEGIN
 	    ON s_er.session_id = s_tst.session_id
 	  LEFT OUTER JOIN sys.dm_exec_connections con 
 	    ON con.session_id = s_tst.session_id 
+      AND con.net_transport <> 'session'
       OUTER APPLY sys.dm_exec_sql_text(con.most_recent_sql_handle) T
   ORDER BY database_transaction_begin_time ASC
   OPTION (max_grant_percent = 3, MAXDOP 2)
@@ -523,3 +533,37 @@ BEGIN
   WAITFOR DELAY '00:01:00'
 END
 GO 
+    "
+
+    if ($true -eq $returnVariable)
+    {
+    Write-LogDebug "Returned variable without creating file, this maybe due to use of GUI to filter out some of the xevents"
+
+    $content = $content -split "`r`n"
+    return $content
+    }
+
+    if (-Not (Test-Path $fileName))
+    {
+        Set-Content -Path $fileName -Value $content
+    } else 
+    {
+        Write-LogDebug "$filName already exists, could be from GUI"
+    }
+
+    #check if command was successful, then add the file to the list for cleanup AND return collector name
+    if ($true -eq $?) 
+    {
+        $global:tblInternalSQLFiles += $collectorName
+        return $collectorName
+    }
+
+    Write-LogDebug "Failed to build SQL File " 
+    Write-LogDebug $fileName
+
+    #return false if we reach here.
+    return $false
+
+    }
+
+    
