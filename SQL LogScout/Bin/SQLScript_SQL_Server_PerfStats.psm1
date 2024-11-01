@@ -68,7 +68,7 @@ AS
     RAISERROR (' ', 0, 1) WITH NOWAIT
     RAISERROR ('-- exec_connections --', 0, 1) WITH NOWAIT;
     SELECT TOP 100 CONVERT (varchar(30), @runtime, 126) AS 'runtime'
-        ,  c.session_id
+        , c.session_id
         , c.most_recent_session_id
         , c.connect_time
         , c.net_transport
@@ -90,7 +90,7 @@ AS
         , c.connection_id
         , c.parent_connection_id
         , c.most_recent_sql_handle
-    FROM sys.dm_exec_connections as C
+    FROM sys.dm_exec_connections as c
     OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
 
         

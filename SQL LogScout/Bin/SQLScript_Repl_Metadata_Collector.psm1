@@ -95,7 +95,7 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 		--While loop to iterate through all distribution databases. At the end of this loop, we mark it as processed and proceed onto the next until there are none left.
 		WHILE(SELECT COUNT(*) FROM @distribution_dbtable WHERE Processed = 0) > 0
 			BEGIN
-				SELECT TOP 1 @DistribName = distribution_db FROM @distribution_dbtable WHERE PROCESSED = 0
+				SELECT TOP 1 @DistribName = distribution_db FROM @distribution_dbtable WHERE Processed = 0
 
 				PRINT 'Logging: Exporting distribution database tables common for troubleshooting'
 				-- get all needed info from distribution database

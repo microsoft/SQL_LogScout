@@ -32,8 +32,8 @@ function InitAppVersion()
 {
     $major_version = "6"
     $minor_version = "24"
-    $build = "10"
-    $revision = "10"
+    $build = "11"
+    $revision = "02"
     $global:app_version = $major_version + "." + $minor_version + "." + $build + "." + $revision
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
@@ -1937,7 +1937,7 @@ function GetNeverEndingQueryPlans([String] $TimeOfCapture = "Startup")
             it checks for neverending queries : shoujld have 0 wait and increasing cpu time
             Then it will check for the execution plans
             */
-            USE TEMPDB
+            USE tempdb
             SET NOCOUNT ON
             --GO
             IF OBJECT_ID ('#active_trasnactions', 'U') IS NOT NULL
@@ -2006,7 +2006,7 @@ function GetNeverEndingQueryPlans([String] $TimeOfCapture = "Startup")
                     FROM sys.dm_exec_sessions AS s
                     JOIN sys.dm_exec_requests AS r 
                         ON r.session_id = s.session_id 
-                            CROSS APPLY sys.Dm_exec_sql_text(r.sql_handle) AS st
+                            CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) AS st
                     LEFT JOIN (sys.dm_tran_session_transactions stran 
                         JOIN sys.dm_tran_active_transactions AS atrn 
                             ON stran.transaction_id = atrn.transaction_id )

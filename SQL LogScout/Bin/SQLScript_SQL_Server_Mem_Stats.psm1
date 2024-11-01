@@ -290,7 +290,7 @@ BEGIN
 	'ORDER BY SUM (CONVERT(bigint,pages_in_bytes)) DESC '
 END	
 
-EXEC SP_EXECUTESQL @sqlmemobj, N'@runtime datetime', @runtime
+EXEC sp_executesql @sqlmemobj, N'@runtime datetime', @runtime
 RAISERROR ('', 0, 1) WITH NOWAIT
 
 -- -- Check for windows memory notifications
