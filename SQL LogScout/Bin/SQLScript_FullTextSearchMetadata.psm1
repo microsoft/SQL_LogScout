@@ -133,7 +133,7 @@ BEGIN
     SET @sql = 'USE [' + @dbname + '];'
 	SET @sql = @sql + N'IF EXISTS (SELECT * FROM ['+@dbname+N'].sys.fulltext_catalogs) 
                         BEGIN 
-						  INSERT INTO #tbl_FullText_Catalog_Info_PropertieS
+						  INSERT INTO #tbl_FullText_Catalog_Info_Properties
                           SELECT 
                             ''' + @dbname + ''' AS [DatabaseName],
                             cat.name AS [CatalogName], cat.fulltext_catalog_id AS [CatalogID],
@@ -161,7 +161,7 @@ BEGIN
                           LEFT OUTER JOIN sys.database_principals AS dp ON cat.principal_id=dp.principal_id 
                           LEFT OUTER JOIN sys.fulltext_indexes AS tbl ON cat.fulltext_catalog_id = tbl.fulltext_catalog_id  
                         END'
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 
 END
@@ -219,7 +219,7 @@ BEGIN
                     INNER JOIN sys.sysobjects as sobj ON fti.object_id=sobj.id
                    END'
 
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 END
 
@@ -262,7 +262,7 @@ BEGIN
                     INNER JOIN sys.sysobjects as sobj ON icol.object_id=sobj.id
                    END'
 
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 
 END
@@ -311,7 +311,7 @@ BEGIN
                             INNER JOIN sys.fulltext_languages AS sl ON sl.lcid=icol.language_id
                         END'
 
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 
 END
@@ -374,7 +374,7 @@ BEGIN
                             FROM sys.fulltext_stoplists
                         END'
 
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 
 END
@@ -416,7 +416,7 @@ BEGIN
 	                               language_id
                             FROM sys.fulltext_stopwords
                         END'
-	EXEC SP_EXECUTESQL @sql
+	EXEC sp_executesql @sql
 	SET @count = @count + 1 
 
 END

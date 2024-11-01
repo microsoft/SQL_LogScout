@@ -147,7 +147,7 @@ function TSQLLoadInsertsAndSelectFunction
         
         --Wait for logscout to start up for ScenarioTest
         WAITFOR DELAY '00:00:30';
-        USE TEMPDB;
+        USE tempdb;
         GO
         
         IF OBJECT_ID('##TestSQLLogscoutTable') IS NOT NULL DROP TABLE ##TestSQLLogscoutTable;

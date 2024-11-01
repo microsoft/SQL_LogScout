@@ -596,12 +596,14 @@ function getServerproperty()
     return $SQLSERVERPROPERTYTBL
 }
 
-function getSQLConnection ([Boolean] $SkipStatusCheck = $false)
+function getSQLConnection ([Boolean] $SkipStatusCheck = $false, [int] $tryCount = 0)
 {
     Write-LogDebug "inside " $MyInvocation.MyCommand
 
+
     try
     {
+
         $globalCon = $global:SQLConnection
 
         if ( $null -eq $globalCon) 
@@ -610,7 +612,7 @@ function getSQLConnection ([Boolean] $SkipStatusCheck = $false)
 
             [System.Data.Odbc.OdbcConnection] $globalCon = New-Object System.Data.Odbc.OdbcConnection
 
-            $conString = getSQLConnectionString -SkipStatusCheck $SkipStatusCheck
+            $conString = getSQLConnectionString -SkipStatusCheck $SkipStatusCheck -tryCount $tryCount
 
             if ($false -eq $conString ) 
             {
@@ -646,8 +648,8 @@ function getSQLConnection ([Boolean] $SkipStatusCheck = $false)
     catch {
         if ($PSItem.Exception.InnerException.Message.Contains("[08001]"))
         {
-            Write-LogWarning "Could not Connect to SQL Server "
-            Write-LogDebug $PSItem.Exception.Message
+            Write-LogWarning "Could not connect to SQL Server "
+            HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
         }
         else 
         {
@@ -657,7 +659,55 @@ function getSQLConnection ([Boolean] $SkipStatusCheck = $false)
     }
 }
 
-function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false)
+function getODBCDriver ([int] $tryCount)
+{
+    Write-LogDebug "inside " $MyInvocation.MyCommand
+
+    # Get the list of ODBC drivers
+    $drivers = Get-OdbcDriver -Name "*SQL Server*" -Platform 32-bit 
+
+    # Filter and sort the drivers by version
+    $sortedDrivers = $drivers |
+        Sort-Object {
+            if ($_.Name -match 'ODBC Driver (\d+) for SQL Server') {
+                [int]$matches[1]
+            } elseif ($_.Name -match 'SQL Server Native Client (\d+)') {
+                [int]$matches[1]
+            } else {
+                0
+            }
+        } -Descending 
+
+    # Output the sorted drivers
+    $sortedDriverNames = $sortedDrivers.Name 
+
+    Write-LogDebug "List of ODBC Drivers on the system"
+    $sortedDriverNames | ForEach-Object { Write-LogDebug "  $($_)"}
+
+    [String] $highestDriver
+    if (($sortedDriverNames.Count -ge 1) -and ( $tryCount -lt $sortedDriverNames.Count))
+    {
+        [String] $temp_DriverName
+        if ($sortedDriverNames.Count -gt 1)
+        {
+            $temp_DriverName = $sortedDriverNames[$tryCount]
+        } else {
+            $temp_DriverName = $sortedDriverNames.ToString()
+        }
+        # Get the highest version driver for the number of tries
+        $highestDriver = $temp_DriverName 
+    } 
+    else 
+    {
+        $highestDriver = "SQL Server"
+        
+    }
+    Write-LogDebug "Highest ODBC driver returned ($highestDriver)"
+
+    return $highestDriver
+}
+
+function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false, [int] $tryCount = 0)
 {
     Write-LogDebug "inside " $MyInvocation.MyCommand
 
@@ -684,10 +734,44 @@ function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false)
             exit
         }
 
+        [String] $ODBCDriverName = getODBCDriver -tryCount $tryCount
+        [System.Data.Odbc.OdbcConnectionStringBuilder] $connectionStringBuilder =  New-Object -TypeName System.Data.Odbc.OdbcConnectionStringBuilder
+
+        #verifying that we have recevied a value ODBC Driver name, if not we use SQL Server as default.
+        if ([string]::IsNullOrEmpty($ODBCDriverName) -or $ODBCDriverName.Trim() -notmatch ".*SQL Server.*" )
+        {
+            
+            Write-LogDebug "getODBCDriver failed to return value, we are failing back to default"
+            $ODBCDriverName = "SQL Server"
+        }
+
+        $connectionStringBuilder.Driver = $ODBCDriverName.Trim()
+        $connectionStringBuilder["Server"] = $SQLInstance
+        $connectionStringBuilder["Database"] = "master"
+        $connectionStringBuilder["Application Name"] = "SQLLogScout"
+
+        if ("SQL Server" -ne $ODBCDriverName.Trim())
+        {
+            $connectionStringBuilder["Trusted_Connection"]="Yes"
+            $connectionStringBuilder["Encrypt"] = "Yes"
+            $connectionStringBuilder["TrustServerCertificate"] = "Yes"
+
+        } else {
+            $connectionStringBuilder["Integrated Security"] = "True"
+            Write-LogWarning ("*"*70)
+            Write-LogWarning "*  SQL LogScout is switching to the classic SQL Server ODBC driver."  
+            Write-LogWarning "*  Thus, this local connection is unencrypted to ensure it is successful"
+            Write-LogWarning "*  To exit without collecting LogScout press Ctrl+C"
+            Write-LogWarning ("*"*70)
+            Start-Sleep 6
+
+        }
         Write-LogDebug "Received parameter SQLInstance: `"$SQLInstance`"" -DebugLogLevel 2
-        
+
+        Write-LogDebug "Connection String : " $connectionStringBuilder.ConnectionString
+
         #default integrated security and encryption with trusted server certificate
-        return "Driver={SQL Server};Server=$SQLInstance;Database=master;Application Name=SQLLogScout;Integrated Security=True;Encrypt=True;TrustServerCertificate=true;"
+        return $connectionStringBuilder.ConnectionString #"Driver={SQL Server};Server=$SQLInstance;Database=master;Application Name=SQLLogScout;Integrated Security=True;Encrypt=NotTrue;TrustServerCertificate=true;"
     }
 
     catch {
@@ -709,6 +793,13 @@ function getSQLCommand([Boolean] $SkipStatusCheck)
         {
             $SqlCmd = New-Object System.Data.Odbc.OdbcCommand
             $conn = getSQLConnection($SkipStatusCheck)
+
+            #if we receive $false (connection failed for some reason) we try multiple times to see if we can find a working driver
+            for ($i = 1; $i -lt 10 -and $false -eq $conn; $i++ ) {
+                Write-LogDebug "First ODBC connection failed, trying a $($i+1) time"
+                Write-LogDebug "Trying ODBC Driver :  $i"
+                $conn = getSQLConnection($SkipStatusCheck) -tryCount $i
+            }
 
             if ($false -eq $conn) {
                 #failed to obtain a connection

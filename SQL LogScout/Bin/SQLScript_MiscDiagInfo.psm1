@@ -372,7 +372,7 @@
     DECLARE @dbname NVARCHAR(64), @dbid INT
     DECLARE @dbcc_log_info VARCHAR(MAX)
 
-    DECLARE Database_Cursor CURSOR FOR SELECT database_id, name FROM MASTER.sys.databases
+    DECLARE Database_Cursor CURSOR FOR SELECT database_id, name FROM master.sys.databases
 
     OPEN Database_Cursor;
 
