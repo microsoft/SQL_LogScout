@@ -155,6 +155,8 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 							agent_id,runstatus,start_time,time,duration,comments,xact_seqno,current_delivery_rate,current_delivery_latency,delivered_transactions,delivered_commands,
 							average_commands,delivery_rate,delivery_latency,total_delivered_commands,error_id,updateable_row,timestamp 
 							FROM MSdistribution_history WITH (NOLOCK)
+							/* limit to last 3 days of exeuction as a precaution if the distribution cleanup job is having issues */
+							WHERE time >= DATEADD(DAY, -3, GETDATE())
 							END'
 						)
 					RAISERROR('',0,1) WITH NOWAIT
@@ -182,6 +184,8 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 							agent_id,runstatus,start_time,time,duration,comments,xact_seqno,delivery_time,delivered_transactions,delivered_commands,average_commands,delivery_rate,delivery_latency,
 							error_id,timestamp,updateable_row
 							FROM MSlogreader_history WITH (NOLOCK)
+							/* limit to last 3 days of exeuction as a precaution if the distribution cleanup job is having issues */
+							WHERE time >= DATEADD(DAY, -3, GETDATE())
 							END'
 						)
 					RAISERROR('',0,1) WITH NOWAIT
@@ -222,6 +226,8 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 							SELECT distribution_dbname = '''+@DistribName+''''+',
 							session_id,agent_id,comments,error_id,timestamp,updateable_row,time		
 							FROM MSmerge_history WITH (NOLOCK)
+							/* limit to last 3 days of exeuction as a precaution if the distribution cleanup job is having issues */
+							WHERE time >= DATEADD(DAY, -3, GETDATE())
 							END'
 						)
 					RAISERROR('',0,1) WITH NOWAIT
@@ -344,6 +350,8 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 							agent_id,publication_id,runstatus,start_time,time,duration,comments,transaction_id,transaction_status,transactions_processed,commands_processed,
 							delivery_rate,transaction_rate,subscriber,subscriberdb,error_id,timestamp
 							FROM MSqreader_history WITH (NOLOCK)
+							/* limit to last 3 days of exeuction as a precaution if the distribution cleanup job is having issues */
+							WHERE time >= DATEADD(DAY, -3, GETDATE())
 							END'
 						)
 					RAISERROR('',0,1) WITH NOWAIT
@@ -507,6 +515,8 @@ PRINT 'Logging: Creating Table Variable to Store Distribution Database Records'
 							SELECT distribution_dbname = '''+@DistribName+''''+',
 							agent_id,runstatus,start_time,time,duration,comments,delivered_transactions,delivered_commands,delivery_rate,error_id,timestamp
 							FROM MSsnapshot_history WITH (NOLOCK)
+							/* limit to last 3 days of exeuction as a precaution if the distribution cleanup job is having issues */
+							WHERE time >= DATEADD(DAY, -3, GETDATE())
 							END'
 						)
 					RAISERROR('',0,1) WITH NOWAIT
