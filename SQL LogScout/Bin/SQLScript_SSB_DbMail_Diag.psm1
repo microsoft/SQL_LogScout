@@ -264,7 +264,7 @@ PRINT '-- sysmail_event_log_sysmail_faileditems --'
 SELECT er.log_id, 
     er.event_type,
     er.log_date, 
-    er.description, 
+    er.description,
     er.process_id, 
     er.mailitem_id, 
     er.account_id, 
@@ -273,8 +273,7 @@ SELECT er.log_id,
     fi.send_request_user,
     fi.send_request_date,
     fi.recipients, 
-	fi.subject, 
-	fi.body
+	fi.subject
 FROM msdb.dbo.sysmail_event_log er 
     LEFT JOIN msdb.dbo.sysmail_faileditems fi
 ON er.mailitem_id = fi.mailitem_id
@@ -289,7 +288,6 @@ SELECT mailitem_id,
        blind_copy_recipients,
        subject,
 	   from_address,
-       body,
        body_format,
        importance,
        sensitivity,
@@ -348,7 +346,7 @@ SELECT
   log_id            ,
   event_type        ,
   log_date          ,
-  description       ,
+  description,
   process_id        ,
   mailitem_id       ,
   account_id        ,

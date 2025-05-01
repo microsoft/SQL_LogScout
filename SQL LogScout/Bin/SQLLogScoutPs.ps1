@@ -81,8 +81,8 @@ param
 [string]$global:perfmon_active_counter_file = "LogmanConfig.txt"
 [string]$global:restart_sqlwriter = ""
 [bool]$global:perfmon_counters_restored = $false
-[string]$NO_INSTANCE_NAME = "no_instance_found"
-[string]$global:sql_instance_conn_str = $NO_INSTANCE_NAME #setting the connection sting to $NO_INSTANCE_NAME initially
+[string]$global:NO_INSTANCE_NAME = "_no_instance_found_"
+[string]$global:sql_instance_conn_str = $global:NO_INSTANCE_NAME #setting the connection sting to $global:NO_INSTANCE_NAME initially
 [System.Collections.ArrayList]$global:processes = New-Object -TypeName System.Collections.ArrayList
 [System.Collections.ArrayList] $global:ScenarioChoice = @()
 [bool] $global:stop_automatically = $false
@@ -114,6 +114,8 @@ param
 [String]$global:dump_helper_outputfolder = ""
 [int] $global:dump_helper_count = 1
 [int] $global:dump_helper_delay = 0
+[bool] $global:is_connection_encrypted = $true
+[string] $global:stopFilePath = "logscout.stop"
 
 #constants
 [string] $global:BASIC_NAME = "Basic"
@@ -275,32 +277,80 @@ $global:SQLInstanceType = @{
     "DefaultInstanceHostName" = 3
 }
 
-#=======================================Start of \OUTPUT and \INTERNAL directories and files Section
-#======================================== START of Process management section
-if ($PSVersionTable.PSVersion.Major -gt 4) { Import-Module .\GUIHandler.psm1 }
-Import-Module .\CommonFunctions.psm1
-#=======================================End of \OUTPUT and \INTERNAL directories and files Section
-#======================================== END of Process management section
-
-
-#======================================== START OF NETNAME + INSTANCE SECTION - Instance Discovery
-Import-Module .\InstanceDiscovery.psm1
-#======================================== END OF NETNAME + INSTANCE SECTION - Instance Discovery
-
+#=======================================Start of Module Import secion
 
 #======================================== START of Console LOG SECTION
-Import-Module .\LoggingFacility.psm1
+Import-Module .\LoggingFacility.psm1 -Force -Global
 #======================================== END of Console LOG SECTION
 
-#======================================== START of File Attribute Validation SECTION
-Import-Module .\Confirm-FileAttributes.psm1
-#======================================== END of File Attribute Validation SECTION
+#======================================== Import-Module replace should happen before any import-module calls
+#Remove Import-Module if it is already custom loaded.
+Remove-Item -Path Function:\Import-Module -ErrorAction  SilentlyContinue
 
-#======================================== START of File Attribute Validation SECTION
-Import-Module .\SQLLogScoutPs.psm1 -DisableNameChecking
-#======================================== END of File Attribute Validation SECTION
+Import-Module .\CustomImportModule.psm1 -Force -Global
+#======================================== END of Import-Module replace should happen before any import-module calls
 
+# Get all files starting with SQLScript and ending with .psm1
+$scriptFiles = ( 'SQLScript_AlwaysOnDiagScript',
+'SQLScript_ChangeDataCapture',
+'SQLScript_Change_Tracking',
+'SQLScript_FullTextSearchMetadata',
+'SQLScript_HighCPU_perfstats',
+'SQLScript_High_IO_Perfstats',
+'SQLScript_linked_server_config',
+'SQLScript_MiscDiagInfo',
+'SQLScript_NeverEndingQuery_perfstats',
+'SQLScript_ProfilerTraces',
+'SQLScript_QueryStore',
+'SQLScript_Repl_Metadata_Collector',
+'SQLScript_SQL_Server_Mem_Stats',
+'SQLScript_SQL_Server_PerfStats',
+'SQLScript_SQL_Server_PerfStats_Snapshot',
+'SQLScript_SSB_DbMail_Diag',
+'SQLScript_TempDB_and_Tran_Analysis',
+'SQLScript_xevent_AlwaysOn_Data_Movement',
+'SQLScript_xevent_backup_restore',
+'SQLScript_xevent_core',
+'SQLScript_xevent_detailed',
+'SQLScript_xevent_general',
+'SQLScript_xevent_servicebroker_dbmail',
+'SqlVersionsTable',
+'InstanceDiscovery',
+'SQLLogScoutPs',
+'Confirm-FileAttributes',
+#'LoggingFacility', #should be imported first to load write functions
+'InstanceDiscovery',
+'CommonFunctions'
+#'GUIHandler' #will be imported separately since it requires PS 4 and up to function
+)
 
+# Import each module
+foreach ($file in $scriptFiles) {
+    try {
+        Write-LogDebug "Processing $file"
+        $fileName = "$file.psm1"
+        $fileFullName = "$PSScriptRoot\$fileName"
+
+        Write-LogDebug "Importing file : $fileFullName"
+
+        Import-Module -Name $fileFullName -Force -ErrorAction Stop
+
+        Write-LogDebug "Imported module: $($fileName)"
+    } catch {
+        Write-LogWarning $("="*75)
+        Write-LogWarning "Please check if SQL LogScout module files are missing, quarantined or locked by"
+        Write-LogWarning "an anti-virus program or another service/application."
+        Write-LogWarning $("="*75)
+
+        Write-LogError "Failed to import module: $($fileName). Error: $_"
+        exit
+    }
+}
+
+#Importing GUIHandler separately and only if PS version is 4 and up
+if ($PSVersionTable.PSVersion.Major -gt 4) { Import-Module .\GUIHandler.psm1 }
+
+#=======================================End of Module Import secion
 function PrintHelp ([string]$ValidArguments ="", [int]$index=777, [bool]$brief_help = $true)
 {
    Try

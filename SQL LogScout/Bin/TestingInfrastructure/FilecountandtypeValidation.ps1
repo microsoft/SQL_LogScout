@@ -151,16 +151,20 @@ function BuildBasicFileArray([bool]$IsNoBasic)
         'NetTCPandUDPConnections.out',
         'SQL_AzureVM_Information.out',
         'Environment_Variables.out',
-        'azcmagent-logs'
+        'azcmagent-logs',
+        'AllMemoryDumps_List.out',
+        'exception.log',
+        'SQLDUMPER_ERRORLOG.log',
+        'DotNetVersions.out'
 	)
 
 	# inclusions and exclusions to the array
-    ModifyArray -ActionType "Add" -TextToFind "This is a Windows Cluster for sure!"  -ArrayToEdit $global:BasicFiles -ReferencedLog "_SQLDIAG"
+    ModifyArray -ActionType "Add" -TextToFind "Getting MSSQLSERVER_SQLDIAG*.xel files"  -ArrayToEdit $global:BasicFiles -ReferencedLog "_SQLDIAG"
     ModifyArray -ActionType "Remove" -TextToFind "Azcmagent not found" -ArrayToEdit $global:BasicFiles -ReferencedLog "azcmagent-logs"
     ModifyArray -ActionType "Remove" -TextToFind "Will not collect SQLAssessmentAPI" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLAssessmentAPI"
     ModifyArray -ActionType "Remove" -TextToFind "No SQLAgent log files found" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLAGENT"
     ModifyArray -ActionType "Remove" -TextToFind "SQL_AzureVM_Information will not be collected" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQL_AzureVM_Information.out"
-    ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog ".mdmp"
+    ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog "PATTERN:.*\.(mdmp|dmp)$"
     ModifyArray -ActionType "Add" -TextToFind "memory dumps \(max count limit of 20\), from the past 2 months, of size < 100 MB"  -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLDUMPER_ERRORLOG.log"
     ModifyArray -ActionType "Add" -TextToFind "HADR /AG is enabled on this system" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOnDiagScript.out"
     ModifyArray -ActionType "Add" -TextToFind "Found AlwaysOn_health files" -ArrayToEdit $global:BasicFiles -ReferencedLog "AlwaysOn_health"
@@ -170,7 +174,10 @@ function BuildBasicFileArray([bool]$IsNoBasic)
     ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "FDLAUNCHERRORLOG"
     ModifyArray -ActionType "Add" -TextToFind "FullText is installed on this SQL instance" -ArrayToEdit $global:BasicFiles -ReferencedLog "_FD"
     ModifyArray -ActionType "Add" -TextToFind "FulText-Search Log file *SQLFT* copied." -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLFT"
+    ModifyArray -ActionType "Remove" -TextToFind "Not capturing exception.log. File not found in the" -ArrayToEdit $global:BasicFiles -ReferencedLog "exception.log"
+    ModifyArray -ActionType "Remove" -TextToFind "Not capturing SQL Dumper Error Log. File not found in the" -ArrayToEdit $global:BasicFiles -ReferencedLog "SQLDUMPER_ERRORLOG.log"
 
+    
     #calculate count of expected files
     $ExpectedFiles = $global:BasicFiles
     return $ExpectedFiles
@@ -425,7 +432,8 @@ function BuildSetupFileArray([bool]$IsNoBasic)
         '_HKLM_CurVer_Uninstall.txt',
         '_HKLM_MicrosoftSQLServer.txt',
         '_MissingMsiMsp_Detailed.txt',
-        '_MissingMsiMsp_Summary.txt'
+        '_MissingMsiMsp_Summary.txt',
+        '_InstalledPrograms.out'
     )
 
 
@@ -884,10 +892,23 @@ function FileCountAndFileTypeValidation([string]$scenario_string, [bool]$IsNoBas
             #loop through array of actual files found
             foreach ($actFile in $LogsCollected)
             {
-                # if a file is found , set the flag
-                if ($actFile.Name -like ("*" + $expFile + "*"))
+                # if a file is found , set the flag to $true
+                # for PATTERN: files, use -match instead of -like. These are custom cases where we may need an OR search for multiple files for example
+                if ($expFile.StartsWith("PATTERN:"))
                 {
-                    $file_found = $true
+                    # remove the PATTERN: from the string and trim spaces
+                    $pattern = ($expFile -replace "PATTERN:", "").Trim()
+                    if($actFile.Name -match $pattern)
+                    {
+                        $file_found = $true
+                    }
+                } 
+                else 
+                {
+                     if($actFile.Name -like ("*" + $expFile + "*"))
+                     {
+                        $file_found = $true
+                     }  
                 }
             }
 

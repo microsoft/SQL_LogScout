@@ -32,7 +32,10 @@ param
     [int] $RepeatCollections = 0,
 
     [Parameter(Position=10)]
-    [double] $RunDuration = 3
+    [double] $RunDuration = 3,
+    
+    [Parameter(Position=11)]
+    $UseStopFile = $false
 )
 
 
@@ -129,6 +132,29 @@ try
     }
 
 
+    #if UseStopFile is set, start a job which will create a stop file after the specified time in seconds (RunDuration *60 * 0.60)
+    if ($UseStopFile -eq $true)
+    {
+        Write-Host "Creating stop file for LogScout to stop in $($RunDuration*60*0.60) seconds"
+        $StopFile = $RootFolder + "\output\internal\logscout.stop"
+        $StopDuration = ($RunDuration * 60) * 0.60 # 60% of the run duration in seconds
+        $stop_job = Start-Job  -Name "CreateStopFileJob" -ScriptBlock {
+                            param($StopFile, $StopDuration) 
+                            Start-Sleep -Seconds $StopDuration; 
+                            Set-Content -Value "stop please" -Path $StopFile -Force;
+                            
+                            if (Test-Path -Path $StopFile)
+                            {
+                                Microsoft.PowerShell.Utility\Write-Host "The stop file $StopFile was created successfully."
+                            }
+                            else
+                            {
+                                Microsoft.PowerShell.Utility\Write-Host "The stop file $StopFile was not created successfully."
+                            }
+                            #no need to remove the file as it will be deleted when a new test is run
+                        } -ArgumentList $StopFile, $StopDuration
+    } 
+
     ##execute a regular SQL LogScout data collection from root folder
     Write-Host "Starting LogScout"
 
@@ -152,6 +178,21 @@ try
 
         TSQLLoadCheckWorkloadExited
     }
+
+    #if UseStopFile is set, wait for the job to complete and print the output
+    if ($UseStopFile -eq $true)
+    {
+        # Wait for the job to complete
+        Wait-Job -Job $stop_job | Out-Null
+
+        # Retrieve and display the job output
+        $jobOutput = Receive-Job -Job $stop_job
+        Microsoft.PowerShell.Utility\Write-Host $jobOutput
+
+        # Remove the job
+        Remove-Job -Job $stop_job
+    }
+
 
     #run file validation test
 

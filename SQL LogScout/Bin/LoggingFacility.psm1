@@ -15,6 +15,13 @@ if ($CommonFuncModule -ne "CommonFunctions")
 $global:consoleLogBuffer = @()
 $global:debugLogBuffer = @()
 
+if($null -eq $global:EnvTempVarFullPath) 
+{
+    $global:EnvTempVarFullPath = $Env:TEMP
+}
+
+
+
 #=======================================Init    =====================================
 #cleanup from previous script runs
 #NOT needed when running script from CMD
@@ -368,9 +375,9 @@ param(
             # before we create the long-term debug log
             # we prune these files leaving only the 9 most recent ones
             # after that we create the 10th
-            Write-LogDebug "Pruning older SQL LogScout DEBUG Logs in $env:TEMP" -DebugLogLevel 1
+            Write-LogDebug "Pruning older SQL LogScout DEBUG Logs in '$global:EnvTempVarFullPath'" -DebugLogLevel 1
             $LogFileName = ($LogFileName -replace "_DEBUG.LOG", ("_DEBUG_*.LOG"))
-            $FilesToDelete = (Get-ChildItem -Path ($env:TEMP + "\" + $LogFileName) | Sort-Object -Property LastWriteTime -Descending | Select-Object -Skip 9)
+            $FilesToDelete = (Get-ChildItem -Path ($global:EnvTempVarFullPath + "\" + $LogFileName) | Sort-Object -Property LastWriteTime -Descending | Select-Object -Skip 9)
             $NumFilesToDelete = $FilesToDelete.Count
 
             Write-LogDebug "Found $NumFilesToDelete older SQL LogScout DEBUG Logs" -DebugLogLevel 2
@@ -392,7 +399,7 @@ param(
             $LogFileName = ($LogFileName -replace "_DEBUG_\*.LOG", ("_DEBUG_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".LOG"))
             
             # create the long-term debug log and keep a reference to it
-            $full_log_file_path = $env:TEMP + "\" + $LogFileName
+            $full_log_file_path = $global:EnvTempVarFullPath + "\" + $LogFileName
             Write-LogInformation "Creating long term debug log file $full_log_file_path"
             $global:ltDebugLogStream = New-Object -TypeName System.IO.StreamWriter -ArgumentList ($full_log_file_path, $false, [System.Text.Encoding]::ASCII)
             

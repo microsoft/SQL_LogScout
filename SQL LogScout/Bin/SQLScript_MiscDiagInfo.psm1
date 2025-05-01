@@ -321,6 +321,35 @@
     PRINT ''
 
 
+    PRINT '-- sys.servers --'
+    SELECT [server_id]
+      ,[name]
+      ,[product]
+      ,[provider]
+      ,CONVERT(VARCHAR(512),[data_source]) AS [data_source]
+      ,CONVERT(VARCHAR(512),[location]) AS [location]
+      ,CONVERT(VARCHAR(512),[provider_string]) AS [provider_string]
+      ,[catalog]
+      ,[connect_timeout]
+      ,[query_timeout]
+      ,[is_linked]
+      ,[is_remote_login_enabled]
+      ,[is_rpc_out_enabled]
+      ,[is_data_access_enabled]
+      ,[is_collation_compatible]
+      ,[uses_remote_collation]
+      ,[collation_name]
+      ,[lazy_schema_validation]
+      ,[is_system]
+      ,[is_publisher]
+      ,[is_subscriber]
+      ,[is_distributor]
+      ,[is_nonsql_subscriber]
+      ,[is_remote_proc_transaction_promotion_enabled]
+      ,[modify_date]
+    FROM [master].[sys].[servers]
+    PRINT '' 
+
     --this proc is only present in SQL Server 2019 and later but seems not present in early builds
     IF OBJECT_ID('sys.sp_certificate_issuers') IS NOT NULL
     BEGIN
@@ -472,6 +501,355 @@
 
     DROP TABLE #dbcc_loginfo_cur_db
     DROP TABLE #loginfo_all_dbs
+    PRINT ''
+
+    PRINT '-- sql_agent_jobs_information --'; 
+WITH LastExecution AS (
+    SELECT ROW_NUMBER() OVER (PARTITION  BY job_id ORDER BY run_date DESC, run_time  DESC) as id,
+	       job_id,
+	       run_date,
+		   run_time,
+		   run_status
+    FROM msdb.dbo.sysjobhistory
+    WHERE step_id = 0
+    )
+    SELECT sj.name AS JobName, 
+        CASE sj.enabled 
+         WHEN 1 THEN 'Yes'
+         ELSE 'No'
+        END AS IsEnabled,
+        CASE ss.enabled
+         WHEN 1 THEN 'Yes'
+         ELSE 'No'
+        END AS ScheduleEnabled,
+        CASE ss.freq_type
+         WHEN 1 THEN 'Once'
+         WHEN 4 THEN 'Daily'
+         WHEN 8 THEN 'Weekly'
+         WHEN 16 THEN 'Monthly'
+         WHEN 32 THEN 'Monthly - Interval Related' 
+         WHEN 64 THEN 'When Agent Starts'
+         WHEN 128 THEN 'When Computer is Idle'
+        END AS Frequency, 
+        CASE ss.freq_subday_type
+         WHEN 0 THEN 'N/A'
+         WHEN 1 THEN 'Specific Time'
+         WHEN 2 THEN 'Seconds'
+         WHEN 4 THEN 'Minutes'
+         WHEN 8 THEN 'Hours'
+        END AS IntervalType,
+        CASE
+         WHEN ss.freq_subday_type = 1 THEN LEFT(STUFF(STUFF(STUFF(CONVERT(VARCHAR(6), active_start_time), 1, 0,
+                                          REPLICATE('0', 6 - LEN(CONVERT(VARCHAR(6), active_start_time)))), 3, 0, ':'), 6, 0, ':'), 12)
+         ELSE 'N/A'
+        END AS ExecutionTime,
+        CASE 
+         WHEN ss.freq_type = 1 THEN 'N/A'
+         WHEN ss.freq_type = 64 THEN 'N/A'
+         WHEN ss.freq_type = 16 THEN 'N/A'
+         WHEN ss.freq_type = 4 THEN 'Every ' + CONVERT(VARCHAR(10), ss.freq_relative_interval) + ' day(s)' 
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 1 THEN 'Sunday' 
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 2 THEN 'Monday' 
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 4 THEN 'Tuesday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 8 THEN 'Wednesday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 16 THEN 'Thursday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 32 THEN 'Friday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 62 THEN 'Monday to Saturday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 64 THEN 'Saturday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 65 THEN 'Saturday, Sunday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 124 THEN 'Tuesday to Sunday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 126 THEN 'Monday to Sunday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 127 THEN 'Monday to Sunday (All days)'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 9 THEN 'Wednesday, Sunday'
+         WHEN ss.freq_type = 8 AND ss.freq_relative_interval = 95 THEN 'Monday, Tuesday, Wednesday, Thursday, Saturday, Sunday'
+         WHEN ss.freq_type = 8 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_recurrence_factor) + ' Week'
+         WHEN ss.freq_type = 16 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_recurrence_factor) + ' Month'
+         WHEN ss.freq_type = 32 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_recurrence_factor) + ' Month'
+         ELSE 'N/A'
+        END AS Interval,
+        CASE
+         WHEN ss.freq_subday_type = 1 THEN 'N/A'
+         WHEN ss.freq_subday_type = 2 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_subday_interval) + ' second(s)'
+         WHEN ss.freq_subday_type = 4 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_subday_interval) + ' minute(s)'
+         WHEN ss.freq_subday_type = 8 THEN 'Every ' + CONVERT(VARCHAR(20), ss.freq_subday_interval) + ' hour(s)'
+         ELSE 'N/A'
+        END AS DayInterval,
+        CASE 
+         WHEN ss.freq_type = 16 THEN CONVERT(VARCHAR(2), ss.freq_relative_interval)
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 1 AND ss.freq_relative_interval = 1 THEN 'First Sunday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 2 AND ss.freq_relative_interval = 1 THEN 'First Monday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 3 AND ss.freq_relative_interval = 1 THEN 'First Tuesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 4 AND ss.freq_relative_interval = 1 THEN 'First Wednesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 5 AND ss.freq_relative_interval = 1 THEN 'First Thursday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 6 AND ss.freq_relative_interval = 1 THEN 'First Friday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 7 AND ss.freq_relative_interval = 1 THEN 'First Saturday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 8 AND ss.freq_relative_interval = 1 THEN 'First day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 9 AND ss.freq_relative_interval = 1 THEN 'First weekday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 10 AND ss.freq_relative_interval = 1 THEN 'First weekend day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 1 AND ss.freq_relative_interval = 2 THEN 'Second Sunday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 2 AND ss.freq_relative_interval = 2 THEN 'Second Monday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 3 AND ss.freq_relative_interval = 2 THEN 'Second Tuesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 4 AND ss.freq_relative_interval = 2 THEN 'Second Wednesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 5 AND ss.freq_relative_interval = 2 THEN 'Second Thursday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 6 AND ss.freq_relative_interval = 2 THEN 'Second Friday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 7 AND ss.freq_relative_interval = 2 THEN 'Second Saturday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 8 AND ss.freq_relative_interval = 2 THEN 'Second day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 9 AND ss.freq_relative_interval = 2 THEN 'Second weekday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 10 AND ss.freq_relative_interval = 2 THEN 'Second weekend day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 1 AND ss.freq_relative_interval = 4 THEN 'Third Sunday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 2 AND ss.freq_relative_interval = 4 THEN 'Third Monday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 3 AND ss.freq_relative_interval = 4 THEN 'Third Tuesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 4 AND ss.freq_relative_interval = 4 THEN 'Third Wednesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 5 AND ss.freq_relative_interval = 4 THEN 'Third Thursday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 6 AND ss.freq_relative_interval = 4 THEN 'Third Friday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 7 AND ss.freq_relative_interval = 4 THEN 'Third Saturday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 8 AND ss.freq_relative_interval = 4 THEN 'Third day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 9 AND ss.freq_relative_interval = 4 THEN 'Third weekday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 10 AND ss.freq_relative_interval = 4 THEN 'Third weekend day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 1 AND ss.freq_relative_interval = 8 THEN 'Fourth Sunday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 2 AND ss.freq_relative_interval = 8 THEN 'Fourth Monday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 3 AND ss.freq_relative_interval = 8 THEN 'Fourth Tuesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 4 AND ss.freq_relative_interval = 8 THEN 'Fourth Wednesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 5 AND ss.freq_relative_interval = 8 THEN 'Fourth Thursday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 6 AND ss.freq_relative_interval = 8 THEN 'Fourth Friday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 7 AND ss.freq_relative_interval = 8 THEN 'Fourth Saturday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 8 AND ss.freq_relative_interval = 8 THEN 'Fourth day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 9 AND ss.freq_relative_interval = 8 THEN 'Fourth weekday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 10 AND ss.freq_relative_interval = 8 THEN 'Fourth weekend day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 1 AND ss.freq_relative_interval = 16 THEN 'Last Sunday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 2 AND ss.freq_relative_interval = 16 THEN 'Last Monday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 3 AND ss.freq_relative_interval = 16 THEN 'Last Tuesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 4 AND ss.freq_relative_interval = 16 THEN 'Last Wednesday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 5 AND ss.freq_relative_interval = 16 THEN 'Last Thursday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 6 AND ss.freq_relative_interval = 16 THEN 'Last Friday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 7 AND ss.freq_relative_interval = 16 THEN 'Last Saturday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 8 AND ss.freq_relative_interval = 16 THEN 'Last day of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 9 AND ss.freq_relative_interval = 16 THEN 'Last weekday of every month'
+         WHEN ss.freq_type = 32 AND ss.freq_interval = 10 AND ss.freq_relative_interval = 16 THEN 'Last weekend day of every month'
+         ELSE 'N/A'
+        END AS MonthDay,      
+        CONVERT(VARCHAR(10), CONVERT(DATETIME, CONVERT(VARCHAR(10), active_start_date)), 126) AS StartDate,
+        CONVERT(VARCHAR(10), CONVERT(DATETIME, CONVERT(VARCHAR(10), active_end_date)), 126) AS EndDate,
+        LEFT(STUFF(STUFF(STUFF(CONVERT(VARCHAR(6), active_start_time), 1, 0, REPLICATE('0', 6 - LEN(CONVERT(VARCHAR(6), active_start_time)))), 3, 0, ':'), 6, 0, ':'), 12) AS StartTime,
+        LEFT(STUFF(STUFF(STUFF(CONVERT(VARCHAR(6), active_end_time), 1, 0, REPLICATE('0', 6 - LEN(CONVERT(VARCHAR(6), active_end_time)))), 3, 0, ':'), 6, 0, ':'), 12) AS EndTime,
+        CASE le.run_status
+           WHEN 0 THEN 'Failed'
+           WHEN 1 THEN 'Succeeded'
+           WHEN 2 THEN 'Retry'
+           WHEN 3 THEN 'Canceled'
+           WHEN 4 THEN 'In Progress'
+		   ELSE 'Unknown'
+       END as LastExecutionStatus,
+		CONVERT(date, CONVERT(varchar(10), le.run_date)) AS LastExecutionDate,
+        STUFF(STUFF(RIGHT('000000' + CAST(le.run_time AS VARCHAR(6)), 6), 5, 0, ':'), 3, 0, ':') AS LastExecutionTime
+    FROM msdb..sysjobs sj
+    LEFT OUTER JOIN msdb..sysjobschedules sjs 
+        ON (sj.job_id = sjs.job_id)
+    LEFT OUTER JOIN msdb..sysschedules ss 
+        ON (sjs.schedule_id = ss.schedule_id)
+    LEFT OUTER JOIN LastExecution le 
+        ON sj.job_id = le.job_id AND
+		   le.id = 1
+    ORDER BY sj.name
+    OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1);
+
+    PRINT ''
+    PRINT '-- sql_agent_job_history --'
+    SELECT 
+        j.name AS job_name,
+        h.job_id,
+        h.step_id,
+        h.step_name,
+        h.sql_message_id,
+        h.sql_severity,
+        h.message,
+        h.run_status,
+        h.run_date,
+        h.run_time,
+        h.run_duration,
+        h.operator_id_emailed,
+        h.operator_id_netsent,
+        h.operator_id_paged,
+        h.retries_attempted,
+        h.server,
+        h.instance_id
+    FROM (
+        SELECT TOP 1000 *
+        FROM (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY run_date DESC, run_time DESC) AS rn
+            FROM msdb.dbo.sysjobhistory
+        ) AS JobHistory
+        WHERE rn <= 100
+    ) AS h
+    JOIN msdb.dbo.sysjobs AS j
+    ON h.job_id = j.job_id
+    ORDER BY h.run_date DESC, h.run_time DESC;
+
+    PRINT ''
+    PRINT '-- sys.dm_clr_appdomains --'
+    SELECT TOP 1000 
+        appdomain_address,
+        appdomain_id,
+        LEFT(appdomain_name, 80) AS appdomain_name,
+        creation_time,
+        db_id,
+        user_id,
+        LEFT(state, 48) AS state,
+        strong_refcount,
+        weak_refcount,
+        cost,
+        value,
+        compatibility_level,
+        total_processor_time_ms,
+        total_allocated_memory_kb,
+        survived_memory_kb
+    FROM sys.dm_clr_appdomains
+    IF @@ROWCOUNT >= 1000 PRINT '<<<<< LIMIT OF 1000 ROWS EXCEEDED, SOME RESULTS NOT SHOWN >>>>>'
+    PRINT ''
+    
+    PRINT '-- sys.dm_clr_loaded_assemblies --'
+    SELECT TOP 1000 
+        assembly_id,         
+        appdomain_address,   
+        load_time
+    FROM sys.dm_clr_loaded_assemblies
+    IF @@rowcount >= 1000 PRINT '<<<<< LIMIT OF 1000 ROWS EXCEEDED, SOME RESULTS NOT SHOWN >>>>>'
+    PRINT ''
+
+
+    PRINT '-- sys.dm_clr_tasks --'
+    SELECT TOP 1000
+        task_address,
+        sos_task_address,
+        appdomain_address,
+        LEFT(state,64) AS state,   
+        LEFT(abort_state,64) AS abort_state,
+        LEFT(type,64) AS type,         
+        affinity_count,
+        forced_yield_count
+    FROM sys.dm_clr_tasks
+    IF @@rowcount >= 1000 PRINT '<<<<< LIMIT OF 1000 ROWS EXCEEDED, SOME RESULTS NOT SHOWN >>>>>'
+    PRINT ''
+
+ 	-- Create temporary tables to store the results for sys.assemblies, sys.assembly_modules, and sys.assembly_types
+    CREATE TABLE #assemblies (
+        database_name NVARCHAR(128),
+        name SYSNAME NULL,
+        assembly_id INT,
+        principal_id INT,
+        clr_name NVARCHAR(512) NULL,
+        permission_set TINYINT NULL,
+        permission_set_desc NVARCHAR(128) NULL,
+        is_visible BIT,
+        create_date DATETIME,
+        modify_date DATETIME,
+        is_user_defined BIT  NULL
+    );
+
+    CREATE TABLE #assembly_modules (
+        database_name NVARCHAR(128),
+        object_id INT,
+        assembly_id INT,
+        assembly_class NVARCHAR(256) NULL,
+        assembly_method NVARCHAR(256) NULL,
+        null_on_null_input BIT NULL,
+        execute_as_principal_id INT  NULL
+    );
+
+    CREATE TABLE #assembly_types (
+        database_name NVARCHAR(128),
+        name SYSNAME,
+        system_type_id TINYINT,
+        user_type_id INT,
+        schema_id INT,
+        principal_id INT NULL,
+        max_length SMALLINT,
+        precision TINYINT,
+        scale TINYINT,
+        collation_name SYSNAME NULL,
+        is_nullable BIT NULL,
+        is_user_defined BIT,
+        is_assembly_type BIT,
+        default_object_id INT,
+        rule_object_id INT,
+        assembly_id INT,
+        assembly_class NVARCHAR(256) NULL,
+        is_binary_ordered BIT NULL,
+        is_fixed_length BIT NULL,
+        prog_id NVARCHAR(80) NULL,
+        assembly_qualified_name NVARCHAR(512) NULL,
+        is_table_type BIT
+    );
+
+    -- Declare a variable to store the database name
+    DECLARE @database_name NVARCHAR(128);
+
+    -- Declare a table variable to store the list of databases
+    DECLARE @databases TABLE (database_name NVARCHAR(128));
+
+    -- Insert the list of databases into the table variable
+    INSERT INTO @databases (database_name)
+    SELECT name
+    FROM sys.databases
+    WHERE state_desc = 'ONLINE' AND name NOT IN ('master', 'tempdb', 'model', 'msdb');
+
+    -- Loop through each database and insert the assemblies, assembly modules, and assembly types into the temporary tables
+    WHILE EXISTS (SELECT 1 FROM @databases)
+    BEGIN
+        -- Get the next database name
+        SELECT TOP 1 @database_name = database_name
+        FROM @databases;
+
+        -- Construct the dynamic SQL to insert the assemblies into the temporary table
+        DECLARE @SQLTxt NVARCHAR(MAX) = '
+            INSERT INTO #assemblies (database_name, assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined)
+            SELECT ''' + @database_name + ''', assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined
+            FROM ' + QUOTENAME(@database_name) + '.sys.assemblies
+            WHERE assembly_id <> 1';
+
+        EXEC sp_executesql @SQLTxt;
+
+        -- Construct the dynamic SQL to insert the assembly modules into the temporary table
+        SET @SQLTxt = '
+            INSERT INTO #assembly_modules (database_name, object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id)
+            SELECT ''' + @database_name + ''', object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id
+            FROM ' + QUOTENAME(@database_name) + '.sys.assembly_modules';
+
+        EXEC sp_executesql @SQLTxt;
+
+        -- Construct the dynamic SQL to insert the assembly types into the temporary table
+        SET @SQLTxt = '
+            INSERT INTO #assembly_types (database_name, name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type)
+            SELECT ''' + @database_name + ''', name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type
+            FROM ' + QUOTENAME(@database_name) + '.sys.assembly_types
+            WHERE schema_id <> SCHEMA_ID(''sys'')';
+
+        EXEC sp_executesql @SQLTxt;
+
+        -- Remove the processed database from the table variable
+        DELETE FROM @databases
+        WHERE database_name = @database_name;
+    END;
+
+    -- Select the results from the temporary tables
+    PRINT '-- sys.assemblies --'
+    SELECT * FROM #assemblies;
+    PRINT ''
+
+    PRINT '-- sys.assembly_modules --'
+    SELECT * FROM #assembly_modules;
+    PRINT ''
+
+    PRINT '-- sys.assembly_types --'
+    SELECT * FROM #assembly_types;
+    PRINT ''
+
+    -- Drop the temporary tables
+    DROP TABLE #assemblies;
+    DROP TABLE #assembly_modules;
+    DROP TABLE #assembly_types;
+
     PRINT ''
     "
 

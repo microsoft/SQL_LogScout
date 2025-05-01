@@ -11,13 +11,13 @@ function Get-ClusterVNN ($instance_name)
 
         if (($instance_name -ne "") -and ($null -ne $instance_name))
         {
-            $sql_fci_object = Get-ClusterResource | Where-Object {($_.ResourceType -eq "SQL Server")} | get-clusterparameter | Where-Object {($_.Name -eq "InstanceName") -and ($_.Value -eq $instance_name)}
-            $vnn_obj = Get-ClusterResource  | Where-Object {($_.ResourceType -eq "SQL Server") -and ($_.OwnerGroup -eq $sql_fci_object.ClusterObject.OwnerGroup.Name)} | get-clusterparameter -Name VirtualServerName | Select-Object Value
+            $sql_fci_object = Get-ClusterResource | Where-Object {($_.ResourceType -eq "SQL Server")} | Get-ClusterParameter | Where-Object {($_.Name -eq "InstanceName") -and ($_.Value -eq $instance_name)}
+            $vnn_obj = Get-ClusterResource  | Where-Object {($_.ResourceType -eq "SQL Server") -and ($_.OwnerGroup -eq $sql_fci_object.ClusterObject.OwnerGroup.Name)} | Get-ClusterParameter -Name VirtualServerName | Select-Object Value
             $vnn = $vnn_obj.Value
         }
         else
         {
-            Write-LogError "Instance name is empty and it shouldn't be at this point"            
+            Write-LogError "Instance name is empty and it shouldn't be at this point ($($MyInvocation.MyCommand))"            
         }
         
         Write-LogDebug "The VNN Matched to Instance = '$instance_name' is  '$vnn' " -DebugLogLevel 2
@@ -41,7 +41,7 @@ function Get-ClusterVnnPlusInstance([string]$instance)
 
         if (($instance -eq "") -or ($null -eq $instance)) 
         {
-            Write-LogError "Instance name is empty and it shouldn't be at this point"
+            Write-LogError "Instance name is empty and it shouldn't be at this point ($($MyInvocation.MyCommand))"
         }
         else
         {
@@ -87,7 +87,7 @@ function Get-HostnamePlusInstance([string]$instance)
         
         if (($instance -eq "") -or ($null -eq $instance)) 
         {
-            Write-LogError "Instance name is empty and it shouldn't be at this point"
+            Write-LogError "Instance name is empty and it shouldn't be at this point ($($MyInvocation.MyCommand))"
         }
         else
         {
@@ -157,8 +157,8 @@ function Get-SQLServiceNameAndStatus()
         if ($sql_services.Count -eq 0)
         {
             #Insert dummy row in array to keep object type consistent
-            [PSCustomObject]$sql_services = @{Name='no_instance_found'; Status='UNKNOWN'}
-            Write-LogDebug "No installed SQL Server instances found. Array value: $sql_services" -DebugLogLevel 1
+            [PSCustomObject]$sql_services = @{Name=$global:NO_INSTANCE_NAME; Status='UNKNOWN'}
+            Write-LogDebug "No installed SQL Server instances found. Name='$($sql_services.Name)', Status='$($sql_services.Status)'"  -DebugLogLevel 1
    
 
             Write-LogInformation "There are currently no installed instances of SQL Server. Would you like to proceed with OS-only log collection?" -ForegroundColor Green
@@ -551,7 +551,7 @@ function Select-SQLServerForDiagnostics()
                 else # this is not likely to happen, but just in case we need to handle it and cause a failure
                 {
                     Write-LogError "The instance name passed in is not valid."
-                    $global:sql_instance_conn_str = "invalid_instance_name"
+                    $global:sql_instance_conn_str = $global:NO_INSTANCE_NAME
                 }
             }
             else 
@@ -570,10 +570,14 @@ function Select-SQLServerForDiagnostics()
             }
         }
 
+        #return instance in case this function needs to be called externally
+        return $global:sql_instance_conn_str
+
     }
     catch 
     {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return $global:NO_INSTANCE_NAME
     }
 }
 
@@ -583,7 +587,7 @@ function Set-NoInstanceToHostName()
     Write-LogDebug "inside" $MyInvocation.MyCommand
     try 
     {
-        if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+        if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
         {
             $global:sql_instance_conn_str = $global:host_name
         }

@@ -122,7 +122,7 @@ function ScheduledTaskHandleCatchBlock ([string] $function_name, [System.Managem
 
 function Initialize-ScheduledTaskLog
     (
-        [string]$LogFilePath = $env:TEMP,
+        [string]$LogFilePath,
         [string]$LogFileName = "##SQLLogScout_ScheduledTask"
     )
 {
@@ -134,11 +134,15 @@ function Initialize-ScheduledTaskLog
 #>    
     try
     {
+        #Create log file in temp directory using full path. The temp var can come back as 8.3 format and so ensure we have the full path.
+        $shortEnvTempPath = $env:TEMP
+        $LogFilePath = (Get-Item $shortEnvTempPath).FullName
+
         #Cache LogFileName withotu date so we can delete old records properly
         $LogFileNameStringToDelete = $LogFileName
 
         #update file with date
-        $LogFileName = ($LogFileName -replace "##SQLLogScout_ScheduledTask", ("##SQLLogScout_ScheduledTask_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".log"))
+        $LogFileName = $LogFileName + (Get-Date -Format "yyyyMMddTHHmmssffff") + ".log"
         $global:ScheduledTaskLog = $LogFilePath + '\' + $LogFileName
         New-Item -ItemType "file" -Path $global:ScheduledTaskLog -Force | Out-Null
         $CurrentTime = (Get-Date -Format("yyyy-MM-dd HH:MM:ss.ms"))

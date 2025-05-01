@@ -8,12 +8,9 @@ Import-Module .\CommonFunctions.psm1
 #=======================================End of \OUTPUT and \INTERNAL directories and files Section
 #======================================== END of Process management section
 
-
 #======================================== START OF NETNAME + INSTANCE SECTION - Instance Discovery
 Import-Module .\InstanceDiscovery.psm1
 #======================================== END OF NETNAME + INSTANCE SECTION - Instance Discovery
-
-
 
 #======================================== START of Console LOG SECTION
 Import-Module .\LoggingFacility.psm1
@@ -27,17 +24,15 @@ Import-Module .\Confirm-FileAttributes.psm1
 Import-Module .\SqlVersionsTable.psm1
 #======================================== END of TextFile Replacement modules
 
-
 function InitAppVersion()
 {
     $major_version = "6"
-    $minor_version = "24"
-    $build = "11"
-    $revision = "02"
+    $minor_version = "25"
+    $build = "04"
+    $revision = "25"
     $global:app_version = $major_version + "." + $minor_version + "." + $build + "." + $revision
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
-
 
 function GetWindowsHotfixes ()
 {
@@ -220,7 +215,7 @@ function GetEventLogs($server)
 
         $sbWriteLogProcess = {
 
-            [string]$TimeGenerated = $_.TimeGenerated.ToString("MM/dd/yyyy hh:mm:ss tt")
+            [string]$TimeGenerated = $_.TimeGenerated.ToString((Get-Culture))
             [string]$EntryType = $_.EntryType.ToString()
             [string]$MachineName = $_.MachineName.ToString()
             [string]$EventID = $_.EventID.ToString()
@@ -664,36 +659,152 @@ function GetMissingSQLMsiMspFiles()
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
     }
 }
-<#
-it seems this funciton is never referenced in the code... commenting it for now.
-function MSDiagProcsCollector()
+
+function GetInstalledPrograms 
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_MSDiagProcs.psm1
+    $collector_name = "InstalledPrograms"
+    Write-LogInformation "Executing Collector: $collector_name"
 
     try
     {
-        if($global:sql_instance_service_status -eq "Running")
-        {
-            #msdiagprocs.sql
-            #the output is potential errors so sent to error file
-            $collector_name = MSDiagProcs_Query #"MSDiagProcs"
-            Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
-        }
-        else
-        {
-            Write-LogInformation "SQL Server service is not running. Skipping $collector_name collector"
-        }
-    }
+        ##create output filenames using the path + servername + date and time
+        $partial_output_file_name = CreatePartialOutputFilename ($server)
 
-    catch {
+        $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        # get the computer platform (x86 or x64). Used to determine which registry path to search for installed programs
+        $Platform = GetComputerPlatform
+
+        # Define registry paths to search for installed programs
+        $registryPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+        if ($Platform -eq "x64") {
+            $registryPaths += "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        }
+
+        # Create an array to store program details
+        $programs = @()
+
+        foreach ($path in $registryPaths) {
+            # Get all subkeys under the uninstall registry path
+            $subKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
+            foreach ($subKey in $subKeys) {
+                $program = [PSCustomObject]@{
+                    DisplayName    = [string]$null
+                    DisplayVersion = [string]$null
+                    Publisher      = [string]$null
+                    ProductCode    = [string]$null
+                }
+
+                # Get the values under the subkey
+                $values = Get-ItemProperty -Path $subKey.PSPath -ErrorAction SilentlyContinue
+                if ($values) {
+                    # Map registry values to program properties
+                    if ($values.DisplayName) {
+                        $program.DisplayName = [string]$values.DisplayName
+                    }
+                    if ($values.DisplayVersion) {
+                        $program.DisplayVersion = [string]$values.DisplayVersion
+                    }
+                    if ($values.Publisher) {
+                        $program.Publisher = [string]$values.Publisher
+                    }
+                    if ($values.PSChildName -and $values.WindowsInstaller -eq 1) {
+                        $program.ProductCode = [string]$values.PSChildName
+                    }
+
+                    # Add the program to the list if it has a valid DisplayName
+                    if ($program.DisplayName) {
+                        $programs += $program
+                    }
+                }
+            }
+        }
+
+        # Sort programs by DisplayName
+        $programs = $programs | Sort-Object -Property DisplayName
+
+        # create a string builder object to hold the output text
+        [System.Text.StringBuilder]$strOutputText = New-Object -TypeName System.Text.StringBuilder
+
+
+        # Add rowset identifier information to the output text
+        [void]$strOutputText.Append("-- InstalledPrograms --`r`n")  
+
+        # Output the header
+        $namePad = 110
+        $versionPad = 20
+        $publisherPad = 64
+        $productCodePad = 40
+        [void]$strOutputText.Append( "Name".PadRight($namePad)  + "Version".PadRight($versionPad) + "Publisher".PadRight($publisherPad) + "Windows_Installer_Product_Code" + "`r`n") 
+        [void]$strOutputText.Append("-" * $($namePad-1) + " " + "-"* $($versionPad-1) + " "+ "-" * $($publisherPad-1) + " " + "-" * $($productCodePad-1) + "`r`n") 
+
+
+        # Output program details
+        foreach ($program in $programs) 
+        {
+
+            #if $program.DisplayName is null or empty, we skip this program and go to the next element in $programs
+            if (-not [string]::IsNullOrWhiteSpace($program.DisplayName)) 
+            {
+                # Format the DisplayName to remove non-alphanumeric characters and limit length
+                $program.DisplayName = $program.DisplayName -replace '[^\u0020-\u007E\u00A0-\u024F]', '' # Allow ASCII characters 32 to 127
+                
+                if ($program.DisplayName.Length -gt $namePad) {
+                    $program.DisplayName = $program.DisplayName.Substring(0, $namePad)
+                }
+                
+                # Clean up the Publisher column to remove charactes different from characters included in the Unicode ranges for Latin-1 Supplement, Latin Extended-A, and Latin Extended-B
+                $cleanPublisher = if ($null -ne $program.Publisher) {$program.Publisher -replace '[^\u0020-\u007E\u00A0-\u024F]', '*'} else {" "}
+
+                if ($cleanPublisher.Length -gt $publisherPad) {
+                    $cleanPublisher = $cleanPublisher.Substring(0, $publisherPad)
+                }
+
+                # Format the output text
+                $displayVersion = if ($null -ne $program.DisplayVersion) { $program.DisplayVersion } else { " " }
+                $productCode = if ($null -ne $program.ProductCode) { $program.ProductCode } else { " " }
+
+                # append the program details to the string builder object
+                [void]$strOutputText.Append( ($program.DisplayName.PadRight($namePad) +
+                    $displayVersion.PadRight($versionPad) +
+                    $cleanPublisher.PadRight($publisherPad) +
+                    $productCode.PadRight($productCodePad))+ "`r`n")
+            } 
+            # if $program.DisplayName is null or empty, we skip this program and go to the next element in $programs
+            else 
+            {
+                continue
+            }
+
+
+            # write the output to file when it reaches a certain length
+            # this is to avoid multiple small I/Os and also to avoid the string builder object to grow too big in memory
+            if ($strOutputText.Length -gt 32768)
+            {
+                $outputContent = $strOutputText.ToString().TrimEnd("`r", "`n")
+                Add-Content -Path $output_file -Value $outputContent -Encoding Unicode
+                #reset the string builder object
+                [void]$strOutputText.Clear()
+            }
+        }
+
+        # Final write to file
+        if ($strOutputText.Length -gt 0) 
+        {
+            $finaloutputContent = $strOutputText.ToString().TrimEnd("`r`n")
+            Add-Content -Path $output_file -Value $finaloutputContent -Encoding Unicode
+        }
+
+    }
+    catch
+    {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
-        return
     }
-
 }
-#>
+
+
 function GetXeventsGeneralPerf()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
@@ -702,6 +813,7 @@ function GetXeventsGeneralPerf()
 
     Import-Module .\SQLScript_xevent_core.psm1
     Import-Module .\SQLScript_xevent_general.psm1
+    
     try {
 
         ##create output filenames using the path + servername + date and time
@@ -1096,7 +1208,7 @@ function GetAlwaysOnHealthXel
 
 
             # get the ERRORLOG path from the registry
-            $vLogPath = GetLogPathFromReg -server $server -logType "ERRORLOG"
+            $vLogPath = GetLogPathFromReg -server $server -logType "LOG"
             
             if ($vLogPath -eq $false)
             {
@@ -1623,7 +1735,7 @@ function GetPerfStatsSnapshot ([string] $TimeOfCapture="Startup")
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     Import-Module .\SQLScript_SQL_Server_PerfStats_Snapshot.psm1
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of PerfStats shutdown collector"
         return
@@ -3076,7 +3188,8 @@ function GetIPandDNSConfig
     $hostname = $global:host_name
 
 
-    try{
+    try
+    {
 
         $partial_output_file_name = CreatePartialOutputFilename ($server)
         $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
@@ -3095,36 +3208,50 @@ function GetIPandDNSConfig
 
         $collector_name = "NetTCPandUDPConnections"
         Write-LogInformation "Executing Collector: $collector_name"
-        $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
-        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-       
-        # Get-NetTCPConnection and Get-NetUDPEndpoint are available in Windows 8 / Windows Server 2012 and later versions.
-        # concatenate the output of Get-NetTCPConnection and the header string and write it to the output file. Get-NetTCPConnection prints its output to a new line thus the need to contat the variables.
-        $str_NexusFriendlyHeader = "-- net_tcp_connection --"
-        $netTcpConnectionOutput = Get-NetTCPConnection | Select-Object Local*, Remote*, State, @{n="ProcessID";e={$_.OwningProcess}}, @{n="ProcessName";e={(Get-Process -Id $_.OwningProcess).ProcessName}} | Format-Table -Auto | Out-String 
-        ($str_NexusFriendlyHeader + "" + $netTcpConnectionOutput) | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
+
+        #TODO: 
+        # Get the total RAM size in GB
+        $TotalRAM = GetTotalRAMSize
+        $CPUCount = GetCoutLogicalCPUs
+        
+        #if RAM > 2 TB CPUs count > 128 CPUs skip this collector 
+        if (($TotalRAM -ge 2048) -or ($CPUCount -ge 128))
+        {
+            Write-LogWarning "Skipping NetTCPandUDPConnections: total RAM size > 2 TB or CPU count > 128 and the collector may take a long time to complete. Collect manually."
+        }
+        else 
+        {
+
+            $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+            $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+        
+            # Get-NetTCPConnection and Get-NetUDPEndpoint are available in Windows 8 / Windows Server 2012 and later versions.
+            # concatenate the output of Get-NetTCPConnection and the header string and write it to the output file. Get-NetTCPConnection prints its output to a new line thus the need to contat the variables.
+            $str_NexusFriendlyHeader = "-- net_tcp_connection --"
+            $netTcpConnectionOutput = Get-NetTCPConnection | Select-Object Local*, Remote*, State, @{n="ProcessID";e={$_.OwningProcess}} | Format-Table -Auto | Out-String 
+            ($str_NexusFriendlyHeader + "" + $netTcpConnectionOutput) | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
 
 
 
 
-        # concatenate the output of Get-NetUDPEndpoint and the header string and write it to the output file. Get-NetUDPEndpoint prints its output to a new line thus the need to contat the variables.
-        # Get-NetUDPEndpoint is available in Windows 8 / Windows Server 2012 and later versions.
-        $str_NexusFriendlyHeader = "-- net_udp_endpoint --"
-        $netUdpConnectionOutput = Get-NetUDPEndpoint | Select-Object Local*, @{n="ProcessID";e={$_.OwningProcess}}, @{n="ProcessName";e={(Get-Process -Id $_.OwningProcess).ProcessName}} | Format-Table -Auto | Out-String 
-        ($str_NexusFriendlyHeader + "" + $netUdpConnectionOutput) | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
+            # concatenate the output of Get-NetUDPEndpoint and the header string and write it to the output file. Get-NetUDPEndpoint prints its output to a new line thus the need to contat the variables.
+            # Get-NetUDPEndpoint is available in Windows 8 / Windows Server 2012 and later versions.
+            $str_NexusFriendlyHeader = "-- net_udp_endpoint --"
+            $netUdpConnectionOutput = Get-NetUDPEndpoint | Select-Object Local*, @{n="ProcessID";e={$_.OwningProcess}} | Format-Table -Auto | Out-String 
+            ($str_NexusFriendlyHeader + "" + $netUdpConnectionOutput) | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
 
-        $collector_name = "DNSClientInfo"
-        Write-LogInformation "Executing Collector: $collector_name"
-        $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
-        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
-        $str_NexusFriendlyHeader = "-- dns_client --"
-        $str_NexusFriendlyHeader | Out-file -FilePath $output_file  -Encoding ascii
-        Get-DnsClient | Select-Object Interface*, Connection*, RegisterThisConnectionsAddress, UseSuffixwhenRegistering | Format-Table -Auto | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
+            $collector_name = "DNSClientInfo"
+            Write-LogInformation "Executing Collector: $collector_name"
+            $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+            $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+            $str_NexusFriendlyHeader = "-- dns_client --"
+            $str_NexusFriendlyHeader | Out-file -FilePath $output_file  -Encoding ascii
+            Get-DnsClient | Select-Object Interface*, Connection*, RegisterThisConnectionsAddress, UseSuffixwhenRegistering | Format-Table -Auto | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
 
-        $str_NexusFriendlyHeader = "-- dns_client_cache --"
-        $str_NexusFriendlyHeader | Out-file -FilePath $output_file  -Encoding ascii -Append
-        Get-DnsClientCache | Select-Object Entry, RecordName, RecordType, Status, Section, TimeToLive, DataLength, Data | Format-Table -Auto | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
-
+            $str_NexusFriendlyHeader = "-- dns_client_cache --"
+            $str_NexusFriendlyHeader | Out-file -FilePath $output_file  -Encoding ascii -Append
+            Get-DnsClientCache | Select-Object Entry, RecordName, RecordType, Status, Section, TimeToLive, DataLength, Data | Format-Table -Auto | Out-File -Append -FilePath $output_file -Encoding ascii -Width 100000
+        }
     }
     catch
     {
@@ -3136,125 +3263,204 @@ function GetSQLInstanceNameByPortNo($server)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    # If User Passed the SQL Instance Name in the form of Ip Address,Port Number
-
-    $commaPos = $server.IndexOf(",") + 1
-    $portno = $server.Substring($commaPos, $server.Length - $commaPos)
-    $Result= ""
-
-    [string]$PortString = $portno
-    [Int32]$portcheck = $null
-
-    #if no port is present, just use the instance name and return out of here
-    if ([Int32]::TryParse($PortString,[ref]$portcheck))
+    try 
     {
-       $Result = @()
-    }
-    else
-    {
-        $instance_name_object = Get-InstanceNameObject -NetnamePlusInstance $selectInstanceName
-        $Result = $instance_name_object.InstanceName
-        return $Result;
-    }
+        
+        # prepare $Result object to return to caller
+        $resultInstObject = [PSCustomObject]@{
+            InstanceName = ""
+            Type  = $global:SQLInstanceType["StartingValue"]}
 
-    #Get all the registry keys where an instance name is present using "MSSQL" and Property like "(default)" to check TCP/IP Sockets
-    $InstRegKeys = Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server' |
-                     Where-Object {$_.Name -like '*MSSQL*' -and $_.Property -like "(default)"} |
-                      Select-Object PSChildName
+        $matchFound = $false
 
-
-    foreach ($key in $InstRegKeys)
-    {
-        #first extract the instance name from the reg key (e.g. get the part after the . in "MSSQL14.MYSQL2017")
-        $InstanceName = $key.PSChildName.Substring($key.PSChildName.IndexOf(".")+1)
-
-        #build the reg key in the form HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL15.MYSQL2019\MSSQLServer\SuperSocketNetLib\Tcp
-        $tcpKey = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\" + $key.PSChildName + "\MSSQLServer\SuperSocketNetLib\Tcp"
-
-        Write-LogDebug "PATH: $tcpKey" -DebugLogLevel 4
-
-        if (Test-Path -Path $tcpKey)
+        # Check whether there's a comma in the server string, which would indicate a port number is also passed
+        # If there's no comma, then the server string is just the instance name or an IP address. If IP address only, we'll connect to default instance
+        if ($server -notmatch ",") 
         {
-           #check if TCP/IP Sockets is enabled
-           $tcpEnabled = Get-ItemProperty -Path $tcpKey | Select-Object -Property Enabled
+            Write-LogDebug "No port found in server name. Using $server"
+            $instance_name_object = Get-InstanceNameObject -NetnamePlusInstance $server
+            return $instance_name_object
+        }
 
-           #if enabled, go through ports
-           if ($tcpEnabled.Enabled -eq "1")
-           {
 
-             foreach ($Port in (Get-ItemProperty -Path ($tcpKey+"\IP*") | Select-Object TcpPort, TcpDynamicPorts))
-             {
-                if ([String]::IsNullOrWhiteSpace($portno) -ne $true)
+        # If User Passed the SQL Instance Name in the form of Ip Address,Port Number then extract the port number
+        $commaPos = $server.IndexOf(",") + 1
+        [string]$portno = $server.Substring($commaPos, $server.Length - $commaPos)
+        
+        [Int32]$portInteger = $null
+
+        # If the port number is not a valid integer, log an error and return null
+        if (-not [Int32]::TryParse($portno, [ref]$portInteger))
+        {
+            Write-LogError "Invalid port number: $portno. Expected a valid integer."
+            return $null
+        }
+
+        Write-LogDebug "The port number is $portno" -DebugLogLevel 3
+
+
+        # Get all the registry keys where an instance name is present using "MSSQL" and Property like "(default)" to check TCP/IP Sockets
+        $InstancesInReg = Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server' -ErrorAction SilentlyContinue |
+                    Where-Object {$_.Name -like '*MSSQL*' -and $_.Property -like "(default)"} |
+                    Select-Object -ExpandProperty PSChildName
+
+        if (-not $InstancesInReg) {
+            Write-LogError "No SQL Server instances found in the registry."
+            return $null
+        }
+
+        Write-LogDebug "Found these instances in the registry: $InstancesInReg" -DebugLogLevel 3
+
+        # Go through each instance in the registry
+        foreach ($InstKey in $InstancesInReg)
+        {
+            # Extract the instance name from the reg key (e.g. get the part after the . in "MSSQL14.MYSQL2017")
+            $InstanceName = $InstKey.Substring($InstKey.IndexOf(".") + 1)
+
+            # Build the reg key in the form HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$InstKey\MSSQLServer\SuperSocketNetLib\Tcp
+            $tcpKey = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$InstKey\MSSQLServer\SuperSocketNetLib\Tcp"
+
+            Write-LogDebug "TCP key for instance '$InstanceName' is $tcpKey" -DebugLogLevel 4
+
+            # Check if the TCP key exists
+            if (Test-Path -Path $tcpKey)
+            {
+                # Check if TCP/IP Sockets is enabled
+                $tcpEnabled = Get-ItemProperty -Path $tcpKey -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Enabled
+
+                # If enabled, go through ports
+                if ($tcpEnabled -eq "1")
                 {
-                    Write-LogDebug "Comparing port=$portno to dynamic=$($Port.TcpDynamicPorts) or static=$($Port.TcpPort)" -DebugLogLevel 4
-
-                    if ( (($Port.TcpDynamicPorts) -eq $portno) -or (($Port.TcpPort) -eq $portno) )
+                    $Ports = Get-ItemProperty -Path "$tcpKey\IP*" -ErrorAction SilentlyContinue | Select-Object TcpPort, TcpDynamicPorts
+                    foreach ($port in $Ports)
                     {
-                        $Result =  $InstanceName
+
+                        # Skip if the port is not set (0 or null)
+                        if ([string]::IsNullOrWhiteSpace($port.TcpDynamicPorts) -or ($port.TcpDynamicPorts -eq "0") -and ([string]::IsNullOrWhiteSpace($port.TcpPort) -or ($port.TcpPort -eq "0"))) {
+                            continue
+                        }
+
+                        Write-LogDebug "Comparing port=$portno to dynamic=$($port.TcpDynamicPorts) or static=$($port.TcpPort)" -DebugLogLevel 4
+
+                        if (($port.TcpDynamicPorts -eq $portno) -or ($port.TcpPort -eq $portno))
+                        {
+                            Write-LogDebug "Port $portno match found for instance $InstanceName" -DebugLogLevel 3
+                            $resultInstObject.InstanceName = $InstanceName
+                            $matchFound = $true
+                            break
+                        }
                     }
                 }
                 else
                 {
-                    $Result =  $global:host_name
+                    Write-LogDebug "TCP/IP protocol not enabled for instance '$InstanceName'"
+                    $instance_name_object = Get-InstanceNameObject -NetnamePlusInstance $server
+                    $resultInstObject = $instance_name_object
                 }
-             }
-           }
+            }
 
-           else
-           {
-                $instance_name_object = Get-InstanceNameObject -NetnamePlusInstance $selectInstanceName
-                $Result = $instance_name_object.InstanceName
-           }
+            if ($matchFound) {
+                break
+            }
         }
+
+        Write-LogDebug "The instance name selected after port look-up is '$($resultInstObject.InstanceName)'" -DebugLogLevel 3
+
+        return $resultInstObject
     }
-
-    Write-LogDebug "The instance name selected after port look-up is $Result" -DebugLogLevel 3
-
-    return $Result
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return $null
+    }
 }
-
 
 
 function GetSQLErrorLogsDumpsSysHealth()
 {
-
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    $collector_name = "SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel"
-    Write-LogInformation "Executing Collector: $collector_name"
+    try 
+    {
+        GetSQLandAgentErrorlogs
+        GetSQLMemoryDumpAndLogs
+        GetSystemAndSQLDiagXELs
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+    
+}
+
+
+function GetSQLandAgentErrorlogs()
+{ 
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     try
     {
 
+        # Get the server name and set the collector name
         $server = $global:sql_instance_conn_str
-        
+        $collector_name = "SQLErrorlogs_SQLAgentLogs"
+        Write-LogInformation "Executing Collector: $collector_name"
+ 
 
+        # Create the partial output and error file names
         $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
         Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
 
 
+        # Get the destination folder
         [string]$DestinationFolder = $global:output_folder
 
-        # get XEL files from last three weeks
-        $time_threshold = (Get-Date).AddDays(-21)
 
 
         # get the path to the ERRORLOG from the registry
-        $vLogPath = GetLogPathFromReg -server $server -logType "ERRORLOG"
+        $vErrLogPath = GetLogPathFromReg -server $server -logType "ERRORLOG"
         
-        if ($vLogPath -eq $false)
+        if ($vErrLogPath -eq $false)
         {
             # The registry key is not valid, return
             Write-LogWarning "The registry key for ERRORLOG path is not valid. Continuing with other collectors."
             return
         }
 
+        # build the filter for the ERRORLOG files
+        # Extract the last part of the path (the errorlog name)
+        $errorlogName = Split-Path $vErrLogPath -Leaf
+
+        # Remove the extension part from the file name if any and keep only the file name
+        $errorlogName = $errorlogName.Split('.') |Select-Object -First 1
+
+        if ([string]::IsNullOrWhiteSpace($errorlogName) -eq $true)
+        {
+            # If the errorlog name is empty, set it to ERRORLOG - last-effort attempt to get the errorlog name
+            $errorlogName = "ERRORLOG"
+            
+            Write-LogDebug "Hard-coding ERRORLOG as a file name" -DebugLogLevel 3
+        }
+        
+        # Use string interpolation to create the filter
+        $filter = "${errorlogName}*"
+
+
+        # extract the path only from the $vLogPath
+        $vLogPath = Split-Path $vErrLogPath -Parent
+
+        # check if the path exists
+        if ((Test-Path -Path $vLogPath))
+        {
+            Write-LogDebug "Getting ERRORLOG files from '$vLogPath'" -DebugLogLevel 3
+        }
+
         # for ERRORLOG files that are larger than 1 GB copy only head or tail. Otherwise copy the file itself
-        Write-LogDebug "Getting ERRORLOG files from '$vLogPath'" -DebugLogLevel 3
+        # Also get all ERRORLOG files up to 2 months back
 
         [datetime] $ErrorLogDateLimit = (Get-Date).AddMonths(-2)
-        $ErrlogFiles = Get-ChildItem -Path $vLogPath -Filter "ERRORLOG*" | Where-Object {$_.LastWriteTime -ge $ErrorLogDateLimit}
+        $ErrlogFiles = Get-ChildItem -Path $vLogPath -Filter $filter | Where-Object {$_.LastWriteTime -ge $ErrorLogDateLimit}
         Write-LogDebug "Capturing all error logs up to 2 months back, starting from '$ErrorLogDateLimit'" -DebugLogLevel 4
 
         #build a string of servername_instancename, if there is a named instance (\) involved
@@ -3289,8 +3495,19 @@ function GetSQLErrorLogsDumpsSysHealth()
                 }
                 else
                 {
-                    Copy-Item -Path $source -Destination  $destination | Out-Null
-                    Write-LogDebug "ERRORLOG file '$file' copied." -DebugLogLevel 4
+                    #copy the file and write any errors to the error file
+                    Copy-Item -Path $source -Destination $destination -ErrorAction SilentlyContinue -ErrorVariable ErrLogCopyError | Out-Null
+                    $ErrLogCopyError | Out-File -FilePath $error_file -Append
+                    
+                    #if there are errors copying the file, log it
+                    if ($false -eq [string]::IsNullOrWhiteSpace($ErrLogCopyError))
+                    {
+                        Write-LogDebug "Error copying Errorlog file '$file'. For details, see '$error_file' ." -DebugLogLevel 4
+                    }
+                    else
+                    {
+                        Write-LogDebug "ERRORLOG file '$file' copied." -DebugLogLevel 4
+                    }
                 }
 
                 $errorlog_count++
@@ -3336,15 +3553,64 @@ function GetSQLErrorLogsDumpsSysHealth()
                 }
                 else
                 {
-                    Copy-Item -Path $source -Destination $destination | Out-Null
-                    Write-LogDebug "Agent Log file '$agentfile' copied." -DebugLogLevel 4
+                    #copy the file and write any errors to the error file
+                    Copy-Item -Path $source -Destination $destination -ErrorAction SilentlyContinue -ErrorVariable AgentCopyError | Out-Null
+                    $AgentCopyError | Out-File -FilePath $error_file -Append
+
+                    #if there are errors copying the file, log it
+                    if ($false -eq [string]::IsNullOrWhiteSpace($AgentCopyError))
+                    {
+                        Write-LogDebug "Error copying Agent Log file '$agentfile'. See '$error_file' for more details." -DebugLogLevel 4
+                    }
+                    else
+                    {
+                        Write-LogDebug "SQL Agent Log file '$agentfile' copied." -DebugLogLevel 4
+                    }
                 }
 
                 $agentlog_count++
             }
         }
 
-        Write-LogDebug "$agentlog_count Agent Log file(s) copied successfully." -DebugLogLevel 3
+        Write-LogDebug "$agentlog_count SQL Agent Log file(s) copied successfully." -DebugLogLevel 3
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+}
+
+function GetSystemAndSQLDiagXELs()
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand 
+
+    try
+    {
+        # get XEL files from last three weeks
+        $time_threshold = (Get-Date).AddDays(-21)
+
+        #set up the collector name
+        $server = $global:sql_instance_conn_str
+        $collector_name = "SystemHealth_SQLDiag_XELs"
+        Write-LogInformation "Executing Collector: $collector_name"
+
+        #set up the error file
+        $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        #set up the destination folder
+        [string]$DestinationFolder = $global:output_folder
+
+        # get the path to the ERRORLOG from the registry
+        $vLogPath = GetLogPathFromReg -server $server -logType "LOG"
+        
+        if ($vLogPath -eq $false)
+        {
+            # The registry key is not valid, return
+            Write-LogWarning "The registry key for LOG path is not valid. Continuing with other collectors."
+            return
+        }
 
         #get SystemHealth XEL files
         Write-LogDebug "Getting System_Health*.xel files" -DebugLogLevel 3
@@ -3358,46 +3624,157 @@ function GetSQLErrorLogsDumpsSysHealth()
         #if System health files found, copy them
         else
         {
-            Copy-Item $syshealth_files.FullName $DestinationFolder 2>> $error_file | Out-Null
-            Write-LogDebug "$($syshealth_files.Count) System_Health XEL file(s) copied successfully." -DebugLogLevel 3
+            $SysHealthXelCopyError = ""
+            Copy-Item $syshealth_files.FullName $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable SysHealthXelCopyError | Out-Null
+            $SysHealthXelCopyError | Out-File -FilePath $error_file -Append
+
+            if($false -eq [string]::IsNullOrWhiteSpace($SysHealthXelCopyError)) 
+            {
+                $SysHealthXelCopyError | Out-File -FilePath $error_file -Append
+                Write-LogDebug "Error copying System_Health XEL file(s). For details, see '$error_file'." -DebugLogLevel 4
+            } else {
+                Write-LogDebug "$($syshealth_files.Count) System_Health XEL file(s) copied successfully." -DebugLogLevel 3
+            }
         }
 
+        #get SQLDIAG XEL files for cluster troubleshooting
+        if (IsClustered)
+        {
 
+            Write-LogDebug "Getting MSSQLSERVER_SQLDIAG*.xel files" -DebugLogLevel 3
+            $SqlDiagXelCopyError = ""
+            Get-ChildItem -Path $vLogPath -Filter "*_SQLDIAG*.xel" | Copy-Item -Destination $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable SqlDiagXelCopyError | Out-Null
+            $SqlDiagXelCopyError | Out-File -FilePath $error_file -Append
+
+            if($false -eq [string]::IsNullOrWhiteSpace($SqlDiagXelCopyError))
+            {
+                Write-LogDebug "Error copying SQLDIAG XEL file(s). For details, see '$error_file'." -DebugLogLevel 4
+            }
+            else {
+                Write-LogDebug "SQLDIAG XEL file(s) copied successfully." -DebugLogLevel 3
+            }
+        }
+        
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+}
+
+function GetSQLMemoryDumpAndLogs()
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    try
+    {
+
+        #set up the collector name and server instance
+        $server = $global:sql_instance_conn_str
+        $server_instance = $server -replace "\\", "_"
+
+        $collector_name = "MemoryDumps"
+        Write-LogInformation "Executing Collector: $collector_name"
+ 
+        #set up the error file
+        $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        # Create the output folder for the dump file list
+        $partial_output_file_name = CreatePartialOutputFilename ($server)
+        $output_file_dumplist = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name "AllMemoryDumps_List" -needExtraQuotes $false
+
+
+        #set up the destination folder
+        [string]$DestinationFolder = $global:output_folder
 
         #get SQL memory dumps
         Write-LogDebug "Getting SQL Dump files" -DebugLogLevel 3
-        
+
         # get the path to the DUMPLOG from the registry
         $vDmpPath = GetLogPathFromReg -server $server -logType "DUMPLOG"
 
         # Fallback to log directory if registry key not found, which is what SQLDumper will do
-        if(($false -eq $vDmpPath) -or ($null -eq $vDmpPath)) {$vDmpPath=$vLogPath}
+        if(($false -eq $vDmpPath) -or ($null -eq $vDmpPath)) 
+        {
+            $vDmpPath=$vLogPath
+        }
 
+        if (($vDmpPath -eq $false) -or ($null -eq $vDmpPath))
+        {
+            # The registry key is not valid, return
+            Write-LogWarning "The registry key for DUMPLOG path is not valid. Continuing with other collectors."
+            return
+        }
         # Ensure that there is no trailing backslash as we will append when using the path
-        if ($vDmpPath.EndsWith("\")) { $vDmpPath = $vDmpPath.TrimEnd("\") }
+        if ($vDmpPath.EndsWith("\")) 
+        { 
+            $vDmpPath = $vDmpPath.TrimEnd("\") 
+        }
 
         Write-LogDebug "ErrorDumpDir is: $vDmpPath" -DebugLogLevel 4
 
-        #first, count how many dump files from the last 2 months
-        $DumpFilesTemp = Get-ChildItem -Path "$vDmpPath\SQLDump*.mdmp","$vDmpPath\SQLDmpr*.*dmp"   | Where-Object {($_.LastWriteTime -gt $ErrorLogDateLimit)}
+        #get all the dump files in a variable first
+        $allDumps = Get-ChildItem -Path "$vDmpPath\SQLDump*.mdmp","$vDmpPath\SQLDmpr*.*dmp"
 
-        Write-LogDebug "Found $($DumpFilesTemp.Count) memory dumps from the past 2 months (since '$ErrorLogDateLimit')" -DebugLogLevel 4
-
-        # now get the memory dumps for last 2 months, of size < 100 MB, and if too many, get only the most recent 20. Dump file types of mdmp and dmp
-        $DumpFiles = Get-ChildItem -Path "$vDmpPath\SQLDump*.mdmp","$vDmpPath\SQLDmpr*.*dmp" | `
-                        Where-Object {($_.LastWriteTime -gt $ErrorLogDateLimit) -and ($_.Length -le 104857600)} | `
-                        Sort-Object -Property LastWriteTime -Descending | `
-                        Select-Object -First 20
-
-        if ($null -ne $DumpFiles)
+        if ($allDumps.Count -gt 0)
         {
-            Write-LogDebug "Capturing the most recent $($DumpFiles.Count) memory dumps (max count limit of 20), from the past 2 months, of size < 100 MB " -DebugLogLevel 4
-            Write-LogInformation "Gathering '$($DumpFiles.Count)' out of '$($DumpFilesTemp.Count)' memory dumps (max limit of 20) from last 2 months of size < 100 MB"
+            # Sort the files by size in descending order
+            $sortedMdmpFiles = $allDumps | Sort-Object -Property Length -Descending
 
-            Copy-Item -Path $DumpFiles -Destination $DestinationFolder 2>> $error_file | Out-Null
+            # collect the file names, sizes, and modified dates of all dumps just in case we don't get all due to size or other restrictions
+            $sortedMdmpFiles | ForEach-Object {
+                [PSCustomObject]@{
+                    FileName     = $_.Name
+                    Size         = ($_.Length / 1MB).ToString("F2") + " MB"
+                    ModifiedDate = $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                }
+            } | Format-Table -AutoSize | Out-File -FilePath $output_file_dumplist -Append
+
+            #count how many dump files from the last 2 months
+            $months_ago = 2
+            [datetime] $ErrorLogDateLimit = (Get-Date).AddMonths(-$months_ago)
+            $DumpFilesTemp = $allDumps  | Where-Object {($_.LastWriteTime -gt $ErrorLogDateLimit)}
+
+            Write-LogDebug "Found $($DumpFilesTemp.Count) memory dumps from the past $months_ago months (since '$ErrorLogDateLimit')" -DebugLogLevel 4
+
+
+            # now get the memory dumps for last 2 months, of size < 100 MB, and if too many, get only the most recent 20. Dump file types of mdmp and dmp
+            $dumpFileSize = 200MB
+            $dumpFileSizeinMB = $dumpFileSize/1024/1024
+            $dumpLimitCount = 20
+            $DumpFiles = $allDumps | Where-Object {($_.LastWriteTime -gt $ErrorLogDateLimit) -and ($_.Length -le $dumpFileSize)} | `
+                            Sort-Object -Property LastWriteTime -Descending | `
+                            Select-Object -First $dumpLimitCount
+
+
+            if ($DumpFiles)
+            {
+                Write-LogDebug "Capturing the most recent $($DumpFiles.Count) memory dumps (max count limit of $dumpLimitCount), from the past $months_ago months, of size < $dumpFileSizeinMB MB " -DebugLogLevel 4
+                Write-LogInformation "Gathering '$($DumpFiles.Count)' out of '$($DumpFilesTemp.Count)' memory dumps (max limit of $dumpLimitCount) from last $months_ago months of size < $dumpFileSizeinMB MB"
+
+                #copy the files and write any errors to the error file
+                $DumpCopyError = ""
+                Copy-Item -Path $DumpFiles -Destination $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable DumpCopyError | Out-Null
+                $DumpCopyError | Out-File -FilePath $error_file -Append
+
+                #if there are errors copying the file, log it
+                if($false -eq [string]::IsNullOrWhiteSpace($DumpCopyError))
+                {
+                    Write-LogDebug "Error copying memory dump file(s). For details, see '$error_file'." -DebugLogLevel 4
+                }
+
+            }
+            else {
+                Write-LogDebug "Not capturing any memory dumps. There are $($DumpFiles.Count) memory dumps from last $months_ago months of size < $dumpFileSizeinMB MB in the '$vDmpPath' folder." -DebugLogLevel 4
+            }
         }
-        else {
-            Write-LogDebug "Not capturing any memory dumps. There are $($DumpFiles.Count) memory dumps from last 2 months of size < 100 MB in the '$vDmpPath' folder." -DebugLogLevel 4
+        else 
+        {
+            $no_memory_dumps_found = "No memory dumps found for this SQL Server instance in the '$($vDmpPath)' folder."
+            Write-LogDebug $no_memory_dumps_found -DebugLogLevel 4
+            $no_memory_dumps_found | Out-File -FilePath $output_file_dumplist -Append
         }
 
         #get SQL Dump*.txt files
@@ -3405,10 +3782,19 @@ function GetSQLErrorLogsDumpsSysHealth()
                         Sort-Object -Property LastWriteTime -Descending | `
                         Select-Object -First 200
 
-        if ($null -ne $DumpTxtFiles)
+        if ($DumpTxtFiles)
         {
             Write-LogDebug "Capturing the most recent $($DumpTxtFiles.Count) SQLDump .txt files" -DebugLogLevel 4
-            Copy-Item -Path $DumpTxtFiles -Destination $DestinationFolder 2>> $error_file | Out-Null
+            # if there are errors copying the file, log it
+            $DumpTxtCopyError = ""
+            Copy-Item -Path $DumpTxtFiles -Destination $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable DumpTxtCopyError | Out-Null
+            $DumpTxtCopyError | Out-File -FilePath $error_file -Append
+
+            #if there are errors copying the file, log it
+            if($false -eq [string]::IsNullOrWhiteSpace($DumpTxtCopyError))
+            {
+                Write-LogDebug "Error copying SQLDump .txt file(s). For details, see '$error_file'." -DebugLogLevel 4
+            }
         }
         else {
             Write-LogDebug "Not capturing any SQLDump*.txt files. There are $($DumpTxtFiles.Count) SQLDump .txt files in the '$vDmpPath' folder." -DebugLogLevel 4
@@ -3422,43 +3808,64 @@ function GetSQLErrorLogsDumpsSysHealth()
         if ($null -ne $DumpLogFiles)
         {
             Write-LogDebug "Capturing the most recent $($DumpLogFiles.Count) SQLDump .log files" -DebugLogLevel 4
-            Copy-Item -Path $DumpLogFiles -Destination $DestinationFolder 2>> $error_file | Out-Null
+            #Copy-Item -Path $DumpLogFiles -Destination $DestinationFolder 2>> $error_file | Out-Null
+            $DumpLogCopyError = ""
+            Copy-Item -Path $DumpLogFiles -Destination $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable DumpLogCopyError | Out-Null
+            $DumpLogCopyError | Out-File -FilePath $error_file -Append
+
+            #if there are errors copying the file, log it
+            if($false -eq [string]::IsNullOrWhiteSpace($DumpLogCopyError))
+            {
+                Write-LogDebug "Error copying SQLDump .log file(s). For details, see '$error_file'." -DebugLogLevel 4
+            }
         }
-        else {
+        else 
+        {
             Write-LogDebug "Not capturing any SQLDump*.log files. There are $($DumpLogFiles.Count) SQLDump .log files in the '$vDmpPath' folder." -DebugLogLevel 4
         }
-       
+
         # We should always attempt to get the  SQLDumper errorlog in all scenarios in case it has been invoked, but no dump file was created. Also tagging the instance name to the file for any future usage whith multi-instance collections.
         $source = $vDmpPath + "\SQLDUMPER_ERRORLOG.log"
         $destination = $DestinationFolder + $server_instance + "_" + "SQLDUMPER_ERRORLOG.log"
 
         if(Test-Path -Path $source -PathType Leaf) {
             Write-LogDebug "Capturing the SQLDUMPER_ERRORLOG.log" -DebugLogLevel 2
-            Get-ChildItem -Path  $source | Copy-Item -Destination $destination 2>> $error_file | Out-Null
+            $DumpErrorLogCopyError = ""
+            Get-ChildItem -Path $source | Copy-Item -Destination $destination -ErrorAction SilentlyContinue -ErrorVariable DumpErrorLogCopyError | Out-Null
+            $DumpErrorLogCopyError | Out-File -FilePath $error_file -Append
+
+            if($false -eq [string]::IsNullOrWhiteSpace($DumpErrorLogCopyError))
+            {
+                $DumpErrorLogCopyError | Out-File -FilePath $error_file -Append
+                Write-LogDebug "Error copying SQLDUMPER_ERRORLOG.log. For details, see '$error_file'." -DebugLogLevel 4
+            }
         }
-        else {
+        else 
+        {
             Write-LogDebug "Not capturing SQL Dumper Error Log. File not found in the '$vDmpPath' directory."
         }
 
-         # We should always attempt to get the exception.log.
-         $source = $vDmpPath + "\exception.log"
-         $destination = $DestinationFolder + $server_instance + "_" + "exception.log"
- 
-         if(Test-Path -Path $source -PathType Leaf) {
-             Write-LogDebug "Capturing the exception.log" -DebugLogLevel 2
-             Get-ChildItem -Path  $source | Copy-Item -Destination $destination 2>> $error_file | Out-Null
-         }
-         else {
-             Write-LogDebug "Not capturing exception.log. File not found in the '$vDmpPath' directory."
-         }
+        # We should always attempt to get the exception.log.
+        $source = $vDmpPath + "\exception.log"
+        $destination = $DestinationFolder + $server_instance + "_" + "exception.log"
 
-        #get SQLDIAG XEL files for cluster troubleshooting
-        if (IsClustered)
+        if(Test-Path -Path $source -PathType Leaf) 
         {
-            Write-LogDebug "Getting MSSQLSERVER_SQLDIAG*.xel files" -DebugLogLevel 3
-            Get-ChildItem -Path $vLogPath -Filter "*_SQLDIAG*.xel" | Copy-Item -Destination $DestinationFolder 2>> $error_file | Out-Null
+            Write-LogDebug "Capturing the exception.log" -DebugLogLevel 2
+            $ExceptionLogCopyError = ""
+            Get-ChildItem -Path $source | Copy-Item -Destination $destination -ErrorAction SilentlyContinue -ErrorVariable ExceptionLogCopyError | Out-Null
+            $ExceptionLogCopyError | Out-File -FilePath $error_file -Append
+            
+            if($false -eq [string]::IsNullOrWhiteSpace($ExceptionLogCopyError)) 
+            {
+                $ExceptionLogCopyError | Out-File -FilePath $error_file -Append
+                Write-LogDebug "Error copying exception.log. For details, see '$error_file'." -DebugLogLevel 4
+            }
         }
-
+        else 
+        {
+            Write-LogDebug "Not capturing exception.log. File not found in the '$vDmpPath' directory."
+        }
     }
     catch
     {
@@ -3477,6 +3884,9 @@ function GetFullTextSearchLogFiles {
     {
 
         $server = $global:sql_instance_conn_str
+
+        #build a string of servername_instancename, if there is a named instance (\) involved
+        $server_instance = $server -replace "\\", "_"
         
 
         $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
@@ -3486,28 +3896,30 @@ function GetFullTextSearchLogFiles {
 
         [string]$DestinationFolder = $global:output_folder
 
-        # get the path to the ERRORLOG from the registry
-        $vLogPath = GetLogPathFromReg -server $server -logType "ERRORLOG"
-        
-        if ($vLogPath -eq $false)
+        # Get the paths to the SQLFT and FDLAUNCHER logs from the registry
+        $sqlftLogPath = GetLogPathFromReg -server $server -logType "SQLFTLOG"
+        $fdlauncherLogPath = GetLogPathFromReg -server $server -logType "FDLAUNCHERRORLOG"
+
+        if (($sqlftLogPath -eq $false) -or ($fdlauncherLogPath -eq $false))
         {
             # The registry key is not valid, return
-            Write-LogWarning "The registry key for ERRORLOG path is not valid. Continuing with other collectors."
+            Write-LogWarning "The registry key for SQLFTLOG or FDLAUNCHERLOG paths is not valid. Continuing with other collectors."
             return
         }
 
-        $server_instance = $server -replace "\\", "_"
+        # Combine the folders into an array
+        $logPaths = @($sqlftLogPath, $fdlauncherLogPath)
 
-        # for ERRORLOG files that are larger than 1 GB copy only head or tail. Otherwise copy the file itself
-        Write-LogDebug "Getting FullText-Search files from '$vLogPath'" -DebugLogLevel 3
 
-        #get FullText files
-        Write-LogDebug "Getting Full-Text Search log files" -DebugLogLevel 3
+        # print the combined paths to be searched
+        $logPathsString = $logPaths -join "', '"
+        Write-LogDebug "Getting FullText-Search files from '$logPathsString'" -DebugLogLevel 3
 
-        $FTS_logfiles = Get-ChildItem -Path $vLogPath -Filter "*" | Where-Object { $_.Name -like "SQLFT*" -or $_.Name -like "FD*" }
+
+        $FTS_logfiles = Get-ChildItem -Path $logPaths -Filter "*" | Where-Object { $_.Name -like "SQLFT*" -or $_.Name -like "FD*" }
         $FTSlog_count = 0
 
-        #Check if any agent error logs found
+        #Check if any FTS error logs found
         if ($FTS_logfiles.Count -eq 0)
         {
             #Do not edit message without updating Testing Infra Array.
@@ -3706,7 +4118,9 @@ function GetSQLAssessmentAPI()
 
         if (Get-Module -ListAvailable -Name sqlserver)
         {
-            if ((Get-Module -ListAvailable -Name sqlserver).exportedCommands.Values | Where-Object name -EQ "Invoke-SqlAssessment")
+            $Invoke_SqlAssessment_command = Get-Command -Module SqlServer -Name Invoke-SqlAssessment -ErrorAction SilentlyContinue 
+            $Get_SqlInstance_command = Get-Command -Module SqlServer -Name Get-SqlInstance -ErrorAction SilentlyContinue
+            if ($Invoke_SqlAssessment_command -and $Get_SqlInstance_command)
             {
                 Write-LogDebug "Invoke-SqlAssessment() function present" -DebugLogLevel 3
                 Get-SqlInstance -ServerInstance $server -TrustServerCertificate -Encrypt Mandatory | Invoke-SqlAssessment -FlattenOutput | Out-File $output_file
@@ -4050,6 +4464,131 @@ function GetXeventServiceBrokerDbMail
 }
 
 
+function GetDotNetVersions 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    try {
+        # Set up the collector name and server instance
+        $server = $global:sql_instance_conn_str
+
+        $collector_name = "DotNetVersions"
+        Write-LogInformation "Executing Collector: $collector_name"
+
+        # Set up the error file
+        $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
+        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
+        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        # Create the output folder for the .NET versions
+        $partial_output_file_name = CreatePartialOutputFilename($server)
+        $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        # Get .NET Framework version
+        $frameworkResult = @{}
+
+        Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -Recurse |
+        Get-ItemProperty -Name Version -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSChildName -match '^(?!S)\p{L}'} |
+        ForEach-Object {
+            $name = ".NET Framework $($_.PSChildName)"
+            $frameworkResult[$name] = $_.Version
+        }
+
+        if ($frameworkResult.Count -eq 0) 
+        {
+            $frameworkResult[".NET Framework"] = "Not detected"
+        }
+
+        # Get .NET Core versions
+        $dotnetCoreSdkVersions = $null
+        $dotnetCoreRuntimeVersions = $null
+
+        if (Get-Command dotnet -ErrorAction SilentlyContinue) 
+        {
+            $dotnetCoreSdkVersions = & "dotnet" --list-sdks
+            $dotnetCoreRuntimeVersions = & "dotnet" --list-runtimes
+        }
+
+
+        # Process .NET Core SDK versions
+        $coreResults = @()
+        $netcore_cntr = 0
+        if ($dotnetCoreSdkVersions) 
+        {
+            
+            foreach ($versionSdk in $dotnetCoreSdkVersions) 
+            {
+                $netcore_cntr += 1
+                $coreResults += @{ $("("+ $netcore_cntr + ") .NET Core SDK" ) = $versionSdk }
+            }
+        } else {
+            $coreResults += @{ ".NET Core SDK" = "Not detected" }
+        }
+
+                
+        # Process .NET Core Runtime versions
+        if ($dotnetCoreRuntimeVersions) 
+        {
+            foreach ($versionRT in $dotnetCoreRuntimeVersions) 
+            {
+                $netcore_cntr += 1
+                $coreResults += @{ $("("+ $netcore_cntr + ") .NET Core Runtime" ) = $versionRT }
+            }
+        } else {
+            $coreResults += @{ ".NET Core Runtime" = "Not detected" }
+        }
+
+        # Combine results using Add method
+        $combinedResults = @{}
+        foreach ($key in $frameworkResult.Keys) 
+        {
+            $combinedResults.Add($key, $frameworkResult[$key])
+        }
+        foreach ($result in $coreResults) 
+        {
+            foreach ($key in $result.Keys) 
+            {
+                $combinedResults.Add($key, $result[$key])
+            }
+        }
+
+        # Determine the maximum length for each column
+        $maxFrameworkLength = ($combinedResults.Keys | Measure-Object -Maximum Length).Maximum
+        $maxVersionLength = ($combinedResults.Values | Measure-Object -Maximum Length).Maximum
+
+        # Create the header and separator
+        $header = "Framework".PadRight($maxFrameworkLength) + "  Version".PadRight($maxVersionLength)
+        $separator = "-" * $maxFrameworkLength + "  " + "-" * $maxVersionLength
+
+        # Store the header, separator, and combined results in a string array
+        $outputContent = @()
+        $outputContent += "-- dot_net_versions --"
+        $outputContent += $header
+        $outputContent += $separator
+
+        foreach ($key in $combinedResults.Keys) 
+        {
+            $line = $key.PadRight($maxFrameworkLength) + "  " + $combinedResults[$key].PadRight($maxVersionLength)
+            $outputContent += $line
+        }
+
+        # Write the entire content to the output file in one operation
+        try {
+            $outputContent | Out-File -FilePath $output_file -Append
+            Write-LogDebug "Collected .NET Framework and .NET Core versions successfully." -DebugLogLevel 3
+        }
+        catch 
+        {
+            $errorMessage = $_.Exception.Message
+            $errorMessage | Out-File -FilePath $error_file -Append
+        }
+    }
+    catch {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+    }
+}
+
 
 function validateUserInput([string[]]$AllInput)
 {
@@ -4245,8 +4784,9 @@ function Invoke-BasicScenario([bool] $PerfmonOnly = $false)
     GetTaskList
     GetFilterDrivers
     GetSysteminfoSummary
+    GetDotNetVersions
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4308,7 +4848,7 @@ function Invoke-GeneralPerfScenario()
 
     GetPerfmonCounters
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4348,7 +4888,7 @@ function Invoke-DetailedPerfScenario()
 
     GetPerfmonCounters
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4386,7 +4926,7 @@ function Invoke-LightPerfScenario ()
 
     GetPerfmonCounters
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4422,7 +4962,7 @@ function Invoke-AlwaysOnScenario()
     Write-LogInformation "Collecting logs for '$global:ALWAYSON_NAME' scenario" -ForegroundColor Green
 
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4458,7 +4998,7 @@ function Invoke-ReplicationScenario()
     Write-LogDebug "Inside" $MyInvocation.MyCommand
     Write-LogInformation "Collecting logs for '$global:REPLICATION_NAME' scenario" -ForegroundColor Green
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4530,7 +5070,7 @@ function Invoke-MemoryScenario
 
 
 
-    if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
         Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
     }
@@ -4556,6 +5096,7 @@ function Invoke-SetupScenario
     GetSQLSetupLogs
     GetInstallerRegistryKeys
     GetMissingSQLMsiMspFiles
+    GetInstalledPrograms
 }
 
 function Invoke-BackupRestoreScenario()
@@ -4638,7 +5179,7 @@ function Invoke-ServiceBrokerDbMailScenario ()
         # get Perfmon counters
         GetPerfmonCounters
 
-        if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+        if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
         {
             Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
         }
@@ -4698,7 +5239,7 @@ function Invoke-NeverEndingQueryScenario()
         # get Perfmon counters
         GetPerfmonCounters
 
-        if ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)
+        if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
         {
             Write-LogDebug $NoCollectionMessage -DebugLogLevel 1
             Write-LogWarning "No SQL Server instance specified, thus skipping execution of SQL Server-based collectors"
@@ -4873,18 +5414,27 @@ function StartStopTimeForDiagnostics ([PSObject] $timeParam, [string] $startOrSt
 
 
         [int] $increment = 0
-        [int] $sleepIntervalSec = 2
+        [int] $sleepIntervalSec = 4
 
         while ((Get-Date) -lt (Get-Date $formatted_date_time))
         {
             Start-Sleep -Seconds $sleepIntervalSec
 
+            #check if CTRL+C was pressed and exit the loop
             if ($Host.UI.RawUI.KeyAvailable -and (3 -eq [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,IncludeKeyDown,NoEcho").Character))
             {
                Write-LogWarning "*******************"
                Write-LogWarning "You pressed CTRL+C. Stopped waiting..."
                Write-LogWarning "*******************"
                break
+            }
+
+            #check if a stop file (logscout.stop) was created and exit the loop
+            if (Check-StopFile -FilePath $global:stopFilePath) 
+            {
+                $ValidStop = $true
+                Write-LogInformation "Stop file detected. Shutting down the collector" -ForegroundColor Green
+                break
             }
 
             $increment += $sleepIntervalSec
@@ -5478,6 +6028,13 @@ function Start-DiagCollectors ()
     }
 }
 
+#helper function to check if a stop file exists
+function Check-StopFile ([string]$FilePath) 
+{
+    return Test-Path $FilePath
+}
+
+
 function Stop-DiagCollectors()
 {
     Write-LogDebug "inside" $MyInvocation.MyCommand
@@ -5509,31 +6066,69 @@ function Stop-DiagCollectors()
         CheckInternalFolderError
 
         if ($false -eq $global:stop_automatically)
-        { #wait for user to type "STOP"
+        {   
+
+            $readHostOptions = ""
+
+            if ($global:dump_helper_arguments -ne "none") {
+                $readHostOptions += "MemDump, "
+            }
+
+            #wait for user to type "STOP", "StopFile" or "MemDump"
+            #construct the Read-Host options string 
+            $readHostOptions += "StopFile, Stop"
+
+
+
+            # get the user input on when and how to stop the collection
             while ($ValidStop -eq $false)
             {
-                Write-LogInformation "Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue" -ForegroundColor Green
+                            
+                Write-LogInformation "Type 'STOP' to terminate the diagnostics collection or type 'StopFile' to end collection externally by an event." -ForegroundColor Green
                 if ($global:dump_helper_arguments -ne "none") 
-                {   
-                    Write-LogInformation "You can invoke MemoryDump by typing 'MemDump'" -ForegroundColor Green
+                {
+                    #if we have 1 dump, produce message for 1 dump, else for multiple dumps add the interval at the end
+                    # Type 'MemDump' to generate 4 dump(s) on demand, X seconds apart.
+                    if ($global:dump_helper_count -eq 1) {
+                        $memDumpPrompt = "Type 'MemDump' to generate $global:dump_helper_count dump on demand"
+                    } else {
+                        $memDumpPrompt = "Type 'MemDump' to generate $global:dump_helper_count dumps on demand, $global:dump_helper_delay seconds apart."
+                    }
+
+                    Write-LogInformation "$memDumpPrompt" -ForegroundColor Green
+                    
                 }
-                $StopStr = (Read-Host ">" -CustomLogMessage "StopCollection Console input:").ToLower()
+                $StopStr = (Read-Host "$readHostOptions >" -CustomLogMessage "StopCollection Console input:").ToLower()
 
                 #validate this PID is in the list discovered
                 Switch ($StopStr )
                 {
                     "stop"{
-                        $ValidStop = $true
-                        Write-LogInformation "Shutting down the collector" -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
-                        break;
+                            $ValidStop = $true
+                            Write-LogInformation "Shutting down the collector" -ForegroundColor Green #DO NOT CHANGE - Message is backward compatible
+                            break;
                         }
                     "memdump"{
-                            if ($global:dump_helper_arguments -ne "none") {
+                            if ($global:dump_helper_arguments -ne "none") 
+                            {
                                 Invoke-DumpMemoryScenario
                             }
                             
                             $ValidStop = $false
+                        }
+                    "stopfile" {
+                            #check if a stop file (logscout.stop) was created and exit the loop
+                            Write-LogInformation "Waiting for stop file to be created..." -ForegroundColor Green
+                            while ($ValidStop -eq $false) {
+                                if (Check-StopFile -FilePath $global:stopFilePath) 
+                                {
+                                    $ValidStop = $true
+                                    Write-LogInformation "Stop file detected. Shutting down the collector" -ForegroundColor Green
+                                    break
+                                }
+                                Start-Sleep -Seconds 5
                             }
+                        }
                     Default
                         {
                             $ValidStop = $false
@@ -6029,12 +6624,26 @@ function Stop-ProcMonTrace([string]$partial_error_output_file_name)
 
 function Invoke-DiagnosticCleanUpAndExit()
 {
+    <#
+        The purpose of this function is to run quickly and therefore we don't call into many of the helper functions in SQL LogScout. 
+        Not using other helper functions also minimizes the risk and increases the reliability of this function.
+    #>
+
     Write-LogDebug "inside" $MyInvocation.MyCommand
 
     try
     {
         Write-LogWarning "Launching cleanup and exit routine... please wait"
         $server = $global:sql_instance_conn_str
+
+        #get the sqlcmd.exe path and check if the path  is valid and not empty
+        $is_sqlcmd_valid = $false
+        $sqlcmd_executable = GetSQLCmdPath
+
+        if ($false -eq [string]::IsNullOrWhiteSpace($sqlcmd_executable))
+        {
+            $is_sqlcmd_valid = $true
+        }
 
         #quick cleanup to ensure no collectors are running.
         #Kill existing sessions
@@ -6053,31 +6662,29 @@ function Invoke-DiagnosticCleanUpAndExit()
             close curSession;
             deallocate curSession;
             "
-        if (($server -ne $NO_INSTANCE_NAME) -or ($global:sql_instance_service_status -eq "Running"))
+        # if a valid server name is provided and the SQL Server service is running, and sqlcmd exist on the machine, then kill the active logscout sessions
+        if (($server -ne $global:NO_INSTANCE_NAME) -and ($global:sql_instance_service_status -eq "Running") -and ($is_sqlcmd_valid -eq $true))
         {
-            $executable = "sqlcmd.exe"
             $argument_list ="-S" + $server +  " -E -Hsqllogscout_cleanup -w8000 -Q`""+ $query + "`" "
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
+            StartNewProcess -FilePath $sqlcmd_executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
 
         }
 
 
         #STOP the XEvent sessions
 
-        if (($server -ne $NO_INSTANCE_NAME) -or ($global:sql_instance_service_status -eq "Running"))
+        # if a valid server name is provided and the SQL Server service is running, and sqlcmd exist on the machine, then stop the XEvent session
+        if (($server -ne $global:NO_INSTANCE_NAME) -and ($global:sql_instance_service_status -eq "Running") -and ($is_sqlcmd_valid -eq $true))
         {
             $alter_event_session_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_session] ON SERVER; END"
-            $executable = "sqlcmd.exe"
             $argument_list = "-S" + $server + " -E -Hsqllogscout_cleanup -w8000 -Q`"" + $alter_event_session_stop + "`""
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
+            StartNewProcess -FilePath $sqlcmd_executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
 
 
             #avoid errors if there was not Xevent collector started
             $alter_event_session_ag_stop = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER; END"
-            $executable = "sqlcmd.exe"
             $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -Q`"" + $alter_event_session_ag_stop + "`""
-            StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
-
+            StartNewProcess -FilePath $sqlcmd_executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
         }
 
         #STOP Perfmon
@@ -6162,12 +6769,18 @@ function Invoke-DiagnosticCleanUpAndExit()
 
         }
 
-        if (($server -ne $NO_INSTANCE_NAME) -and ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) )
+        # if a valid server name is provided and the SQL Server service is running, and sqlcmd exist on the machine, 
+        # and the BackupRestoreBit is enabled, then disable the trace flags for Backup/Restore
+        if (($server -ne $global:NO_INSTANCE_NAME) `
+            -and ($global:sql_instance_service_status -eq "Running")`
+            -and ($is_sqlcmd_valid -eq $true) `
+            -and ($true -eq (IsScenarioEnabled -scenarioBit $global:BackupRestoreBit )) 
+        )
         {
             #clean up backup/restore tace flags
             $Disabled_Trace_Flag = "DBCC TRACEOFF(3004,3212,3605,-1)"
             $argument_list = "-S" + $server + " -E -Hsqllogscout_stop -w8000 -Q`"" + $Disabled_Trace_Flag + "`""
-            StartNewProcess -FilePath "sqlcmd.exe" -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
+            StartNewProcess -FilePath $sqlcmd_executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
 
         }
 
@@ -6239,6 +6852,9 @@ function Invoke-DiagnosticCleanUpAndExit()
 
         Write-LogInformation "Thank you for using SQL LogScout!" -ForegroundColor Green
 
+        #we have to remove importModule early on before we flush and close open streams
+        Remove-Module -Name CustomImportModule
+        
         #close and remove handles to the log files
         if ($global:debugLogStream)
         {
@@ -6262,8 +6878,22 @@ function Invoke-DiagnosticCleanUpAndExit()
         }
 
         ## Remove all modules from the current session so that the script can be run again without restarting the session
-        Get-Module | Remove-Module
 
+        $LoadedModules = Get-Module  
+        ForEach ($module in $LoadedModules)
+        {
+            try 
+            {
+                Remove-Module -Name $module.Name -Force -ErrorAction SilentlyContinue 
+            }
+            catch 
+            {
+                #if we fail to remove a specific module we report and continue
+                Microsoft.PowerShell.Utility\Write-Host "Could not remove module : $($module.Name)"
+                continue
+            }
+        } 
+        
         #Clean up global variables, except for the output folder and many of the input parameters
         #Clean up is necessary to allow the script to be run again without restarting the PS session and causing errors
         #Also when the script is run from Powershell.exe -File ... the scope of local variables and parameters is treated as global and they get deleted. Thus the exclusion list
@@ -6296,6 +6926,8 @@ function Invoke-DiagnosticCleanUpAndExit()
     }
     catch
     {
+        #Importing commonfunction is needed if the exception happens after removal of the function in the previous block
+        Import-Module .\CommonFunctions.psm1
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
         exit
     }
@@ -6573,9 +7205,9 @@ param (
     
     Write-LogDebug "inside " $MyInvocation.MyCommand
 
-    if (($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME) -or ($true -eq $global:instance_independent_collection ) -or ($global:sql_instance_service_status -ne "Running"))
+    if (($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME) -or ($true -eq $global:instance_independent_collection ) -or ($global:sql_instance_service_status -ne "Running"))
     {
-        Write-LogDebug "Offline status values: NO_INSTANCE_NAME=$NO_INSTANCE_NAME, instance_independent_collection=$global:instance_independent_collection, allow_static_data_because_service_offline=$global:allow_static_data_because_service_offline, sql_instance_service_status=$global:sql_instance_service_status" -DebugLogLevel 3
+        Write-LogDebug "Offline status values: NO_INSTANCE_NAME=$global:NO_INSTANCE_NAME, instance_independent_collection=$global:instance_independent_collection, allow_static_data_because_service_offline=$global:allow_static_data_because_service_offline, sql_instance_service_status=$global:sql_instance_service_status" -DebugLogLevel 3
         Write-LogWarning "SQL Server instance isn't found, is offline, or scenario is instance independent. SQL Permissions-checking is not necessary"
         Start-Sleep -Seconds 5
         return $true
@@ -6991,7 +7623,7 @@ function GetPerformanceDataAndLogs
 
 
         #pick a sql instance
-        Select-SQLServerForDiagnostics
+        Select-SQLServerForDiagnostics | Out-Null
 
         #If selected SQL instance is not running and the data collection requires connection to SQL Server, exit
         if ($true -ne $global:allow_static_data_because_service_offline -and $global:sql_instance_service_status -ne "Running")
@@ -7051,7 +7683,7 @@ function InitializeGlobalsFromSQL()
 
     if 
     (
-        ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)    -or    
+        ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)    -or    
         ($true -eq $global:instance_independent_collection )     -or 
         ("Running" -ne $global:sql_instance_service_status) 
      )
