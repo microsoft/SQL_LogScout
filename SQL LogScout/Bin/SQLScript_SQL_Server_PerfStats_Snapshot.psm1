@@ -122,7 +122,7 @@ begin
 		PRINT '-- Missing Indexes --'
 		SELECT CONVERT (varchar(30), @runtime, 126) AS runtime, 
 		mig.index_group_handle, mid.index_handle, 
-		CONVERT (decimal (28,1), migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) AS improvement_measure, 
+		CONVERT (bigint, migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) AS improvement_measure, 
 		'CREATE INDEX missing_index_' + CONVERT (varchar, mig.index_group_handle) + '_' + CONVERT (varchar, mid.index_handle) 
 		+ ' ON ' + mid.statement 
 		+ ' (' + ISNULL (mid.equality_columns,'') 
@@ -133,8 +133,8 @@ begin
 		FROM sys.dm_db_missing_index_groups mig
 		INNER JOIN sys.dm_db_missing_index_group_stats migs ON migs.group_handle = mig.index_group_handle
 		INNER JOIN sys.dm_db_missing_index_details mid ON mig.index_handle = mid.index_handle
-		WHERE CONVERT (decimal (28,1), migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) > 10
-		ORDER BY migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC
+		WHERE CONVERT (bigint, migs.avg_total_user_cost * migs.avg_user_impact * (migs.user_seeks + migs.user_scans)) > 10
+		ORDER BY improvement_measure DESC
 		OPTION (MAX_GRANT_PERCENT = 3, MAXDOP 1)
 
 		PRINT ''
@@ -821,7 +821,7 @@ BEGIN
 			SELECT object_id, OBJECT_NAME(object_id) [object_name], index_id, name [index_name],
 			sql_text,last_max_dop_used,	partition_number, state, state_desc, start_time, 
 			last_pause_time, total_execution_time, percent_complete, page_count 
-			FROM sys.index_resumable_operations
+			FROM sys.index_resumable_operations WITH (NOLOCK)
 			
 			PRINT ''
 			RAISERROR ('', 0, 1) WITH NOWAIT

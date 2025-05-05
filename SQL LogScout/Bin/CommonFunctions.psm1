@@ -28,6 +28,7 @@ function InitCriticalDirectories()
         }  
         Set-OutputPath
         Set-InternalPath
+        Set-StopFilePath
     }
     catch
     {
@@ -80,7 +81,7 @@ function Set-OutputPath()
         }
         elseif ($global:custom_user_directory -eq "PromptForCustomDir" -And !$global:gui_mode)    
         {
-            $userlogfolder = Read-Host "Would your like the logs to be collected on a non-default drive and directory?" -CustomLogMessage "Prompt CustomDir Console Input:"
+            $userlogfolder = Read-Host "Would you like the logs to be collected on a non-default drive and directory?" -CustomLogMessage "Prompt CustomDir Console Input:"
             $HelpMessage = "Please enter a valid input (Y or N)"
 
             $ValidInput = "Y","N"
@@ -155,6 +156,20 @@ function Set-InternalPath()
     {
         #the \internal folder is subfolder of \output
         $global:internal_output_folder =  ($global:output_folder  + "internal\")    
+    }
+    catch 
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem    
+    }
+}
+
+function Set-StopFilePath() 
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+    try 
+    {
+        #set the stop file path to the \internal folder
+        $global:stopFilePath = ($global:internal_output_folder + "logscout.stop")    
     }
     catch 
     {
@@ -283,7 +298,8 @@ function ReuseOrRecreateOutputFolder()
             if (Test-Path -Path $global:output_folder)
             {
                 Remove-Item -Path $global:output_folder -Force -Recurse  | Out-Null
-                Write-LogWarning "Deleted $global:output_folder and its contents"
+                Write-LogInformation "Deleting '$global:output_folder' and its contents. Please wait..."
+                Write-LogWarning "Deleted '$global:output_folder' folder and its contents"
             }
         }
         elseif ($DeleteOrNew -eq "N") 
@@ -715,7 +731,7 @@ function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false, [int] $try
     {
         if 
         (
-            ($global:sql_instance_conn_str -eq $NO_INSTANCE_NAME)    -or    
+            ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)    -or    
             ($true -eq $global:instance_independent_collection )     -or 
             ( ("Running" -ne $global:sql_instance_service_status) -and (-$false -eq $SkipStatusCheck) )
         )
@@ -757,7 +773,11 @@ function getSQLConnectionString ([Boolean] $SkipStatusCheck = $false, [int] $try
             $connectionStringBuilder["TrustServerCertificate"] = "Yes"
 
         } else {
+
+            #only for the classic SQL Server driver  use no encryption as it doesn't support it in all OS versions. But also convenient for WID connections
             $connectionStringBuilder["Integrated Security"] = "True"
+            $global:is_connection_encrypted = $false
+
             Write-LogWarning ("*"*70)
             Write-LogWarning "*  SQL LogScout is switching to the classic SQL Server ODBC driver."  
             Write-LogWarning "*  Thus, this local connection is unencrypted to ensure it is successful"
@@ -1002,6 +1022,8 @@ function GetSQLCmdPath()
 
     try 
     {
+        [string] $sqlcmd_executable = ""
+
         # use the global sqlcmdpath variable if it isn't empty. The Test-Path validation will be done just once for perf reasons. 
         # If empty, populate by finding the path to sqlcmd.exe  with highest version
         if (([string]::IsNullOrWhiteSpace($global:sqlcmdPath) -eq $false) -and ($global:sqlcmdPath -match "sqlcmd.exe"))
@@ -1010,7 +1032,8 @@ function GetSQLCmdPath()
         }
         else
         {
-            #if no  path to sqlcmd, find the highest version of sqlcmd.exe on the sytem (assuming C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\... most common case)
+            #if no  path to sqlcmd, find the highest version of sqlcmd.exe on the system 
+            # first start by trying the common case C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\... 
             $sqlcmd_fullpath =  (Get-ChildItem "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\*\Tools\Binn\SQLCMD.EXE" -ErrorAction SilentlyContinue|
                                     Sort-Object -Property FullName -Descending | 
                                     Select-Object -First 1 -Property FullName).FullName
@@ -1019,11 +1042,11 @@ function GetSQLCmdPath()
             if (([string]::IsNullOrWhiteSpace($sqlcmd_fullpath) -eq $false) -and (Test-Path -Path $sqlcmd_fullpath))
             {
                 $sqlcmd_executable = $global:sqlcmdPath = $sqlcmd_fullpath
-                Write-LogDebug "SQLCMD path assigned to global variable: '$global:sqlcmdPath'" -DebugLogLevel 2
+                Write-LogDebug "SQLCMD path found in common location and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
             }
             else 
             {
-                #if no path found, try to get the path from the registry and append the executable name
+                #if no path found thus far, second choice is to get the path from the registry and append the executable name
 
                 # Get the ODBCToolsPath values from the registry
                 $paths = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\*\Tools\ClientSetup\" -Name "ODBCToolsPath" -ErrorAction SilentlyContinue).ODBCToolsPath
@@ -1049,12 +1072,39 @@ function GetSQLCmdPath()
                 if (([string]::IsNullOrWhiteSpace($sqlcmd_path_reg) -eq $false) -and (Test-Path -Path $sqlcmd_path_reg))
                 {
                     $sqlcmd_executable = $global:sqlcmdPath = $sqlcmd_path_reg
-                    Write-LogDebug "SQLCMD path discovered in registry assigned to global variable : '$global:sqlcmdPath'" -DebugLogLevel 2
+                    Write-LogDebug "SQLCMD.EXE path discovered in registry and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
                 }
                 else 
                 {
-                    #last resort, just use the executable name without the path, and let the system find it if at all present
-                    $sqlcmd_executable = "sqlcmd.exe"
+                    #if no path found thus far, third choice is to look in the Environment variable PATH and pick one if found (last one seems the highest version typically)
+                    $sqlcmd_path_env = ((Get-Command -Name "sqlcmd.exe" -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -Last 1)
+               
+                    #if path is valid, assign to global variable and local return variable
+                    # else log an error and continue without T-SQL collections
+                    if (($sqlcmd_path_env).Name -match "sqlcmd")
+                    {
+                        
+                        if ( ([string]::IsNullOrWhiteSpace(($sqlcmd_path_env.Source)) -eq $false) -and (Test-Path -Path ($sqlcmd_path_env.Source) ))
+                        {
+                            $sqlcmd_executable = $global:sqlcmdPath  = $sqlcmd_path_env.Source
+                             Write-LogDebug "SQLCMD.EXE path discovered in environment variable PATH and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
+
+                        }
+                        # in older version like SQL 2012, the registry key ODBCToolsPath is not present AND the Get-Command.Source property is not populated, so hard-codiing the sqlcmd.exe directly
+                        else
+                        {
+                            $sqlcmd_executable = "sqlcmd.exe"
+                            Write-LogDebug  "SQLCMD.EXE discovered in environment variable PATH, but it's an older version so assigned executable directly: '$sqlcmd_executable'" -DebugLogLevel 2
+                        }
+
+                    }
+                    else
+                    {
+                        $sqlcmd_executable = $null
+                        Write-LogError "SQLCMD.EXE not found. Continuing without T-SQL script execution."
+                        Write-LogInformation "To enable T-SQL collections, install SQLCMD (ODBC) from your installation media or download from Microsoft."
+                    }
+                    
                 }
             }
         }
@@ -1086,13 +1136,31 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
             $collector_name = "blank_collector_name"
         }
 
+        
+        Write-LogInformation "Executing Collector: $collector_name"
+
+        #get the path to the input script
         $input_script = BuildInputScript $global:present_directory $input_script_name 
 
         #get the path to sqlcmd.exe
         $executable = GetSQLCmdPath
 
+        if ([string]::IsNullOrWhiteSpace($executable))
+        {
+            #if we can't find sqlcmd.exe, we can't execute the script so just return
+            return
+        }
+
         #command arguments for sqlcmd; server connection, trusted connection, Hostname, wide output, and encryption negotiation
-        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000 -C -N"
+        $argument_list = "-S" + $server + " -E -Hsqllogscout -w8000" 
+        
+        #if we connected with unencrypted connection earlier with the SQL Server driver, remove -C -N from the command line
+        #otherwise, default to using encrypted connection with the ODBC driver
+        if ($global:is_connection_encrypted -eq $true)
+        {
+            $argument_list += " -C -N"
+        }
+        
 
         #if secondary replica has read-intent, we add -KReadOnly to avoid failures on those secondaries
         if ($global:is_secondary_read_intent_only -eq $true)
@@ -1145,7 +1213,7 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
         $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name ($collector_name+"_stderr") -needExtraQuotes $false 
         $stdoutput_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name ($collector_name+"_stdout") -needExtraQuotes $false 
 
-        Write-LogInformation "Executing Collector: $collector_name"
+        #start the process
         StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden -RedirectStandardError $error_file -RedirectStandardOutput $stdoutput_file -Wait $wait_sync | Out-Null
         
     }
@@ -1176,6 +1244,28 @@ function isHADREnabled()
     if ($isHadrEnabled -eq "1") {
         Write-LogDebug "HADR /AG is enabled on this system" -DebugLogLevel 2 
         return $True
+    }
+    
+    return $false
+
+}
+function IsSqlFCI() 
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    
+    $propertiesList = $global:SQLSERVERPROPERTYTBL
+    
+    if (!$propertiesList) {
+        #We didn't receive server properteis     
+        Write-LogError " getServerproperty returned no results " 
+        return $false
+    }
+    
+    $isSqlFci = $propertiesList."IsClustered"
+
+    if ($isSqlFci -eq "1") {
+        Write-LogDebug "SQL Server is FCI on this system" -DebugLogLevel 2 
+        return $true
     }
     
     return $false
@@ -1448,10 +1538,6 @@ Function GetRegistryKeys
         [int]$CurrentPSMajorVer = ($PSVersionTable.PSVersion).Major
 
 
-        # This variable is used to hold the PowerShell Major version for calling the appropriate cmdlet that is compatible with the PS Version
-        [int]$CurrentPSMajorVer = ($PSVersionTable.PSVersion).Major
-
-
         # for each nested key perform an iteration to get all the properties for writing to the output file
         foreach ($k in $keys)
         {
@@ -1655,6 +1741,7 @@ function GetLogPathFromReg([string]$server, [string]$logType)
     try
     {
         $vInstance = ""
+        $vInstanceType = ""
         $vRegInst = ""
         $RegPathParams = ""
         $retLogPath = ""
@@ -1662,21 +1749,29 @@ function GetLogPathFromReg([string]$server, [string]$logType)
 
 
         # extract the instance name from the server name
-        $instByPort = GetSQLInstanceNameByPortNo($server)
-        Write-LogDebug "Result from GetSQLInstanceNameByPortNo is '$instByPort'" -DebugLogLevel 2
+        $instByPortObj = GetSQLInstanceNameByPortNo($server)
+        Write-LogDebug "Result from GetSQLInstanceNameByPortNo is '$instByPortObj'" -DebugLogLevel 2
         
-        if ($true -ne [String]::IsNullOrWhiteSpace($instByPort))
+        if (-not ([String]::IsNullOrWhiteSpace($instByPortObj.InstanceName)))
         {
-            $vInstance = $instByPort
+            $vInstance = $instByPortObj.InstanceName
+            $vInstanceType = $instByPortObj.Type
         }
         else 
         {   
             # get the instance name from the server name (registry stores MSSQLSERVER if default instance)
             $vInstanceObj = Get-InstanceNameObject($server)
             $vInstance = $vInstanceObj.InstanceName
+            $vInstanceType = $vInstanceObj.Type
         }
         
-        Write-LogDebug "Instance name is $vInstance" -DebugLogLevel 2
+        # if the instance name is default instance on an FCI, we need to set it to the MSSQLSERVER because the registry stores it that way
+        if ($vInstanceType -eq $global:SQLInstanceType["DefaultInstanceVNN"])
+        {
+            $vInstance = "MSSQLSERVER"
+        }
+
+        Write-LogDebug "Instance name for the purpose of reg key lookup is '$vInstance'" -DebugLogLevel 2
 
         # make sure a Instance Names is a valid registry key (could be missing if SQL Server is not installed or registry is corrupt)
         if (Test-Path -Path $regInstNames)
@@ -1692,49 +1787,130 @@ function GetLogPathFromReg([string]$server, [string]$logType)
 
         # validate the registry value with the instance name appended to the end
         # for example, HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL\SQL2017
-        if ([String]::IsNullOrWhiteSpace($vRegInst) -eq $true)
+        # special case for WID
+        if (([String]::IsNullOrWhiteSpace($vRegInst) -eq $true) -and ($vInstance -ne "MSWIN8.SQLWID"))
         {
             Write-LogDebug "Registry value vRegInst is null or empty. Not getting files from Log directory" -DebugLogLevel 2
             return $false
         }
         else
         {
+            #special case for WID
+            # if the server name (alias) to connect to is "MSWIN8.SQLWID", then hard-code the $vRegInst to "MSWIN8.SQLWID"
+            if ($vInstance -eq "MSWIN8.SQLWID")
+            {
+                $vRegInst = "MSWIN8.SQLWID"
+                Write-LogDebug "It appears this is WID, assigning vRegInst to '$vRegInst'" -DebugLogLevel 2
+            }
+        
             # get the SQL Server registry key + instance name
-            $RegPathParams = "HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst 
+            $RegPathInstance = "HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\" + $vRegInst 
+
+
+            # go after the startup params registry key 
+            $RegPathParams = $RegPathInstance + "\MSSQLSERVER\Parameters"
+
+            if (Test-Path -Path $RegPathParams)
+            {
+                Write-LogDebug "Registry RegPathParams='$RegPathParams' is valid. Getting SQLArg keys" -DebugLogLevel 2
+
+                # Get all the SQLArg keys
+                $keys = Get-ItemProperty -Path $RegPathParams | Select-Object -Property SQLArg*
+
+                # Initialize the errorLogPath and data path variables 
+                $errorLogPath = $null
+                $DataFilesPath = $null
+
+                # Loop through the keys to find the one containing "-e"
+                foreach ($key in $keys.PSObject.Properties) 
+                {
+                    #find the error log path and store it in the errorLogPath variable
+                    if ($key.Value -like "-e*") 
+                    {
+                        $errorLogPath = $key.Value
+                        
+                    }
+
+                    #find the data files path and store it in the DataFilesPath variable
+                    if ($key.Value -like "-d*") 
+                    {
+                        $DataFilesPath = $key.Value
+                    }
+
+                }
+
+                Write-LogDebug "Registry - Error log path: '$errorLogPath'. Data files path found: '$DataFilesPath'" -DebugLogLevel 3
+
+                # validate key to get the path to the ERRORLOG and strip the -e from the beginning of the string
+                if ([string]::IsNullOrWhiteSpace($errorLogPath) -eq $false) 
+                {
+                    Write-LogDebug "Error log path found: $errorLogPath" -DebugLogLevel 3
+
+                    # strip the -e from the beginning of the string
+                    $errorLogPath = $errorLogPath -replace "^-e", ""
+                } 
+                else 
+                {
+                    Write-LogDebug "No error log path found in the registry with '-e'. How does SQL Server even start?" -DebugLogLevel 3
+                    return $false
+                }
+
+
+                #validate key to the data files path and strip the -d from the beginning of the string
+                if ([string]::IsNullOrWhiteSpace($DataFilesPath) -eq $false) 
+                {
+                    Write-LogDebug "Data files path found: $DataFilesPath" -DebugLogLevel 3
+
+                    # strip the -d from the beginning of the string
+                    $DataFilesPath = $DataFilesPath -replace "^-d", ""
+                } 
+                else 
+                {
+                    Write-LogDebug "No data files path found in the registry with '-d'. How does SQL Server even start?" -DebugLogLevel 3
+                    return $false
+                }
+
+            }
+            else
+            {
+                Write-LogDebug "Registry RegPathParams='$RegPathParams' is not valid or doesn't exist" -DebugLogLevel 2
+                return $false
+            }
+            
 
             switch ($logType)
             {
-                {($_ -eq "ERRORLOG") -or ($_ -eq "POLYBASELOG")}
+                "ERRORLOG"
                 {
-                    # go after the startup params registry key 
-                    $RegPathParams +=  "\MSSQLServer\Parameters"
-                
-                    # validate key to get the path to the ERRORLOG
-                    if (Test-Path -Path $RegPathParams)
-                    {
-                        # strip the -e from the beginning of the string
-                        $retLogPath = (Get-ItemProperty -Path $RegPathParams).SQLArg1 -replace "^-e", ""
-    
-                        # strip the word ERRORLOG from the end of the string
-                        $retLogPath = Split-Path $retLogPath -Parent
+                    # just return the full path with log file name
+                    # the file name will be extracted by the caller
 
-                        if ($logType -eq "POLYBASELOG") 
-                        {
-                            # append the PolyBase folder name to the end of the path
-                            $retLogPath = $retLogPath + "\PolyBase\"
-                        }
-                    }
-                    else
+                    $retLogPath = $errorLogPath
+
+                }
+                "FDLAUNCHERRORLOG"
+                {
+                    # strip the master.mdf from the end of the string and then the \DATA (or whatever name) folder from the end of the string
+                    $retLogPath = $DataFilesPath | Split-Path -Parent | Split-Path -Parent
+                    $retLogPath = $retLogPath + "\Log\"
+                }
+                {($_ -eq "LOG") -or ($_ -eq "POLYBASELOG") -or ($_ -eq "SQLFTLOG")}
+                {
+
+                    # strip the word ERRORLOG (or whatever name is stored) from the end of the string
+                    $retLogPath = Split-Path $errorLogPath -Parent
+
+                    if ($logType -eq "POLYBASELOG") 
                     {
-                        Write-LogDebug "Registry RegPathParams='$RegPathParams' is not valid or doesn't exist" -DebugLogLevel 2
-                        return $false
+                        # append the PolyBase folder name to the end of the path
+                        $retLogPath = $retLogPath + "\PolyBase\"
                     }
                 }
                 "DUMPLOG"
                 {
                     # go after the dump configured registry key
                     # HKLM:SOFTWARE\Microsoft\Microsoft SQL Server\vRegInst\CPE
-                    $vRegDmpPath = $RegPathParams + "\CPE"
+                    $vRegDmpPath = $RegPathInstance + "\CPE"
                 
                     if (Test-Path -Path $vRegDmpPath)
                     {
@@ -1743,8 +1919,11 @@ function GetLogPathFromReg([string]$server, [string]$logType)
                     }
                     else
                     {
-                        Write-LogDebug "Registry RegDmpPath='$vRegDmpPath' is not valid or doesn't exist" -DebugLogLevel 2
-                        return $false
+                        # if the \CPE reg key doesn't exist, then memory dumps are stored in the \LOG folder in SQL Server
+                        Write-LogDebug "Registry RegDmpPath='$vRegDmpPath' is not valid or doesn't exist. Defaulting to \LOG folder" -DebugLogLevel 2
+                        
+                        # default to the \LOG folder by removing the ERORLOG file name from the path
+                        $retLogPath = Split-Path $errorLogPath -Parent
                     }
                 }
                 Default
@@ -1756,7 +1935,7 @@ function GetLogPathFromReg([string]$server, [string]$logType)
         }
 
         # make sure the path to the log directory is valid
-        if (Test-Path -Path $retLogPath -PathType Container)
+        if (Test-Path -Path $retLogPath)
         {
             Write-LogDebug "Log path is $retLogPath" -DebugLogLevel 2
         }
@@ -1830,3 +2009,80 @@ function ParseRelativeTime ([string]$relativeTime, [datetime]$baseDateTime)
         return
     }
 }
+
+function GetTotalRAMSize() 
+{
+    try
+    {
+        Write-LogDebug "inside" $MyInvocation.MyCommand
+
+        # get the total physical memory in GB
+        $TotalRAM = (Get-CimInstance -ClassName CIM_ComputerSystem).TotalPhysicalMemory / 1GB
+        Write-LogDebug "Total RAM: $($TotalRAM.ToString("F2")) GB" -DebugLogLevel 2
+        return $TotalRAM
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return 0
+    }
+}
+
+function GetCoutLogicalCPUs() 
+{
+    try
+    {
+        Write-LogDebug "inside" $MyInvocation.MyCommand
+
+        # get the count of logical CPUs
+        $NumLogicalCPUs = (Get-CimInstance -ClassName Win32_Processor | Select-Object -Property NumberOfLogicalProcessors).NumberOfLogicalProcessors
+        Write-LogDebug "Number of logical CPUs: $NumLogicalCPUs" -DebugLogLevel 2
+        return $NumLogicalCPUs 
+    }
+    catch
+    {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return 0
+    }
+}
+
+function GetComputerPlatform 
+{
+    Write-LogDebug "inside" $MyInvocation.MyCommand
+
+    try {
+        # Determine if the OS is 64-bit
+        $is64BitOS = [System.Environment]::Is64BitOperatingSystem
+
+        # Get the processor architecture from the environment variable
+        $processorArchitecture = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" -Name "PROCESSOR_ARCHITECTURE").PROCESSOR_ARCHITECTURE
+
+        # Map the processor architecture to a human-readable platform
+        switch ($processorArchitecture) {
+            "AMD64" {
+                if ($is64BitOS) {
+                    return "x64"  #AMD64
+                } else {
+                    return "WOW64" #x86 on x64
+                }
+            }
+            "x86" {
+                return "x86"
+            }
+            "ARM64" {
+                return "ARM64"
+            }
+            "IA64" {
+                return "Itanium (IA-64)"
+            }
+            default {
+                return "Unknown platform: $processorArchitecture"
+            }
+        }
+    }
+    catch {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return $null
+    }
+}
+

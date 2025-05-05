@@ -47,7 +47,7 @@ function HandleCatchBlockCleanup ([string] $function_name, [System.Management.Au
 
 function Initialize-CleanupIncompleteShutdownTaskLog
 (
-    [string]$LogFilePath = $env:TEMP,
+    [string]$LogFilePath,
     [string]$LogFileName = "##SQLLogScout_CleanupIncompleteShutdown"
 )
 {
@@ -59,11 +59,15 @@ function Initialize-CleanupIncompleteShutdownTaskLog
 #>    
     try
     {
+        #Create log file in temp directory using full path. The temp var can come back as 8.3 format and so ensure we have the full path.
+        $shortEnvTempPath = $env:TEMP
+        $LogFilePath = (Get-Item $shortEnvTempPath).FullName
+
         #Cache LogFileName without date so we can delete old records properly
         $LogFileNameStringToDelete = $LogFileName
 
         #update file with date
-        $LogFileName = ($LogFileName -replace "$LogFileName", ($LogFileName+"_" + @(Get-Date -Format  "yyyyMMddTHHmmssffff") + ".log"))
+        $LogFileName = $LogFileName + "_" + (Get-Date -Format "yyyyMMddTHHmmssffff") + ".log"
         $global:CleanupIncompleteShutdownLog = $LogFilePath + '\' + $LogFileName
         New-Item -ItemType "file" -Path $global:CleanupIncompleteShutdownLog -Force | Out-Null
         Write-Host "Created log file $global:CleanupIncompleteShutdownLog"
@@ -205,7 +209,7 @@ Log-CleanupIncompleteShutdownTask "=============================================
 
 if ([string]::IsNullOrWhiteSpace($ServerName))
 {
-    Select-SQLServerForDiagnostics
+    Select-SQLServerForDiagnostics | Out-Null
 }
 else 
 {
@@ -219,7 +223,7 @@ $xevent_alwayson_session = "SQLLogScout_AlwaysOn_Data_Movement"
 
 try 
 {
-    Log-CleanupIncompleteShutdownTask "Testing connection into: '$global:sql_instance_conn_str'. If connection fails, verify instance name." -WriteToConsole $true
+    Log-CleanupIncompleteShutdownTask "Testing connection into: '$global:sql_instance_conn_str'. If connection fails, verify instance name or running status." -WriteToConsole $true
     $ConnectionResult = Test-SQLConnection ($global:sql_instance_conn_str)
 
     if ($ConnectionResult -eq $false)
@@ -282,18 +286,12 @@ try
         Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
 
         #stop perf Xevent
-        Log-CleanupIncompleteShutdownTask "Executing 'Stop_SQLLogScout_Xevent' session. It will stop the SQLLogScout performance Xevent trace in case it was found to be running..." -WriteToConsole $true
+        Log-CleanupIncompleteShutdownTask "Executing 'Stop_$xevent_session' session. It will stop the SQLLogScout performance Xevent trace in case it was found to be running..." -WriteToConsole $true
+        
         $query = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_session] ON SERVER; END" 
         $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -w8000 -Q`"" + $query + "`""
+        $argument_list = "-S" + $global:sql_instance_conn_str + " -E -w8000 -Q`"" + $query + "`""
         Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-        
-        
-        $query = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_alwayson_session] ON SERVER; END" 
-        $executable = "sqlcmd.exe"
-        $argument_list = "-S" + $server + " -E -w8000 -Q`"" + $query + "`""
-        Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
-
         
         $xevent_session = "xevent_SQLLogScout"
         $query = "ALTER EVENT SESSION [$xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_session] ON SERVER;" 
@@ -302,9 +300,14 @@ try
         Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
     
         #stop always on data movement Xevent
-        Log-CleanupIncompleteShutdownTask "Executing 'Stop_SQLLogScout_AlwaysOn_Data_Movement'. It will stop the SQLLogScout AlwaysOn Xevent trace in case it was found to be running..." -WriteToConsole $true
-        $xevent_session = "SQLLogScout_AlwaysOn_Data_Movement"
-        $query = "ALTER EVENT SESSION [$xevent_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_session] ON SERVER;" 
+        Log-CleanupIncompleteShutdownTask "Executing 'Stop_$xevent_alwayson_session'. It will stop the SQLLogScout AlwaysOn Xevent trace in case it was found to be running..." -WriteToConsole $true
+        
+        $query = "IF HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY EVENT SESSION') = 1 BEGIN ALTER EVENT SESSION [$xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_alwayson_session] ON SERVER; END" 
+        $executable = "sqlcmd.exe"
+        $argument_list = "-S" + $global:sql_instance_conn_str + " -E -w8000 -Q`"" + $query + "`""
+        Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden
+
+        $query = "ALTER EVENT SESSION [$xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$xevent_alwayson_session] ON SERVER;" 
         $executable = "sqlcmd.exe"
         $argument_list ="-S" + $global:sql_instance_conn_str +  " -E -w8000 -Q`""+ $query + "`" "
         Start-Process -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden

@@ -93,9 +93,16 @@ function Test-PowerShellVersionAndHost()
     }
 }
 
+
+# get the full but by default short path of the temp folder and convert it to full path. Then store it in a global variable
+$shortEnvTempPath = $env:TEMP
+$global:EnvTempVarFullPath = (Get-Item $shortEnvTempPath).FullName
+
 # create a temporary log file to store the output of the repeated executions
-$script:temp_output_sqllogscout = $env:temp + "\SQL_LogScout_Repeated_Execution_" + (Get-Date).ToString('yyyyMMddhhmmss') + ".txt"
-$script:search_pattern = $env:temp + "\SQL_LogScout_Repeated_Execution_*.txt"
+# the file will be created in the temp folder and will be deleted at the end of the script
+
+$script:temp_output_sqllogscout = $global:EnvTempVarFullPath + "\SQL_LogScout_Repeated_Execution_" + (Get-Date).ToString('yyyyMMddhhmmss') + ".txt"
+$script:search_pattern = $global:EnvTempVarFullPath+ "\SQL_LogScout_Repeated_Execution_*.txt"
 
 function Write-SQLLogScoutTempLog()
 {

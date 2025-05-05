@@ -47,6 +47,93 @@ function Get-LogScoutRootFolder
     return $root_folder
 }
 
+function GetPortFromInstance {
+    param (
+        [string]$server
+    )
+
+    Write-Host "Testing GetPortFromInstance function with server: $server"
+
+    try 
+    {
+        # Extract the instance name from the server string
+        $instanceName = if ($server -match '\\') {
+            $server.Split('\')[1]
+        } else {
+            'MSSQLSERVER'  # Default instance name
+        }
+
+        # Get all the registry keys where an instance name is present using "MSSQL" and Property like "(default)" to check TCP/IP Sockets
+        $InstancesInReg = Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server' -ErrorAction SilentlyContinue |
+                    Where-Object {$_.Name -like '*MSSQL*' -and $_.Property -like "(default)"} |
+                    Select-Object -ExpandProperty PSChildName
+
+        if (-not $InstancesInReg) 
+        {
+            Write-Host "No SQL Server instances found in the registry."
+            return $null
+        }
+
+        Write-Host "Found these instances in the registry: $InstancesInReg"
+
+        # Go through each instance in the registry
+        foreach ($InstKey in $InstancesInReg) 
+        {
+            # Extract the instance name from the reg key (e.g. get the part after the . in "MSSQL14.MYSQL2017")
+            $RegInstanceName = $InstKey.Substring($InstKey.IndexOf(".") + 1)
+
+            # Check if the instance name matches the one we are looking for
+            if ($RegInstanceName -eq $instanceName) 
+            {
+                # Build the reg key in the form HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$InstKey\MSSQLServer\SuperSocketNetLib\Tcp
+                $tcpKey = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$InstKey\MSSQLServer\SuperSocketNetLib\Tcp"
+
+                Write-Host "TCP key for instance '$instanceName' is $tcpKey"
+
+                # Check if the TCP key exists
+                if (Test-Path -Path $tcpKey) 
+                {
+                    # Check if TCP/IP Sockets is enabled
+                    $tcpEnabled = Get-ItemProperty -Path $tcpKey -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Enabled
+
+                    # If enabled, go through ports
+                    if ($tcpEnabled -eq "1") 
+                    {
+                        $Ports = Get-ItemProperty -Path "$tcpKey\IP*" -ErrorAction SilentlyContinue | Select-Object TcpPort, TcpDynamicPorts
+                        foreach ($port in $Ports) 
+                        {
+                            # Skip if the port is not set (0 or null)
+                            if (-not [string]::IsNullOrWhiteSpace($port.TcpDynamicPorts) -and $port.TcpDynamicPorts -gt 0) 
+                            {
+                                Write-Host "Port found: $($port.TcpDynamicPorts)"
+                                return $port.TcpDynamicPorts
+                            } 
+                            elseif (-not [string]::IsNullOrWhiteSpace($port.TcpPort) -and $port.TcpPort -gt 0) {
+                                Write-Host "Port found: $($port.TcpPort)"
+                                return $port.TcpPort
+                            }
+                        }
+                    } 
+                    else 
+                    {
+                        Write-Host "TCP/IP Sockets is not enabled for instance $instanceName"
+                        return $null
+                    }
+                }
+            }
+        }
+
+        Write-Host "No matching instance found for server: $server"
+        return $null
+    } 
+    catch 
+    {
+        Write-Host "Test failed with error: $_"
+    }
+}
+
+
+# Main entry point
 
 try 
 {
@@ -97,6 +184,25 @@ try
 
         $TestCount++
     }
+    if ($Scenarios -in ("Basic", "All"))
+    {
+        # Get the port number for the instance and use it as a connection string to test the Basic scenario and GetSQLInstanceNameByPortNo()
+        $port = GetPortFromInstance -server $ServerName
+
+        # If the port is found, run the Basic scenario with the port number. Else, skip the test
+        if ($port) 
+        {
+            $temp_return_val = .\Scenarios_Test.ps1 -ServerName ("127.0.0.1,"+$port) -Scenarios "Basic"          -SummaryOutputFile $SummaryOutputFilename -SqlNexusPath $SqlNexusPath -SqlNexusDb $SqlNexusDb -LogScoutOutputFolder $LogScoutOutputFolder -RootFolder $root_folder -RunDuration $RunDuration
+               
+            #due to PS pipeline, Scenario_Test returns many things in an array. 
+            #We need to get the last element of the array - the return value which is sent out last
+            $return_val+=$temp_return_val[$temp_return_val.Count-1]
+            
+            $TestCount++
+        }    
+        
+    }
+
     if ($Scenarios -in ("GeneralPerf", "All"))
     {
         $temp_return_val = .\Scenarios_Test.ps1 -ServerName $ServerName -Scenarios "GeneralPerf"    -SummaryOutputFile $SummaryOutputFilename -SqlNexusPath $SqlNexusPath -SqlNexusDb $SqlNexusDb -LogScoutOutputFolder $LogScoutOutputFolder -RootFolder $root_folder -RunTSQLLoad $true -RunDuration $RunDuration
@@ -199,7 +305,8 @@ try
     }
     if ($Scenarios -in ("GeneralPerf+NoBasic", "All"))
     {
-        $temp_return_val =.\Scenarios_Test.ps1 -ServerName $ServerName -Scenarios "GeneralPerf+NoBasic"     -SummaryOutputFile $SummaryOutputFilename -RootFolder $root_folder -RunTSQLLoad $true  -RunDuration $RunDuration
+        #Run this scenario with a logscout.stop file to test that functionality -UseStopFile $true
+        $temp_return_val =.\Scenarios_Test.ps1 -ServerName $ServerName -Scenarios "GeneralPerf+NoBasic"     -SummaryOutputFile $SummaryOutputFilename -RootFolder $root_folder -RunTSQLLoad $true  -RunDuration $RunDuration -UseStopFile $true
         $return_val+=$temp_return_val[$temp_return_val.Count-1]
         $TestCount++
     }

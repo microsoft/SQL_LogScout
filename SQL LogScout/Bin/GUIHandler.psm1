@@ -630,9 +630,9 @@ function BuildXEventsModel_detailed() {
         Write-LogDebug "inside" $MyInvocation.MyCommand  
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
-        $content = xevent_General_Query -returnVariable $true
+        $content = xevent_detailed_Query -returnVariable $true
 
-        foreach ($element in $content <#Get-Content .\xevent_detailed.sql#>) {
+        foreach ($element in $content) {
             if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
@@ -671,7 +671,7 @@ function BuildXEventsModel_AlwaysOn() {
         $xevent_string = New-Object -TypeName System.Text.StringBuilder
         $GenericModelobj = New-Object GenericModel
         $content = xevent_AlwaysOn_Data_Movement_Query -returnVariable $true
-        foreach ($element in $content <#Get-Content .\xevent_AlwaysOn_Data_Movement.sql#>) {
+        foreach ($element in $content ) {
             if ($element.Trim() -eq "GO")  { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true
@@ -711,7 +711,7 @@ function BuildXEventsModel_servicebroker_dbmail() {
         $GenericModelobj = New-Object GenericModel
 
         $content = xevent_servicebroker_dbmail_Query -returnVariable $true
-        foreach ($element in $content <#Get-Content .\xevent_servicebroker_dbmail.sql#>) {
+        foreach ($element in $content ) {
             if ($element.Trim() -eq "GO") { 
                 $GenericModelobj.Value = $xevent_string
                 $GenericModelobj.State = $true

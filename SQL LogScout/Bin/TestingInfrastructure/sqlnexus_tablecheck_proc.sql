@@ -336,7 +336,6 @@ BEGIN
 			('dbo','tbl_SYSPERFINFO') ,
 			('dbo','tbl_SQL_CPU_HEALTH') ,
 			('dbo','tbl_FILE_STATS') ,
-			('dbo','tbl_SYSINFO') ,
 			('dbo','tbl_PERF_STATS_SCRIPT_RUNTIMES') ,
 			('dbo','tbl_BLOCKING_CHAINS') ,
 			('dbo','tbl_Reports') ,
@@ -350,7 +349,15 @@ BEGIN
 			('dbo','CounterDetails'),
 			('dbo','CounterData'),
 			('dbo', 'tbl_SystemInformation'),
-			('dbo', 'tbl_environment_variables')
+			('dbo', 'tbl_environment_variables'),
+			('dbo', 'tbl_sys_servers'),
+			('dbo', 'tbl_dotnet_versions'),
+			('dbo', 'tbl_sys_assembly_types'),
+			('dbo', 'tbl_sys_assembly_modules'),
+			('dbo', 'tbl_sys_assemblies'),
+			('dbo', 'tbl_clr_loaded_assemblies'),
+			('dbo', 'tbl_clr_appdomains'),
+			('dbo','tbl_sqlagent_jobs')
 
 		--create the list of Basic scenario tables for reuse in other scenarios
 		IF  OBJECT_ID('tempdb..#tablelist_LightPerfScenario') IS NOT NULL 
@@ -518,7 +525,8 @@ BEGIN
 		BEGIN
 			-- insert the tables for Setup scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
-			('dbo','tbl_setup_missing_msi_msp_packages')
+			('dbo','tbl_setup_missing_msi_msp_packages'),
+			('dbo','tbl_installed_programs')
 
 			--insert the tables for Basic scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
@@ -672,12 +680,10 @@ BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_sysmail_profileaccount'),
 			('dbo','tbl_sysmail_profile'),
-			('dbo','tbl_sysmail_log'),
 			('dbo','tbl_sysmail_configuration'),
 			('dbo','tbl_sysmail_account'),
 			('dbo','tbl_sysmail_mailitems'),
-            ('dbo','tbl_sysmail_event_log_sysmail_faileditems'),
-			('dbo','tbl_sysmail_server')
+            ('dbo','tbl_sysmail_server')
 			
 			--add the basic scenario tables
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 

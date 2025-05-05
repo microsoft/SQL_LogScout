@@ -405,7 +405,7 @@ $MainBodyBlock =
     while($OutputFolder -eq "" -or !(Test-Path -Path $OutputFolder))
     {
         Write-Host ""
-        Write-Host "Where would your like the memory dump stored (output folder)?" -ForegroundColor Yellow
+        Write-Host "Where would you like the memory dump stored (output folder)?" -ForegroundColor Yellow
         $OutputFolder = Read-Host "Enter an output folder with no quotes (e.g. C:\MyTempFolder or C:\My Folder)" -CustomLogMessage "Dump Output Folder console input:"
         if ($OutputFolder -eq "" -or !(Test-Path -Path $OutputFolder))
         {

@@ -10,14 +10,14 @@
     - [Examples](#examples)
 1. [Scenarios](#scenarios)
 1. [Output folders](#output-folders)
+1. [SQL LogScout as a scheduled task in Windows Task Scheduler](#schedule-sql-logscout-as-a-task-to-automate-execution)
 1. [Logging](#logging)
-1. [Permissions](#permissions)
 1. [Targeted SQL instances](#targeted-sql-instances)
 1. [Security](#security)
 1. [Sample output](#sample-output)
 1. [Test Suite](#test-suite)
 1. [Script to cleanup an incomplete shutdown of SQL LogScout](#script-to-cleanup-an-incomplete-shutdown-of-sql-logscout)
-1. [SQL LogScout as a scheduled task in Windows Task Scheduler](#schedule-sql-logscout-as-a-task-to-automate-execution)
+1. [How to connect to and collect data from Windows Internal Database (WID)](#how-to-connect-to-and-collect-data-from-windows-internal-database-wid)
 
 # Introduction
 
@@ -111,10 +111,17 @@ There are 3 possible ways to run and interact with SQL LogScout:
 1. Run the following PS script by itself or by using [parameters](#parameters). For example:
 
    ```powershell
-   PS > .\SQL_LogScout.ps1 -Scenario "Basic" -ServerName "Win2022machine\inst2022"
+   .\SQL_LogScout.ps1 -Scenario "Basic" -ServerName "Win2022machine\inst2022"
    ```
 
-**Note:** Using the PowerShell script `SQL_LogScout.ps1` is the recommended way to run SQL LogScout, but `SQL_LogScout.cmd` is supported for backwards compatibility.  The introduction of `SQL_LogScount.ps1` was brought about for several reasons:
+### Accept to run signed files for first time
+
+You may be prompted to accept to run the digitally-signed PowerShell scripts for the very first time. See [Prompt to accept usage of digitally-signed files](#prompt-to-accept-usage-of-digitally-signed-files)
+
+
+### Recommendation to use SQL_LogScout.ps1 script
+
+Using the PowerShell script `SQL_LogScout.ps1` is the recommended way to run SQL LogScout, but `SQL_LogScout.cmd` is supported for backwards compatibility.  The introduction of `SQL_LogScount.ps1` was brought about for several reasons:
 
 1. The ability to invoke SQL LogScout with named parameters in any order and with the option to omit parameters that aren't required. The .CMD file has been inflexible in this respect.
 1. The introduction of a new feature RepeatCollections or continuous mode and the ability to retain a certain number of output folders when run with continuous mode.  
@@ -128,7 +135,7 @@ There are 3 possible ways to run and interact with SQL LogScout:
   |:---------------------------|
   | Please make sure that the SQL Server startup account has **write** permissions to the folder you selected. Typically folders like %USERPROFILE%\Downloads, %USERPROFILE%\Documents AND %USERPROFILE%\Desktop folders are **not** write-accessible by the SQL Server service account by default.|
 
-1. Open a PowerShell prompot or a Command Prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
+1. Open a PowerShell prompt as an Administrator and change to the folder where SQL LogScout files reside. For example:
 
    ```console
    cd d:\sqllogscout
@@ -137,7 +144,7 @@ There are 3 possible ways to run and interact with SQL LogScout:
 1. Start the tool via `SQL_LogScout.ps1` before or while the issue is occurring and follow the menus
 
    ```console
-   SQL_LogScout.ps1
+   .\SQL_LogScout.ps1
    ```
 
 1. When prompted `Would you like to use GUI mode ?> (Y/N):` type 'y' and you will be presented with a GUI
@@ -203,6 +210,71 @@ If the need arises, you can interrupt the execution of SQL LogScout by pressing 
 |:---------------------------|
 | Do **not** close the Command Prompt window where SQL LogScout is running because this may leave a data collector running on your system. You can safely do so when SQL LogScout completes.|
 
+## Stop execution automatically by using a .stop file
+
+In some cases the user may not be present to type 'STOP' and terminate the SQL LogScout collection. You may need to have an event trigger an automatic stop. To do so, you can create a blank or non-blank file named `logscout.stop` in the **\internal** folder. The file can be created either manually or programmatically. SQL LogScout detects the file within 5 seconds and initiates a graceful stop.  A message is printed on teh screen and in the log that states this "Stop file detected. Shutting down the collector".
+
+Here are examples of how to create a logscout.stop file programmatically
+
+In PowerShell:
+
+```powershell
+Set-Content -Value "stop please" -Path "G:\SQLLogScout\output\internal\logscout.stop"
+```
+
+In a batch file or from Command Prompt
+
+```bash
+ECHO abc > F:\SQLLogScout\output_20240919T114819\internal\logscout.stop
+```
+
+There are two situations where this action is possible:
+
+- Manually choose to wait for a stop file to be created
+- Create a stop file while SQL LogScout is waiting for an end time (DiagStopTime) to expire
+
+### Manually choose to wait for a stop file to be created
+
+You can set up SQL LogScout to stop only when a .stop file is created. If you manually start SQL LogScout and follow the prompts, you are asked whether you'd like to type 'STOP' or 'STOPEVENT'. If you type 'STOPEVENT', SQL LogScout continues to collect logs until a .stop file is created. The user experience looks like this:
+
+```bash
+2025-03-28 14:49:16.302 INFO    Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue.
+2025-03-28 14:49:16.302 INFO    You can type 'STOPEVENT' and wait for a stop file to automatically end the diagnostics collection.
+>: stopevent
+2025-03-28 14:49:25.809 INFO    StopCollection Console input: stopevent
+2025-03-28 14:49:25.821 INFO    Waiting for stop file to be created...
+2025-03-28 14:49:35.839 INFO    Stop file detected. Shutting down the collector
+2025-03-28 14:49:35.884 INFO    Executing Collector: Xevents_Stop
+2025-03-28 14:49:36.000 INFO    Executing Collector: PerfmonStop
+2025-03-28 14:49:39.126 INFO    Executing Collector: KillActiveLogscoutSessions
+2025-03-28 14:49:40.234 INFO    Collecting logs for 'Basic' scenario
+2025-03-28 14:49:40.266 INFO    Executing Collector: TaskListVerbose
+2025-03-28 14:49:45.465 INFO    Executing Collector: TaskListServices
+2025-03-28 14:49:48.582 INFO    Executing Collector: FLTMC_Filters
+```
+
+### Create a stop file while waiting for an end time to expire
+
+If you have configured SQL LogScout to run until a predefined time using the -DiagStopTime parameter, then it waits for that time to be reached and automatically stop. However, if you decide to stop collection before that end time is reached, you can create a stop file in the \internal folder and SQL LogScout stops. The user experience looks like this (note that 14:48 is not reached because a stop file is created at 14:46):
+
+```bash
+2025-03-28 14:46:18.245 INFO    Executing Collector: HighCPU_perfstats
+2025-03-28 14:46:18.322 INFO    Executing Collector: PerfStats
+2025-03-28 14:46:20.455 INFO    Executing Collector: PerfStatsSnapshotStartup
+2025-03-28 14:46:20.541 INFO    Executing Collector: QueryStore
+2025-03-28 14:46:22.649 INFO    Executing Collector: TempDB_and_Tran_Analysis
+2025-03-28 14:46:22.728 INFO    Executing Collector: linked_server_config
+2025-03-28 14:46:22.966 WARN    Waiting until the specified stop time '2025-Mar-28 14:48:00' is reached...(CTRL+C to stop - wait for response)
+2025-03-28 14:46:41.108 INFO    Stop file detected. Shutting down the collector
+2025-03-28 14:46:41.116 INFO    Checking for errors in collector logs
+2025-03-28 14:46:41.140 INFO    Shutting down automatically. No user interaction to stop collectors
+2025-03-28 14:46:41.145 INFO    Waiting 10-15 seconds to capture a few snapshots of Perfmon before shutting down.
+2025-03-28 14:46:53.152 INFO    Shutting down the collector
+2025-03-28 14:46:53.179 INFO    Executing Collector: Xevents_Stop
+2025-03-28 14:46:53.303 INFO    Executing Collector: PerfmonStop
+2025-03-28 14:46:56.415 INFO    Executing Collector: KillActiveLogscoutSessions
+```
+
 ## Parameters
 
 `SQL_LogScout.ps1` and `SQL_LogScout.cmd` accepts several optional parameters. If you are using the PS1 PowerShell script, you can pass named parameters and omit most of them or specify them in any order. However, if you are using `SQL_LogScout.cmd` because this is a batch file, you have to specify all the parameters in the sequence listed below and cannot omit parameters. For example if you would like to specify the server instance (3rd parameter), you must specify the Scenario parameter before it.
@@ -225,6 +297,7 @@ Possible values are:
  - IO
  - LightPerf
  - ProcessMonitor
+ - ServiceBrokerDBMail
  - NeverEndingQuery
  - MenuChoice - this directs SQL LogScout to present an interactive menu with Scenario choices. The option is available in cases where multiple parameters are used with SQL_LogScout.cmd. Combining MenuChoice with another scenario choice, causes SQL LogScout to ignore MenuChoice and pick the selected scenario(s). For more information on what data each scenario collects, see [Scenarios](#scenarios)
  - NoBasic - this instructs SQL LogScout to skip the collection of basic logs, when Basic scenario is part of another scenario by default. For example if you use GeneralPerf+NoBasic, only the performance logs will be collected and static logs (Basic) will be skipped. If NoBasic+Basic is specified by mistake, the assumption is you intend to collect data; therefore Basic is enabled and NoBasic flag is disabled. Similarly, if NoBasic+Basic+A_VALID_SCENARIO is selected, again the assumption is that data collection is intended. In this case, Basic is enabled, NoBasic is disabled and A_VALID_SCENARIO will collect Basic logs.
@@ -302,7 +375,7 @@ If you do not select any option in the GUI (e.g. scenario or server name) and cl
 This is the most common method to execute SQL LogScout which allows you to pick your choices from a menu of options
 
 ```powershell
-SQL_LogScout.ps1
+.\SQL_LogScout.ps1
 ```
 
 ### B. Execute SQL LogScout using a specific scenario
@@ -310,7 +383,7 @@ SQL_LogScout.ps1
 This command starts the diagnostic collection specifying the GeneralPerf scenario.
 
 ```powershell
-SQL_LogScout.ps1 -Scenario "GeneralPerf"
+.\SQL_LogScout.ps1 -Scenario "GeneralPerf"
 ```
 
 ### C. Execute SQL LogScout by specifying folder creation option
@@ -318,7 +391,7 @@ SQL_LogScout.ps1 -Scenario "GeneralPerf"
 Execute SQL LogScout using the DetailedPerf Scenario, specifies the Server name, use the present directory and folder option to delete the default \output folder if present
 
 ```powershell
-SQL_LogScout.ps1 -Scenario "DetailedPerf" -ServerName "DbSrv\SQL2019" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder"
+.\SQL_LogScout.ps1 -Scenario "DetailedPerf" -ServerName "DbSrv\SQL2019" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder"
 ```
 
 ### D. Execute SQL LogScout with start and stop times (absolute values)
@@ -326,7 +399,7 @@ SQL_LogScout.ps1 -Scenario "DetailedPerf" -ServerName "DbSrv\SQL2019" -CustomOut
 The following example collects the AlwaysOn scenario against the "DbSrv" default instance, prompts user to choose a custom path and a new custom subfolder, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  
 
 ```powershell
-SQL_LogScout.ps1 -Scenario AlwaysOn -ServerName "DbSrv" -CustomOutputPath "PromptForCustomDir" -DeleteExistingOrCreateNew "NewCustomFolder" -DiagStartTime "2000-01-01 19:26:00" -DiagStopTime "2020-10-29 13:55:00"
+.\SQL_LogScout.ps1 -Scenario AlwaysOn -ServerName "DbSrv" -CustomOutputPath "PromptForCustomDir" -DeleteExistingOrCreateNew "NewCustomFolder" -DiagStartTime "2000-01-01 19:26:00" -DiagStopTime "2020-10-29 13:55:00"
 ```
 
 This is how you would do the same using the .CMD file.
@@ -340,7 +413,7 @@ SQL_LogScout.cmd AlwaysOn "DbSrv" PromptForCustomDir NewCustomFolder "2000-01-01
 The following example collects the Replication and LightPerf scenarios without getting Basic logs against the "DbSrv\SQL2022" named instance, uses the current directory as root and overwrites the \output subfolder. Then uses relative time from current time to set the start time 3 minutes from now and stop time to seven minutes from now.  
 
 ```powershell
-SQL_LogScout.ps1 -Scenario "Replication+LightPerf+NoBasic" -ServerName "DbSrv\SQL2022" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "+00:03:00" -DiagStopTime "+00:07:00"
+.\SQL_LogScout.ps1 -Scenario "Replication+LightPerf+NoBasic" -ServerName "DbSrv\SQL2022" -CustomOutputPath "UsePresentDir" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "+00:03:00" -DiagStopTime "+00:07:00"
 ```
 
 **Note:** If you are using SQL_LogScout.cmd, all parameters are required when you need to specify the last parameter. For example, if you need to specify stop time, the 5 prior parameters have to be passed.
@@ -350,7 +423,7 @@ SQL_LogScout.ps1 -Scenario "Replication+LightPerf+NoBasic" -ServerName "DbSrv\SQ
 The example collects data for GeneralPerf, AlwaysOn, and BackupRestore scenarios against the "DbSrv" default instance, re-uses the default output folder but creates it in the D:\Log custom path, and sets the stop time to some time in the future, while setting the start time in the past to ensure the collectors start without delay.  It also automatically accepts the prompts by using Quiet mode and helps a full automation with no interaction.
 
 ```powershell
-SQL_LogScout.ps1 -Scenario "GeneralPerf+AlwaysOn+BackupRestore" -ServerName "DbSrv" -CustomOutputPath "d:\log" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "01-01-2000" -DiagStopTime "04-01-2021 17:00" -InteractivePrompts "Quiet"
+.\SQL_LogScout.ps1 -Scenario "GeneralPerf+AlwaysOn+BackupRestore" -ServerName "DbSrv" -CustomOutputPath "d:\log" -DeleteExistingOrCreateNew "DeleteDefaultFolder" -DiagStartTime "01-01-2000" -DiagStopTime "04-01-2021 17:00" -InteractivePrompts "Quiet"
 ```
 
 When you use SQL_LogScout.cmd (available for backwards compatibility), pass the parameters in order
@@ -390,9 +463,10 @@ Collects snapshot or static logs. It captures information on:
 - Installed Windows Hotfixes
 - OS disk information
 - Running filter drivers
+- .NET Framework and .NET Core versions
 - Event logs (system and application in both .CSV and .TXT formats)
 - Full-Text Search Log files and output file with Full-Text metadata
-- SQL Server dumps found in the errorlog directory. We collect up to 20 dumps if they were created in the last 2 months and are less than 100 MB in size.
+- SQL Server dumps found in the errorlog directory. SQL LogScout collects up to 20 dumps if they were created in the last 2 months and are less than 200 MB in size.
 - Memory dump .txt files (most recent 200 files)
 - IPConfig, DNSClientInfo, and TCP and UDP endpoints
 - SQL Errorlogs
@@ -486,7 +560,7 @@ Allows you to collect a [Windows Performance Recorder](https://docs.microsoft.co
 
 | :warning: WARNING          |
 |:---------------------------|
-| WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 45 seconds of data collection. You can specify a custom value between 3 and 45 seconds.|
+| WPR traces collect system-wide diagnostic data. Thus a large set of trace data may be collected and it may take several minutes to stop the trace. Therefore the WPR trace is limited to 45 seconds of data collection. You can specify a custom value between 3 and 45 seconds. Since the WPR scenario is run for a very short time and can be impactful to systems, this scenario is not designed to be run as a scheduled task and requires the user's interaction with SQL LogScout to run it.|
 
 ## 9. Setup scenario
 
@@ -494,7 +568,9 @@ Collects Setup logs and allows analysis of installation issues of SQL Server com
 
 - Basic scenario logs
 - All SQL Setup logs from the SQL Server \Setup Bootstrap\ folders on the system.
+- Registry keys of the installed programs on the system
 - Missing MSI/MSP output files showing what installation packages may be missing. The summary file shows the only missing and potentially corrupt packages and the detailed one provides details on each SQL Server MSI/MSP and if it's in place, missing, or corrupt and what actions can be taken.
+- A list of installed programs on the system
 
 ## 10. BackupRestore scenario
 
@@ -557,7 +633,7 @@ SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows y
 
 - **-LogScoutPath** - this is the executable path to the `SQL_LogScout.cmd` file. It defaults to the current path you are running the script from.
 - **-Scenario** - you can input the scenario (s) you want to collect data for. Examples include "Basic", "GeneralPerf" or "Basic+Replication". For more information see [Scenarios](#scenarios)
-- **-SQLInstance** - this is the name of the SQL Server instance to connect to. Please provide correct name (for example: "MACHINE1\SQLINST1")
+- **-SQLInstance** - this is the name of the SQL Server instance to connect to. Please provide correct name. For example you would use "MACHINE1\SQLINST1" for a named instance or "MACHINE2" for a default instance. For SQL Server failover clustered instances use a virtual network name: for example "SQL01FCIVNN" for a default instance or "SQL01FCIVNN\SQLINST2" for a named instance.
 - **-OutputPath** - you specify whether you want a custom output path by providing the path itself, or specify 'UsePresentDir' to use the current folder as a base under which an output folder will be created. This corresponds to `CustomOutputPath` in SQL LogScout [Parameters](#parameters). Do NOT use `PromptForCustomDir` for a scheduled task, because you have to present to accept this on the screen.
 - **-CmdTaskName** - this is the name of the task as it appears in Windows Task Scheduler. This is an optional parameter that allows you to create multiple scheduled tasks. If you pass a value which already exists, you will be prompted to overwrite or keep original task. Default value is "SQL LogScout Task".
 - **-DeleteFolderOrNew** - this controls the sub-folder name where the output data goes. For more information see, `DeleteExistingOrCreateNew` in [Parameters](#parameters). Options for it are:
@@ -578,32 +654,43 @@ SQL LogScout can be scheduled as a task in Windows Task Scheduler. This allows y
 Examples:
 
 1. Run SQL_LogScout one time for the GeneralPerf scenario, starting at 05/06/2024 at 2:18 PM ending after 10 minutes (2:28 PM). The Output folder is overwritten (if it exists already). User will be logged in during execution.
+
 ```powershell
-.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance ".\SQLInstanceName" -StartTime "2024-05-06 14:18" -EndTime "+00:10:00" -Once -DeleteFolderOrNew "DeleteDefaultFolder" -LogonType "S4U"
+.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance ".\SQLInstance01" -StartTime "2024-05-06 14:18" -EndTime "+00:10:00" -Once -DeleteFolderOrNew "DeleteDefaultFolder" -LogonType "S4U"
 ```
-2. Run SQL_LogScout starting 6 hours from now, running continously for 48 executions recycling the logs every 30 minutes. The total run time would be 24 hours (48 runs * 30 minutes). A new folder is created for each execution and the user isn't to be logged in during runtime.
+
+1. Run SQL_LogScout starting 6 hours from now, running continously for 48 executions recycling the logs every 30 minutes. The total run time would be 24 hours (48 runs * 30 minutes). A new folder is created for each execution and the user isn't to be logged in during runtime.
+
 ```powershell
-.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance ".\SQLInstanceName" -StartTime "+06:00:00" -EndTime "+00:30:00" -Continuous -DeleteFolderOrNew "NewCustomFolder" -LogonType "Interactive" -RepeatCollections 47
+.\ScheduleSQLLogScoutAsTask.ps1 -Scenario "GeneralPerf" -SQLInstance "SQLPRODMACHINE" -StartTime "+06:00:00" -EndTime "+00:30:00" -Continuous -DeleteFolderOrNew "NewCustomFolder" -LogonType "Interactive" -RepeatCollections 47
 ```
 
 # Logging
 
+There are several logs generated by SQL LogScout based on the activities used. 
+
 ### ##SQLLOGSCOUT.LOG file
+
 SQL LogScout logs the flow of activity in two files ##SQLLOGSCOUT.LOG and ##SQLLOGSCOUT_DEBUG.LOG. The activity flow on the console is logged in ##SQLLOGSCOUT.LOG. The design goal is to match what the user sees on the screen with what is written in the log file so that a post-mortem analysis can be performed. This file can be found in the **\Internal** folder
 
 ### ##STDERR.LOG file
+
 If SQL LogScout main script generates any runtime errors that were not caught, those will be written to the ##STDERR.LOG file and the contents of that file is displayed in the console after the main script completes execution. The ##STDERR.LOG file is stored in the root directory where SQL LogScout runs because any failures that occur early before the creation of an output folder may be logged in this file. This file can be found together with the scripts (**\Bin** folder).
 
 ### ##SQLLOGSCOUT_DEBUG.LOG file
+
 This file contains everything the ##SQLLOGSCOUT.LOG contains, but also adds many debug-level, detailed messages. These can be used to investigate any issues with SQL LogScout and examine the flow of execution in detail. This file can be found in the **\Internal** folder. In addition, the %temp% folder stores copies of ##SQLLOGSCOUT_DEBUG.LOG from the last 10 executions.
 
 ### SQL_LogScout_Repeated_Execution_yyyyMMddhhmmss.txt
+
 This file is created when repeated collections (continuous mode) is used. It logs the number of repetitions, the number of folders to be preserved, the names of output folders created by the repeated mode. It is created in the Windows **%temp%** folder (commonly C:\Users\\<user\>\AppData\Local\Temp). 
 
 ### ##SQLLogScout_ScheduledTask_yyyyMMddhhmmss.log
+
 This file is created when the functionality to automate the SQL_LogScout collection task through Windows Task Scheduler is used. This file can be found in the user's **%temp%** folder where you can find copies of the latest 10 executions of the task scheduling script `ScheduleSQLLogScoutAsTask.ps1`.
 
 ### ##SQLLogScout_CleanupIncompleteShutdown_yyyyMMddhhmmss.log
+
 This file is created when the functionality to cleanup an incomplete shutdown of SQL_LogScout is used. The last 10 instances of this file can be found in the user's **%temp%** folder.
 
 
@@ -625,6 +712,37 @@ The following is security-related information:
 
 SQL LogScout is released with digitally-signed Powershell files. For other files, SQL LogScout calculates a SHA512 hash and compares it to the expected value of each file. If the stored hash does not match the calculated hash on disk, then SQL LogScout will not run.  
 
+### Prompt to accept usage of digitally-signed files
+
+When you download and run a new version of SQL LogScout on your system for the first time, you will be prompted to confim and accept running these scripts if your PowerShell execution policy requires signed files. In order to successfully run SQL LogScout, read the message on screen that shows that Microsoft has signed these files and accept to run. You may see messages similar to these:
+
+```powershell
+
+Do you want to run software from this untrusted publisher?
+File C:\Temp\SQL_LogScout.ps1 is published by CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond,
+S=Washington, C=US and is not trusted on your system. Only run scripts from trusted publishers.
+[V] Never run  [D] Do not run  [R] Run once  [A] Always run  [?] Help (default is "D"): a
+Launching SQL LogScout...
+
+
+
+Do you want to run software from this untrusted publisher?
+File C:\Temp\Bin\CommonFunctions.psm1 is published by CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US and is not trusted on your system. Only run scripts from trusted publishers.
+[V] Never run  [D] Do not run  [R] Run once  [A] Always run  [?] Help (default is "D"): a
+Copyright (c) 2022 Microsoft Corporation. All rights reserved.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+...
+
+```
+
+### Validate digital signatures of Powershell scripts
 To manually validate script signature, you may execute the following:
 
 ```bash
@@ -669,7 +787,7 @@ SignerCertificate : [Subject]
 
 ## Encrypted connection to SQL Server
 
-SQL LogScout negotiates connection encryption with the SQL Server it collects data from. It does so by using "Encrypt=True;TrustServerCertificate=true;" and "sqlcmd -C -N" values. 
+SQL LogScout negotiates connection encryption with the SQL Server it collects data from. It does so by using "Encrypt=True;TrustServerCertificate=true;" and "sqlcmd -C -N" values. In cases where encryption isn't supported by the back-end SQL Server (for example WID), SQL LogScout will attempt to use an unencrypted connection via the classic SQL Server ODBC driver. 
 
 # Sample output
 
@@ -695,138 +813,139 @@ Copyright (c) 2021 Microsoft Corporation. All rights reserved.
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
-2021-09-10 11:03:32.148	INFO	Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG 
-2021-09-10 11:03:26.230	INFO	SQL LogScout version: 4.5.33 
-2021-09-10 11:03:26.302	INFO	The Present folder for this collection is C:\temp\log scout\Test 2 
-2021-09-10 11:03:30.479	INFO	Prompt CustomDir Console Input: n 
-2021-09-10 11:03:30.551	INFO	 
-2021-09-10 11:03:30.560	WARN	It appears that output folder 'C:\temp\log scout\Test 2\output\' has been used before. 
-2021-09-10 11:03:30.562	WARN	You can choose to: 
-2021-09-10 11:03:30.562	WARN	 - Delete (D) the \output folder contents and recreate it 
-2021-09-10 11:03:30.572	WARN	 - Create a new (N) folder using \Output_ddMMyyhhmmss format. 
-2021-09-10 11:03:30.572	WARN	   You can delete the new folder manually in the future 
-2021-09-10 11:03:31.954	INFO	Output folder Console input: d 
-2021-09-10 11:03:32.118	WARN	Deleted C:\temp\log scout\Test 2\output\ and its contents 
-2021-09-10 11:03:32.126	INFO	Output path: C:\temp\log scout\Test 2\output\ 
-2021-09-10 11:03:32.126	INFO	Error  path is C:\temp\log scout\Test 2\output\internal\ 
-2021-09-10 11:03:32.168	INFO	Validating attributes for non-Powershell script files 
-2021-09-10 11:03:32.648	INFO	 
-2021-09-10 11:03:32.656	INFO	Initiating diagnostics collection...  
-2021-09-10 11:03:32.659	INFO	Please select one of the following scenarios:
+2025-03-10 11:03:32.148	INFO	Initializing log C:\temp\log scout\Test 2\output\internal\##SQLLOGSCOUT.LOG 
+2025-03-10 11:03:26.230	INFO	SQL LogScout version: 4.5.33 
+2025-03-10 11:03:26.302	INFO	The Present folder for this collection is C:\temp\log scout\Test 2 
+2025-03-10 11:03:30.479	INFO	Prompt CustomDir Console Input: n 
+2025-03-10 11:03:30.551	INFO	 
+2025-03-10 11:03:30.560	WARN	It appears that output folder 'C:\temp\log scout\Test 2\output\' has been used before. 
+2025-03-10 11:03:30.562	WARN	You can choose to: 
+2025-03-10 11:03:30.562	WARN	 - Delete (D) the \output folder contents and recreate it 
+2025-03-10 11:03:30.572	WARN	 - Create a new (N) folder using \Output_ddMMyyhhmmss format. 
+2025-03-10 11:03:30.572	WARN	   You can delete the new folder manually in the future 
+2025-03-10 11:03:31.954	INFO	Output folder Console input: d 
+2025-03-10 11:03:32.118	WARN	Deleted C:\temp\log scout\Test 2\output\ and its contents 
+2025-03-10 11:03:32.126	INFO	Output path: C:\temp\log scout\Test 2\output\ 
+2025-03-10 11:03:32.126	INFO	Error  path is C:\temp\log scout\Test 2\output\internal\ 
+2025-03-10 11:03:32.168	INFO	Validating attributes for non-Powershell script files 
+2025-03-10 11:03:32.648	INFO	 
+2025-03-10 11:03:32.656	INFO	Initiating diagnostics collection...  
+2025-03-10 11:03:32.659	INFO	Please select one of the following scenarios:
  
-2021-09-10 11:03:32.659	INFO	 
-2021-09-10 11:03:32.669	INFO	ID	 Scenario 
-2021-09-10 11:03:32.669	INFO	--	 --------------- 
-2021-09-10 11:03:32.677	INFO	0 	 Basic 
-2021-09-10 11:03:32.679	INFO	1 	 GeneralPerf 
-2021-09-10 11:03:32.679	INFO	2 	 DetailedPerf 
-2021-09-10 11:03:32.687	INFO	3 	 Replication 
-2021-09-10 11:03:32.689	INFO	4 	 AlwaysOn 
-2021-09-10 11:03:32.689	INFO	5 	 NetworkTrace 
-2021-09-10 11:03:32.689	INFO	6 	 Memory 
-2021-09-10 11:03:32.689	INFO	7 	 DumpMemory 
-2021-09-10 11:03:32.697	INFO	8 	 WPR 
-2021-09-10 11:03:32.699	INFO	9 	 Setup 
-2021-09-10 11:03:32.699	INFO	10 	 BackupRestore 
-2021-09-10 11:03:32.699	INFO	11 	 IO 
-2021-09-10 11:03:32.699	INFO	12 	 LightPerf 
-2021-09-10 11:03:32.709	INFO	 
-2021-09-10 11:03:32.709	WARN	Type one or more Scenario IDs (separated by '+') for which you want to collect diagnostic data. Then press Enter 
-2021-09-10 11:04:02.077	INFO	Scenario Console input: 1+4+10 
-2021-09-10 11:04:02.208	INFO	The scenarios selected are: 'GeneralPerf AlwaysOn BackupRestore Basic' 
-2021-09-10 11:04:02.665	INFO	Discovered the following SQL Server instance(s)
+2025-03-10 11:03:32.659	INFO	 
+2025-03-10 11:03:32.669	INFO	ID	 Scenario 
+2025-03-10 11:03:32.669	INFO	--	 --------------- 
+2025-03-10 11:03:32.677	INFO	0 	 Basic 
+2025-03-10 11:03:32.679	INFO	1 	 GeneralPerf 
+2025-03-10 11:03:32.679	INFO	2 	 DetailedPerf 
+2025-03-10 11:03:32.687	INFO	3 	 Replication 
+2025-03-10 11:03:32.689	INFO	4 	 AlwaysOn 
+2025-03-10 11:03:32.689	INFO	5 	 NetworkTrace 
+2025-03-10 11:03:32.689	INFO	6 	 Memory 
+2025-03-10 11:03:32.689	INFO	7 	 DumpMemory 
+2025-03-10 11:03:32.697	INFO	8 	 WPR 
+2025-03-10 11:03:32.699	INFO	9 	 Setup 
+2025-03-10 11:03:32.699	INFO	10 	 BackupRestore 
+2025-03-10 11:03:32.699	INFO	11 	 IO 
+2025-03-10 11:03:32.699	INFO	12 	 LightPerf 
+2025-03-10 11:03:32.709	INFO	 
+2025-03-10 11:03:32.709	WARN	Type one or more Scenario IDs (separated by '+') for which you want to collect diagnostic data. Then press Enter 
+2025-03-10 11:04:02.077	INFO	Scenario Console input: 1+4+10 
+2025-03-10 11:04:02.208	INFO	The scenarios selected are: 'GeneralPerf AlwaysOn BackupRestore Basic' 
+2025-03-10 11:04:02.665	INFO	Discovered the following SQL Server instance(s)
  
-2021-09-10 11:04:02.665	INFO	 
-2021-09-10 11:04:02.676	INFO	ID	SQL Instance Name 
-2021-09-10 11:04:02.678	INFO	--	---------------- 
-2021-09-10 11:04:02.679	INFO	0 	 DbServerMachine 
-2021-09-10 11:04:02.679	INFO	1 	 DbServerMachine\SQL2014 
-2021-09-10 11:04:02.686	INFO	2 	 DbServerMachine\SQL2017 
-2021-09-10 11:04:02.686	INFO	3 	 DbServerMachine\SQL2019 
-2021-09-10 11:04:02.686	INFO	 
-2021-09-10 11:04:02.686	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
-2021-09-10 11:04:11.899	INFO	SQL Instance Console input: 3 
-2021-09-10 11:04:11.911	INFO	You selected instance 'DbServerMachine\SQL2019' to collect diagnostic data.  
-2021-09-10 11:04:12.022	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2019' 
-2021-09-10 11:04:12.022	INFO	Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2019' 
-2021-09-10 11:04:12.735	WARN	At least one of the selected 'GeneralPerf AlwaysOn BackupRestore Basic' scenarios collects Xevent traces 
-2021-09-10 11:04:12.751	WARN	The service account 'NT Service\MSSQL$SQL2019' for SQL Server instance 'DbServerMachine\SQL2019' must have write/modify permissions on the 'C:\temp\log scout\Test 2\output\' folder 
-2021-09-10 11:04:12.751	WARN	The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an *.XEL file exists that you can open and read in SSMS 
-2021-09-10 11:04:15.822	INFO	Access verification Console input: y 
-2021-09-10 11:04:15.841	INFO	LogmanConfig.txt copied to  C:\temp\log scout\Test 2\output\internal\LogmanConfig.txt 
-2021-09-10 11:04:15.922	INFO	Basic collectors will execute on shutdown 
-2021-09-10 11:04:15.934	INFO	Collecting logs for 'GeneralPerf' scenario 
-2021-09-10 11:04:15.964	INFO	Executing Collector: Perfmon 
-2021-09-10 11:04:17.055	INFO	Executing Collector: Xevent_Core_AddSession 
-2021-09-10 11:04:17.088	INFO	Executing Collector: Xevent_General_AddSession 
-2021-09-10 11:04:19.130	INFO	Executing Collector: Xevent_General_Target 
-2021-09-10 11:04:19.152	INFO	Executing Collector: Xevent_General_Start 
-2021-09-10 11:04:19.214	INFO	Executing Collector: ExistingProfilerXeventTraces 
-2021-09-10 11:04:21.313	INFO	Executing Collector: HighCPU_perfstats 
-2021-09-10 11:04:21.364	INFO	Executing Collector: SQLServerPerfStats 
-2021-09-10 11:04:23.441	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
-2021-09-10 11:04:23.492	INFO	Executing Collector: QueryStore 
-2021-09-10 11:04:25.552	INFO	Executing Collector: TempDBAnalysis 
-2021-09-10 11:04:25.601	INFO	Executing Collector: linked_server_config 
-2021-09-10 11:04:25.708	INFO	Collecting logs for 'AlwaysOn' scenario 
-2021-09-10 11:04:25.740	INFO	Executing Collector: AlwaysOnDiagScript 
-2021-09-10 11:04:25.788	INFO	Executing Collector: Xevent_CoreAddSesion 
-2021-09-10 11:04:25.809	INFO	Executing Collector: Xevent_AlwaysOn_Data_Movement 
-2021-09-10 11:04:27.853	INFO	Executing Collector: AlwaysOn_Data_Movement_target 
-2021-09-10 11:04:27.881	INFO	Executing Collector: AlwaysOn_Data_Movement_Start 
-2021-09-10 11:04:27.922	INFO	Executing Collector: AlwaysOnHealthXevent 
-2021-09-10 11:04:28.007	INFO	Collecting logs for 'BackupRestore' scenario 
-2021-09-10 11:04:28.023	INFO	Executing Collector: Xevent_BackupRestore_AddSession 
-2021-09-10 11:04:30.070	INFO	Executing Collector: EnableTraceFlag 
-2021-09-10 11:04:30.088	INFO	Executing collector: SetVerboseSQLVSSWriterLog
-2021-09-10 11:04:30.159	WARN	To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process.
-2021-09-10 11:04:36.697	INFO	Console Input: n 
-2021-09-10 11:04:36.705	INFO	You have chosen not to restart SQLWriter Service. No verbose logging will be collected for SQL VSS Writer (2019 or later)
-2021-09-10 11:04:36.737	INFO	Executing Collector: VSSAdmin_Providers 
-2021-09-10 11:04:36.778	INFO	Executing Collector: VSSAdmin_Shadows 
-2021-09-10 11:04:37.832	INFO	Executing Collector: VSSAdmin_Shadowstorage 
-2021-09-10 11:04:37.873	INFO	Executing Collector: VSSAdmin_Writers 
-2021-09-10 11:04:37.924	INFO	Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue 
-2021-09-10 11:04:43.012	INFO	StopCollection Console input: stop 
-2021-09-10 11:04:43.014	INFO	Shutting down the collector 
-2021-09-10 11:04:43.032	INFO	Executing shutdown command: Xevents_Stop 
-2021-09-10 11:04:43.073	INFO	Executing shutdown command: Xevents_Alwayson_Data_Movement_Stop 
-2021-09-10 11:04:43.098	INFO	Executing shutdown command: Disable_BackupRestore_Trace_Flags
-2021-09-10 11:04:43.145	INFO	Executing shutdown command: PerfmonStop 
-2021-09-10 11:04:46.228	INFO	Executing shutdown command: KillActiveLogscoutSessions 
-2021-09-10 11:04:47.277	INFO	Collecting logs for 'Basic' scenario 
-2021-09-10 11:04:47.298	INFO	Executing Collector: TaskListVerbose 
-2021-09-10 11:04:47.339	INFO	Executing Collector: TaskListServices 
-2021-09-10 11:04:47.407	INFO	Executing Collector: FLTMC_Filters 
-2021-09-10 11:04:47.464	INFO	Executing Collector: FLTMC_Instances 
-2021-09-10 11:04:47.533	INFO	Executing Collector: SystemInfo_Summary 
-2021-09-10 11:04:47.618	INFO	Executing Collector: MiscDiagInfo 
-2021-09-10 11:04:47.681	INFO	Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel 
-2021-09-10 11:04:50.501	INFO	Executing Collector: PolybaseLogs 
-2021-09-10 11:04:50.533	INFO	Executing Collector: SQLAssessmentAPI 
-2021-09-10 11:05:09.554	INFO	Executing Collector: UserRights 
-2021-09-10 11:05:12.266	INFO	Executing Collector: RunningDrivers 
-2021-09-10 11:05:14.217	INFO	Executing Collector: PowerPlan 
-2021-09-10 11:05:14.308	INFO	Executing Collector: WindowsHotfixes 
-2021-09-10 11:05:16.694	INFO	Executing Collector: GetEventLogs 
-2021-09-10 11:05:16.707	INFO	Gathering Application EventLog in TXT and CSV format   
-2021-09-10 11:05:23.218	INFO	   Produced 10000 records in the EventLog 
-2021-09-10 11:05:29.011	INFO	   Produced 20000 records in the EventLog 
-2021-09-10 11:05:35.914	INFO	   Produced 30000 records in the EventLog 
-2021-09-10 11:05:41.975	INFO	   Produced 39129 records in the EventLog 
-2021-09-10 11:05:41.975	INFO	Application EventLog in TXT and CSV format completed! 
-2021-09-10 11:05:41.975	INFO	Gathering System EventLog in TXT and CSV format   
-2021-09-10 11:05:50.913	INFO	   Produced 10000 records in the EventLog 
-2021-09-10 11:05:59.494	INFO	   Produced 20000 records in the EventLog 
-2021-09-10 11:06:04.839	INFO	   Produced 26007 records in the EventLog 
-2021-09-10 11:06:04.842	INFO	System EventLog in TXT and CSV format completed! 
-2021-09-10 11:06:04.879	INFO	Executing Collector: PerfStatsSnapshotShutdown
-2021-09-10 11:06:04.888	INFO	Executing collector: GetSQLVSSWriterLog
-2021-09-10 11:06:04.900 INFO	SQLWriter Service has been restarted
-2021-09-10 11:06:04.917	INFO	Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... 
-2021-09-10 11:06:08.518	INFO	Ending data collection 
-2021-09-10 11:06:08.533	WARN	Launching cleanup and exit routine... please wait 
-2021-09-10 11:06:13.780	INFO	Thank you for using SQL LogScout! 
+2025-03-10 11:04:02.665	INFO	 
+2025-03-10 11:04:02.676	INFO	ID	SQL Instance Name 
+2025-03-10 11:04:02.678	INFO	--	---------------- 
+2025-03-10 11:04:02.679	INFO	0 	 DbServerMachine 
+2025-03-10 11:04:02.679	INFO	1 	 DbServerMachine\SQL2014 
+2025-03-10 11:04:02.686	INFO	2 	 DbServerMachine\SQL2017 
+2025-03-10 11:04:02.686	INFO	3 	 DbServerMachine\SQL2019 
+2025-03-10 11:04:02.686	INFO	 
+2025-03-10 11:04:02.686	WARN	Enter the ID of the SQL instance for which you want to collect diagnostic data. Then press Enter 
+2025-03-10 11:04:11.899	INFO	SQL Instance Console input: 3 
+2025-03-10 11:04:11.911	INFO	You selected instance 'DbServerMachine\SQL2019' to collect diagnostic data.  
+2025-03-10 11:04:12.022	INFO	Confirmed that MYDOMAIN\Joseph has VIEW SERVER STATE on SQL Server Instance 'DbServerMachine\SQL2019' 
+2025-03-10 11:04:12.022	INFO	Confirmed that MYDOMAIN\Joseph has ALTER ANY EVENT SESSION on SQL Server Instance 'DbServerMachine\SQL2019' 
+2025-03-10 11:04:12.735	WARN	At least one of the selected 'GeneralPerf AlwaysOn BackupRestore Basic' scenarios collects Xevent traces 
+2025-03-10 11:04:12.751	WARN	The service account 'NT Service\MSSQL$SQL2019' for SQL Server instance 'DbServerMachine\SQL2019' must have write/modify permissions on the 'C:\temp\log scout\Test 2\output\' folder 
+2025-03-10 11:04:12.751	WARN	The easiest way to validate write permissions on the folder is to test-run SQL LogScout for 1-2 minutes and ensure an *.XEL file exists that you can open and read in SSMS 
+2025-03-10 11:04:15.822	INFO	Access verification Console input: y 
+2025-03-10 11:04:15.841	INFO	LogmanConfig.txt copied to  C:\temp\log scout\Test 2\output\internal\LogmanConfig.txt 
+2025-03-10 11:04:15.922	INFO	Basic collectors will execute on shutdown 
+2025-03-10 11:04:15.934	INFO	Collecting logs for 'GeneralPerf' scenario 
+2025-03-10 11:04:15.964	INFO	Executing Collector: Perfmon 
+2025-03-10 11:04:17.055	INFO	Executing Collector: Xevent_Core_AddSession 
+2025-03-10 11:04:17.088	INFO	Executing Collector: Xevent_General_AddSession 
+2025-03-10 11:04:19.130	INFO	Executing Collector: Xevent_General_Target 
+2025-03-10 11:04:19.152	INFO	Executing Collector: Xevent_General_Start 
+2025-03-10 11:04:19.214	INFO	Executing Collector: ExistingProfilerXeventTraces 
+2025-03-10 11:04:21.313	INFO	Executing Collector: HighCPU_perfstats 
+2025-03-10 11:04:21.364	INFO	Executing Collector: SQLServerPerfStats 
+2025-03-10 11:04:23.441	INFO	Executing Collector: SQLServerPerfStatsSnapshotStartup 
+2025-03-10 11:04:23.492	INFO	Executing Collector: QueryStore 
+2025-03-10 11:04:25.552	INFO	Executing Collector: TempDBAnalysis 
+2025-03-10 11:04:25.601	INFO	Executing Collector: linked_server_config 
+2025-03-10 11:04:25.708	INFO	Collecting logs for 'AlwaysOn' scenario 
+2025-03-10 11:04:25.740	INFO	Executing Collector: AlwaysOnDiagScript 
+2025-03-10 11:04:25.788	INFO	Executing Collector: Xevent_CoreAddSesion 
+2025-03-10 11:04:25.809	INFO	Executing Collector: Xevent_AlwaysOn_Data_Movement 
+2025-03-10 11:04:27.853	INFO	Executing Collector: AlwaysOn_Data_Movement_target 
+2025-03-10 11:04:27.881	INFO	Executing Collector: AlwaysOn_Data_Movement_Start 
+2025-03-10 11:04:27.922	INFO	Executing Collector: AlwaysOnHealthXevent 
+2025-03-10 11:04:28.007	INFO	Collecting logs for 'BackupRestore' scenario 
+2025-03-10 11:04:28.023	INFO	Executing Collector: Xevent_BackupRestore_AddSession 
+2025-03-10 11:04:30.070	INFO	Executing Collector: EnableTraceFlag 
+2025-03-10 11:04:30.088	INFO	Executing collector: SetVerboseSQLVSSWriterLog
+2025-03-10 11:04:30.159	WARN	To enable SQL VSS VERBOSE loggging, the SQL VSS Writer service must be restarted now and when shutting down data collection. This is a very quick process.
+2025-03-10 11:04:36.697	INFO	Console Input: n 
+2025-03-10 11:04:36.705	INFO	You have chosen not to restart SQLWriter Service. No verbose logging will be collected for SQL VSS Writer (2019 or later)
+2025-03-10 11:04:36.737	INFO	Executing Collector: VSSAdmin_Providers 
+2025-03-10 11:04:36.778	INFO	Executing Collector: VSSAdmin_Shadows 
+2025-03-10 11:04:37.832	INFO	Executing Collector: VSSAdmin_Shadowstorage 
+2025-03-10 11:04:37.873	INFO	Executing Collector: VSSAdmin_Writers 
+2025-03-10 11:04:37.924	INFO	Please type 'STOP' to terminate the diagnostics collection when you finished capturing the issue. 
+2025-03-10 11:04:37.924	INFO	You can type 'StopFile' and wait for the presence of a '\internal\logscout.stop' file to automatically end the diagnostics collection.
+2025-03-10 11:04:43.012	INFO	StopCollection Console input: stop 
+2025-03-10 11:04:43.014	INFO	Shutting down the collector 
+2025-03-10 11:04:43.032	INFO	Executing shutdown command: Xevents_Stop 
+2025-03-10 11:04:43.073	INFO	Executing shutdown command: Xevents_Alwayson_Data_Movement_Stop 
+2025-03-10 11:04:43.098	INFO	Executing shutdown command: Disable_BackupRestore_Trace_Flags
+2025-03-10 11:04:43.145	INFO	Executing shutdown command: PerfmonStop 
+2025-03-10 11:04:46.228	INFO	Executing shutdown command: KillActiveLogscoutSessions 
+2025-03-10 11:04:47.277	INFO	Collecting logs for 'Basic' scenario 
+2025-03-10 11:04:47.298	INFO	Executing Collector: TaskListVerbose 
+2025-03-10 11:04:47.339	INFO	Executing Collector: TaskListServices 
+2025-03-10 11:04:47.407	INFO	Executing Collector: FLTMC_Filters 
+2025-03-10 11:04:47.464	INFO	Executing Collector: FLTMC_Instances 
+2025-03-10 11:04:47.533	INFO	Executing Collector: SystemInfo_Summary 
+2025-03-10 11:04:47.618	INFO	Executing Collector: MiscDiagInfo 
+2025-03-10 11:04:47.681	INFO	Executing Collector: SQLErrorLogs_AgentLogs_SystemHealth_MemDumps_FciXel 
+2025-03-10 11:04:50.501	INFO	Executing Collector: PolybaseLogs 
+2025-03-10 11:04:50.533	INFO	Executing Collector: SQLAssessmentAPI 
+2025-03-10 11:05:09.554	INFO	Executing Collector: UserRights 
+2025-03-10 11:05:12.266	INFO	Executing Collector: RunningDrivers 
+2025-03-10 11:05:14.217	INFO	Executing Collector: PowerPlan 
+2025-03-10 11:05:14.308	INFO	Executing Collector: WindowsHotfixes 
+2025-03-10 11:05:16.694	INFO	Executing Collector: GetEventLogs 
+2025-03-10 11:05:16.707	INFO	Gathering Application EventLog in TXT and CSV format   
+2025-03-10 11:05:23.218	INFO	   Produced 10000 records in the EventLog 
+2025-03-10 11:05:29.011	INFO	   Produced 20000 records in the EventLog 
+2025-03-10 11:05:35.914	INFO	   Produced 30000 records in the EventLog 
+2025-03-10 11:05:41.975	INFO	   Produced 39129 records in the EventLog 
+2025-03-10 11:05:41.975	INFO	Application EventLog in TXT and CSV format completed! 
+2025-03-10 11:05:41.975	INFO	Gathering System EventLog in TXT and CSV format   
+2025-03-10 11:05:50.913	INFO	   Produced 10000 records in the EventLog 
+2025-03-10 11:05:59.494	INFO	   Produced 20000 records in the EventLog 
+2025-03-10 11:06:04.839	INFO	   Produced 26007 records in the EventLog 
+2025-03-10 11:06:04.842	INFO	System EventLog in TXT and CSV format completed! 
+2025-03-10 11:06:04.879	INFO	Executing Collector: PerfStatsSnapshotShutdown
+2025-03-10 11:06:04.888	INFO	Executing collector: GetSQLVSSWriterLog
+2025-03-10 11:06:04.900 INFO	SQLWriter Service has been restarted
+2025-03-10 11:06:04.917	INFO	Waiting 3 seconds to ensure files are written to and closed by any program including anti-virus... 
+2025-03-10 11:06:08.518	INFO	Ending data collection 
+2025-03-10 11:06:08.533	WARN	Launching cleanup and exit routine... please wait 
+2025-03-10 11:06:13.780	INFO	Thank you for using SQL LogScout! 
 
 Checking for console execution errors logged into .\##STDERR.LOG...
 Removed .\##STDERR.LOG which was 0 bytes
@@ -949,3 +1068,53 @@ Executing 'NetworkTraceStop'. It will stop network tracing initiated by SQLLogSc
 Cleanup script execution completed.
 PS C:\SQL LogScout\Bin>
 ```
+
+# How to connect to and collect data from Windows Internal Database (WID)
+
+WID uses a modified version of SQL Server and has some limitations or behaves differently. SQL LogScout has been adapted to support WID with some lmitations:
+
+1. Doesn't connect with encryption because WID doesn't support encryption (less of a concern since connection is local). You will get an error message initially that a connection fails, but it would eventually succeed to connect.
+1. Cannot use the SQL LogScout GUI because an client alias must be created. You can use command line only with ServerName specified explicitly.
+1. Might not collect WID errorlogs unless you create a specific connection alias (see the [steps](#steps-to-collect-data-with-sql-logscout-on-wid) below)
+
+## Steps to collect data with SQL LogScout on WID
+
+1. Open Services app (services.msc) on Windows and find the **Windows Internal Database** service
+1. Under the General tab, find the **Path to executable** and copy the WID instance name that appears after the -S parameter. Most commonly it is **MSWIN8.SQLWID**
+1. Close Serivces app
+1. Open SQL Client Network Utility (cliconfg.exe) and define an alias to the custom WID named pipe `np:\\.\pipe\MICROSOFT##WID\tsql\query`. Use the WiD instance you found, as a name in **Server alias**. For example use `MSWIN8.SQLWID`
+
+   - Start->Run->Cliconfg.exe
+   - Click Add to create a new alias.
+   - In the Server alias field, enter the instance name you discovered in prior steps: `MSWIN8.SQLWID`.
+   - In the Network libraries section, select Named Pipes.
+   - In the Pipe Name section, enter `\\.\pipe\MICROSOFT##WID\tsql\query`
+
+1. Alternatively, you can use [SQL Server Configuration Manager](https://learn.microsoft.com/sql/relational-databases/sql-server-configuration-manager) to create an alias. For more information, see [Create or delete a server alias for use by a client](https://learn.microsoft.com/sql/database-engine/configure-windows/create-or-delete-a-server-alias-for-use-by-a-client) and [Aliases - Named Pipes connections](https://learn.microsoft.com/sql/tools/configuration-manager/aliases-sql-server-configuration-manager#named-pipes-connections)
+
+1. Then run SQL LogScout with that alias. For example 
+
+   ```PowerShell
+   .\SQL_LogScout.ps1 -ServerName "MSWIN8.SQLWID" -Scenario "GeneralPerf"
+   ```
+
+1. You will get connection errors when trying to connect with a ODBC driver using encryption, but after a few attempts, an unencrypted connection succeeds. The output may look like this:
+
+   ```output
+   2025-01-08 00:14:31.229 WARN    Could not connect to SQL Server
+   2025-01-08 00:14:31.229 ERROR   Function 'getSQLConnection' failed with error:  Exception calling "Open" with "0" argument(s): "ERROR [08001] [Microsoft][ODBC    Driver 17 for SQL Server]Encryption not supported on SQL Server.
+   ERROR [08001] [Microsoft][ODBC Driver 17 for SQL Server]Client unable to establish connection
+   ERROR [01S00] [Microsoft][ODBC Driver 17 for SQL Server]Invalid connection string attribute" (line: 628, offset: 13, file:    C:\Tools\SQLLogScout\Bin\CommonFunctions.psm1)
+   2025-01-08 00:14:31.276 WARN    Could not connect to SQL Server
+   2025-01-08 00:14:31.276 ERROR   Function 'getSQLConnection' failed with error:  Exception calling "Open" with "0" argument(s): "ERROR [08001] [Microsoft][SQL    Server Native Client 11.0]Encryption not supported on SQL Server.
+   ERROR [08001] [Microsoft][SQL Server Native Client 11.0]Client unable to establish connection
+   ERROR [01S00] [Microsoft][SQL Server Native Client 11.0]Invalid connection string attribute" (line: 628, offset: 13, file:    C:\Tools\SQLLogScout\Bin\CommonFunctions.psm1)
+   2025-01-08 00:14:31.307 WARN    **********************************************************************
+   2025-01-08 00:14:31.323 WARN    *  SQL LogScout is switching to the classic SQL Server ODBC driver.
+   2025-01-08 00:14:31.323 WARN    *  Thus, this local connection is unencrypted to ensure it is successful
+   2025-01-08 00:14:31.323 WARN    *  To exit without collecting LogScout press Ctrl+C
+   2025-01-08 00:14:31.323 WARN    **********************************************************************
+   2025-01-08 00:14:37.489 INFO    Confirmed that WIN2022SQL1\Administrator has VIEW SERVER STATE on SQL Server Instance 'MSWIN8.SQLWID'
+   2025-01-08 00:14:37.489 INFO    Confirmed that WIN2022SQL1\Administrator has ALTER ANY EVENT SESSION on SQL Server Instance 'MSWIN8.SQLWID'
+   2025-01-08 00:14:37.489 INFO    Confirmed that SQL Server Instance WIDAlias can write Extended Event Session Target at    C:\Tools\SQLLogScout\output\WIDAlias_20250108T0014373961_xevent_LogScout_target_test.xel
+   ```

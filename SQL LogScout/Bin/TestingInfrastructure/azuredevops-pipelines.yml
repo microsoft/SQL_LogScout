@@ -228,52 +228,53 @@ extends:
           displayName: Run LogScout Test Suite
           inputs:
             script: |
+                    @echo off
                     time /t
                     sqlcmd -S.\sqlexpress -Q "set nocount on; SELECT @@version; SELECT @@servername; SELECT * FROM sys.databases"
                     echo NexusDir: $(NexusDir) 
-
+                    set RunDuration=2.7
                     
                     echo ========================================================================================
                     echo Starting SQL LogScout test...
                     date /t & time /t
                     cd .\Bin\TestingInfrastructure
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Basic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5 
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Basic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration% 
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
                     timeout /T 5
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "GeneralPerf" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "DetailedPerf+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "DetailedPerf+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
                     
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "LightPerf" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "LightPerf" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
                     
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Memory" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Memory" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    # powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "AlwaysOn" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    # powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "AlwaysOn" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     # IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "NetworkTrace+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "NetworkTrace+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
                     
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "IO" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "IO" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "BackupRestore+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "BackupRestore+NoBasic" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Replication" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Replication" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
 
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Setup" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "Setup" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
                     
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "ServiceBrokerDBMail" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "ServiceBrokerDBMail" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
                     
-                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "NeverEndingQuery" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration 2.5
+                    powershell -File .\ConsistentQualityTests.ps1 -ServerName ".\sqlexpress" -Scenarios "NeverEndingQuery" -SqlNexusPath $(NexusDir) -SqlNexusDb "SqlNexusDB" -RunDuration %RunDuration%
                     IF %ERRORLEVEL% GTR 0 echo ##[error]Test failed with errorlevel %ERRORLEVEL% && exit 1
