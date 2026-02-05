@@ -27,9 +27,9 @@ Import-Module .\SqlVersionsTable.psm1
 function InitAppVersion()
 {
     $major_version = "6"
-    $minor_version = "25"
-    $build = "04"
-    $revision = "25"
+    $minor_version = "26"
+    $build = "01"
+    $revision = "27"
     $global:app_version = $major_version + "." + $minor_version + "." + $build + "." + $revision
     Write-LogInformation "SQL LogScout version: $global:app_version"
 }
@@ -136,9 +136,34 @@ function GetWindowsDiskInfo ()
         $vol_ltr_pad = 13
         $vol_freespc_pad = 20
 
-        [void]$strDskOutputText.Append("Disk_Drive".PadRight($dsk_drv_pad)  + " " +  "Disk_Model".PadRight($dsk_model_pad)  + " " +  "Partn_Id".PadRight($partid_pad)  + " " +  "Volume_Size_GB".PadRight($vol_size_pad)  + " " +  "Volume_Free_Space_GB".PadRight($vol_freespc_pad) + " " + "Volume_Caption".PadRight($part_caption_pad)  + " " +  "Volume_Label".PadRight($vol_label_pad)  + " " + "Primary_Part".PadRight($prim_part_pad)  + " " +  "Boot_Part".PadRight($boot_part_pad)  + " " +  "Volume_Letter".PadRight($vol_ltr_pad) + " " +  "Total_Disk_Size_GB".PadRight($dsk_size_pad) + " " +  "BytesPerSector".PadRight($dsk_sect_size_pad) + " " +  "SCSIPort".PadRight($scsi_port_pad)  +  "`r`n") 
-        [void]$strDskOutputText.Append(("-"*$dsk_drv_pad) + " " + ("-"*$dsk_model_pad) + " "  + ("-"*$partid_pad)  + " " +  ("-"*$vol_size_pad)  + " " +  ("-"*$vol_freespc_pad) + " " + ("-"*$part_caption_pad)  + " " +  ("-"*$vol_label_pad)  + " " + ("-"*$prim_part_pad)  + " " +  ("-"*$boot_part_pad)  + " " +  ("-"*$vol_ltr_pad) + " " + ("-"*$dsk_size_pad) + " " + ("-"*$dsk_sect_size_pad)  + " " + ("-"*$scsi_port_pad) +  "`r`n")
-        
+        # Header for disk drive information
+        [void]$strDskOutputText.Append( "Disk_Drive".PadRight($dsk_drv_pad)             + " " +  
+                                        "Disk_Model".PadRight($dsk_model_pad)           + " " +  
+                                        "Partn_Id".PadRight($partid_pad)                + " " +
+                                        "Volume_Size_GB".PadRight($vol_size_pad)        + " " +  
+                                        "Volume_Free_Space_GB".PadRight($vol_freespc_pad) + " " + 
+                                        "Volume_Caption".PadRight($part_caption_pad)    + " " +  
+                                        "Volume_Label".PadRight($vol_label_pad)         + " " +  
+                                        "Primary_Part".PadRight($prim_part_pad)         + " " +  
+                                        "Boot_Part".PadRight($boot_part_pad)            + " " +  
+                                        "Volume_Letter".PadRight($vol_ltr_pad)          + " " +  
+                                        "Total_Disk_Size_GB".PadRight($dsk_size_pad)    + " " +  
+                                        "BytesPerSector".PadRight($dsk_sect_size_pad)   + " " +  
+                                        "SCSIPort".PadRight($scsi_port_pad)             +  "`r`n")
+        # Separator line
+        [void]$strDskOutputText.Append( ("-"*$dsk_drv_pad)      + " " +
+                                        ("-"*$dsk_model_pad)    + " " + 
+                                        ("-"*$partid_pad)       + " " +  
+                                        ("-"*$vol_size_pad)     + " " +  
+                                        ("-"*$vol_freespc_pad)  + " " + 
+                                        ("-"*$part_caption_pad) + " " +  
+                                        ("-"*$vol_label_pad)    + " " + 
+                                        ("-"*$prim_part_pad)    + " " +  
+                                        ("-"*$boot_part_pad)    + " " +  
+                                        ("-"*$vol_ltr_pad)      + " " + 
+                                        ("-"*$dsk_size_pad)     + " " + 
+                                        ("-"*$dsk_sect_size_pad) + " " + 
+                                        ("-"*$scsi_port_pad)    +  "`r`n")
 
         foreach ($drive in $diskDrives) {
 
@@ -155,7 +180,21 @@ function GetWindowsDiskInfo ()
                 $volumeLabel =  if ($null -ne ($volume.VolumeName)) { ($volume.VolumeName)} else { "" }
                 $driveModel = if ($drive.Model.Length -gt 35) { $drive.Model.Substring(0,35) } else { $drive.Model }
 
-                [void]$strDskOutputText.Append($($drive.DeviceID.ToString().PadRight($dsk_drv_pad))  + " " + $($driveModel.PadRight($dsk_model_pad))  + " " + $($partition.Index.ToString().PadRight($partid_pad)) + " " +  $([math]::Round($partition.Size / 1GB,2)).ToString().PadRight($vol_size_pad) + " " +  $([math]::Round($volume.FreeSpace /1GB, 2).ToString().PadRight($vol_freespc_pad)) + " " + $($partition.Caption).ToString().PadRight($part_caption_pad) + " " +  $volumeLabel.PadRight($vol_label_pad) + " " + $($partition.PrimaryPartition).ToString().PadRight($prim_part_pad) + " " +  $($partition.Bootable).ToString().PadRight($boot_part_pad) + " " +  $volumeLetter.PadRight($vol_ltr_pad) + " " + $([math]::Round($drive.Size / 1GB,2).ToString().PadRight($dsk_size_pad)) + " " +  $($drive.BytesPerSector.ToString().PadRight($dsk_sect_size_pad)) + " " + $($drive.SCSIPort.ToString().PadRight($scsi_port_pad)) + "`r`n")
+                                # Append disk and partition information to the output
+                [void]$strDskOutputText.Append( $($drive.DeviceID.ToString().PadRight($dsk_drv_pad))                                + " " + 
+                                                $($driveModel.PadRight($dsk_model_pad))                                             + " " + 
+                                                $($partition.Index.ToString().PadRight($partid_pad))                                + " " +  
+                                                $([math]::Round($partition.Size / 1GB,2)).ToString().PadRight($vol_size_pad)        + " " +  
+                                                $([math]::Round($volume.FreeSpace /1GB, 2).ToString().PadRight($vol_freespc_pad))   + " " + 
+                                                $($partition.Caption).ToString().PadRight($part_caption_pad)                        + " " +  
+                                                $volumeLabel.PadRight($vol_label_pad)                                               + " " + 
+                                                $($partition.PrimaryPartition).ToString().PadRight($prim_part_pad)                  + " " +  
+                                                $($partition.Bootable).ToString().PadRight($boot_part_pad)                          + " " +  
+                                                $volumeLetter.PadRight($vol_ltr_pad)                                                + " " + 
+                                                $([math]::Round($drive.Size / 1GB,2).ToString().PadRight($dsk_size_pad))            + " " +  
+                                                $($drive.BytesPerSector.ToString().PadRight($dsk_sect_size_pad))                    + " " + 
+                                                $($drive.SCSIPort.ToString().PadRight($scsi_port_pad)) + "`r`n")
+
 
             }
         
@@ -164,6 +203,113 @@ function GetWindowsDiskInfo ()
 
         # Write the disk drive information to the file
         Add-Content -Path ($output_file) -Value $strDskOutputText.ToString() 
+
+        # Add Volume Information section
+        [System.Text.StringBuilder]$strVolOutputText = New-Object -TypeName System.Text.StringBuilder
+
+        # Add section separator and header
+        [void]$strVolOutputText.Append("`r`n`r`n-- Volume_Information --`r`n")
+
+        # Define padding for volume columns
+        $vol_name_pad = 50
+        $vol_label_pad = 16
+        $vol_deviceid_pad = 50
+        $vol_filesystem_pad = 12
+        $vol_blocksize_pad = 10
+        $vol_bootvol_pad = 12
+        $vol_sysvol_pad = 14
+        $vol_diskquota_pad = 12
+        $vol_compress_pad = 12
+        $vol_capacity_pad = 15
+        $vol_freespace_pad = 15
+
+        # Header for volume information
+        [void]$strVolOutputText.Append( "Volume_Name".PadRight($vol_name_pad)                    + " " +
+                                        "Volume_Label".PadRight($vol_label_pad)                  + " " +
+                                        "Device_ID".PadRight($vol_deviceid_pad)                  + " " +
+                                        "File_System".PadRight($vol_filesystem_pad)              + " " +
+                                        "Block_Size".PadRight($vol_blocksize_pad)               + " " +
+                                        "Boot_Volume".PadRight($vol_bootvol_pad)                + " " +
+                                        "System_Volume".PadRight($vol_sysvol_pad)               + " " +
+                                        "Disk_Quotas".PadRight($vol_diskquota_pad)              + " " +
+                                        "Compression".PadRight($vol_compress_pad)               + " " +
+                                        "Capacity_GB".PadRight($vol_capacity_pad)               + " " +
+                                        "FreeSpace_GB".PadRight($vol_freespace_pad)             + "`r`n")
+
+        # Separator line
+        [void]$strVolOutputText.Append( ("-"*$vol_name_pad)        + " " +
+                                        ("-"*$vol_label_pad)       + " " +
+                                        ("-"*$vol_deviceid_pad)    + " " +
+                                        ("-"*$vol_filesystem_pad)  + " " +
+                                        ("-"*$vol_blocksize_pad)   + " " +
+                                        ("-"*$vol_bootvol_pad)     + " " +
+                                        ("-"*$vol_sysvol_pad)      + " " +
+                                        ("-"*$vol_diskquota_pad)   + " " +
+                                        ("-"*$vol_compress_pad)    + " " +
+                                        ("-"*$vol_capacity_pad)    + " " +
+                                        ("-"*$vol_freespace_pad)   + "`r`n")
+
+        # Get volume information
+        $volumes = Get-CimInstance -ClassName Win32_Volume
+
+        foreach ($volume in $volumes) 
+        {
+            # Handle null values and format data
+            $volName = if ($null -ne $volume.Name) 
+            { 
+                if ($volume.Name.Length -gt $vol_name_pad) 
+                    { $volume.Name.Substring(0,($vol_name_pad-3)) + "..." } 
+                else { $volume.Name }
+            } else { "" }
+
+            $volLabel = if ($null -ne $volume.Label) 
+            { 
+                if ($volume.Label.Length -gt $vol_label_pad) 
+                    { $volume.Label.Substring(0,($vol_label_pad-3)) + "..." } 
+                else { $volume.Label }
+            } else { "" }
+            
+            $volDeviceID = if ($null -ne $volume.DeviceID) 
+            { 
+                if ($volume.DeviceID.Length -gt $vol_deviceid_pad) 
+                    { $volume.DeviceID.Substring(0,($vol_deviceid_pad-3)) + "..." } 
+                else { $volume.DeviceID }
+            } else { "" }
+
+            $volFileSystem = if ($null -ne $volume.FileSystem) { $volume.FileSystem.ToString() } else { "" }
+            
+            $volBlockSize = if ($null -ne $volume.BlockSize) { $volume.BlockSize.ToString() } else { "" }
+            $volBootVolume = if ($null -ne $volume.BootVolume) { $volume.BootVolume.ToString() } else { "" }
+            $volSystemVolume = if ($null -ne $volume.SystemVolume) { $volume.SystemVolume.ToString() } else { "" }
+            $volDiskQuotas = if ($null -ne $volume.SupportsDiskQuotas) { $volume.SupportsDiskQuotas.ToString() } else { "" }
+            $volCompression = if ($null -ne $volume.SupportsFileBasedCompression) { $volume.SupportsFileBasedCompression.ToString() } else { "" }
+            
+            $volCapacityGB = if ($null -ne $volume.Capacity -and $volume.Capacity -gt 0) 
+            {
+                [math]::Round($volume.Capacity / 1GB, 2).ToString() 
+            } else { "" }
+
+            $volFreeSpaceGB = if ($null -ne $volume.FreeSpace -and $volume.FreeSpace -gt 0) 
+            {
+                [math]::Round($volume.FreeSpace / 1GB, 2).ToString() 
+            } else { "" }
+
+            # Append volume information to the output
+            [void]$strVolOutputText.Append( $volName.PadRight($vol_name_pad)                        + " " +
+                                            $volLabel.PadRight($vol_label_pad)                      + " " +
+                                            $volDeviceID.PadRight($vol_deviceid_pad)                + " " +
+                                            $volFileSystem.PadRight($vol_filesystem_pad)            + " " +
+                                            $volBlockSize.PadRight($vol_blocksize_pad)              + " " +
+                                            $volBootVolume.PadRight($vol_bootvol_pad)               + " " +
+                                            $volSystemVolume.PadRight($vol_sysvol_pad)              + " " +
+                                            $volDiskQuotas.PadRight($vol_diskquota_pad)             + " " +
+                                            $volCompression.PadRight($vol_compress_pad)             + " " +
+                                            $volCapacityGB.PadRight($vol_capacity_pad)              + " " +
+                                            $volFreeSpaceGB.PadRight($vol_freespace_pad)            + "`r`n")
+        }
+
+        # Write the volume information to the file
+        Add-Content -Path ($output_file) -Value $strVolOutputText.ToString()
 
 
     }
@@ -350,9 +496,82 @@ function GetEnvironmentVariables ($server)
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
         return
     }
+}
 
     
+function GetDefaultTraces
+{
+    Write-LogDebug "Inside" $MyInvocation.MyCommand
+
+    try 
+    {
+        $collector_name = "DefaultTraces"
+        Write-LogInformation "Executing Collector: $collector_name"
+        $server = $global:sql_instance_conn_str
+
+         # Create the partial error file names
+        $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
+        $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+
+        #get the destination folder for the output files
+        [string]$DestinationFolder = $global:output_folder
+
+        #get the \Log directory from the registry by calling the GetLogDirectory function
+        $LogPath = GetLogPathFromReg -server $server -logType "LOG"
+        
+        if ($LogPath -eq $false)
+        {
+            # The registry key is not valid, return
+            Write-LogWarning "The registry key for LOG path is not valid. Continuing with other collectors."
+            return
+        }
+
+        Write-LogDebug "The LogPath is $LogPath" -DebugLogLevel 2
+
+        #get the default trace files
+        $default_traces = Get-ChildItem -Path $LogPath -Filter "log*.trc" -ErrorAction SilentlyContinue
+
+        if ($null -eq $default_traces)
+        {
+            Write-LogDebug "No default trace files found for this SQL Server. Likely 'default trace enabled' = 0" -DebugLogLevel 1
+            return
+        }
+        else 
+        {
+             Write-LogDebug "Default trace files found:" -DebugLogLevel 2
+
+            foreach ($trace in $default_traces)
+            {
+                $source_file = $trace.FullName
+                
+                #copy the trace file to the output folder
+                Copy-Item -Path $source_file -Destination $DestinationFolder -ErrorAction SilentlyContinue -ErrorVariable DfltTrcCopyError | Out-Null
+                $DfltTrcCopyError | Out-File -FilePath $error_file -Append
+                
+                #if there are errors copying the file, log it
+                if ($false -eq [string]::IsNullOrWhiteSpace($DfltTrcCopyError))
+                {
+                    Write-LogDebug "Error copying default trace file '$source_file'. For details, see '$error_file' ." -DebugLogLevel 4
+                }
+                else
+                {
+                    Write-LogDebug "Default trace '$source_file' with last write time: '$($trace.LastWriteTime)' successfully copied." -DebugLogLevel 4
+                }
+            }
+            
+        }
+
+    }
+    catch {
+        HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
+        return
+    }
 }
+
+
+
+
 function GetPowerPlan($server)
 {
     #power plan
@@ -441,21 +660,108 @@ function GetRunningDrivers()
         [System.Text.StringBuilder]$TXToutput = New-Object -TypeName System.Text.StringBuilder
         [System.Text.StringBuilder]$CSVoutput = New-Object -TypeName System.Text.StringBuilder
 
+        # Add rowset identifier for TXT output
+        [void]$TXToutput.Append("-- running_drivers --`r`n")
+
+        # Define padding variables for tabular format
+        $module_id_pad = 4
+        $file_name_pad = 120
+        $company_name_pad = 33
+        $file_description_pad = 50
+        $product_version_pad = 20
+        $file_version_pad = 25
+        $file_size_mb_pad = 12
+        $last_write_time_pad = 22
+
+        # Header for running drivers information
+        [void]$TXToutput.Append( "ID".PadRight($module_id_pad)           + " " +
+                                 "File_Name".PadRight($file_name_pad)           + " " +
+                                 "Company_Name".PadRight($company_name_pad)     + " " +
+                                 "File_Description".PadRight($file_description_pad) + " " +
+                                 "Product_Version".PadRight($product_version_pad) + " " +
+                                 "File_Version".PadRight($file_version_pad)     + " " +
+                                 "File_Size_MB".PadRight($file_size_mb_pad)     + " " +
+                                 "Last_Write_Time".PadRight($last_write_time_pad) + "`r`n")
+
+        # Separator line
+        [void]$TXToutput.Append( ("-"*$module_id_pad)           + " " +
+                                 ("-"*$file_name_pad)           + " " +
+                                 ("-"*$company_name_pad)        + " " +
+                                 ("-"*$file_description_pad)    + " " +
+                                 ("-"*$product_version_pad)     + " " +
+                                 ("-"*$file_version_pad)        + " " +
+                                 ("-"*$file_size_mb_pad)        + " " +
+                                 ("-"*$last_write_time_pad)     + "`r`n")
+
         #CSV header
         [void]$CSVoutput.Append("ID,Module Path,Product Version,File Version,Company Name,File Description,File Size,File Time/Date String,`r`n")
 
         [int]$counter = 1
 
         foreach ($driver in $driverproperties) {
-            [void]$TXToutput.Append("Module[" + $counter + "] [" + $driver.FileName + "]`r`n")
-            [void]$TXToutput.Append("  Company Name:      " + $driver.CompanyName + "`r`n")
-            [void]$TXToutput.Append("  File Description:  " + $driver.FileDescription + "`r`n")
-            [void]$TXToutput.Append("  Product Version:   (" + $driver.ProductVersion + ")`r`n")
-            [void]$TXToutput.Append("  File Version:      (" + $driver.FileVersion + ")`r`n")
-            [void]$TXToutput.Append("  File Size (bytes): " + $driver.Length + "`r`n")
-            [void]$TXToutput.Append("  File Date:         " + $driver.LastWriteTime + "`r`n")
-            [void]$TXToutput.Append("`r`n`r`n")
+            # Handle null values and format data for TXT output
+            $moduleId = $counter.ToString()
+            
+            $fileName = if ($null -ne $driver.FileName) { 
+                if ($driver.FileName.Length -gt $file_name_pad) { 
+                    $driver.FileName.Substring(0,($file_name_pad-3)) + "..." 
+                } else { 
+                    $driver.FileName 
+                }
+            } else { "" }
 
+            $companyName = if ($null -ne $driver.CompanyName) {
+                $companyName = $driver.CompanyName.Trim()
+                if ($companyName.Length -gt $company_name_pad) { 
+                    $companyName.Substring(0,($company_name_pad-3)) + "..." 
+                } else { 
+                    $companyName 
+                }
+            } else { "" }
+
+            $fileDescription = if ($null -ne $driver.FileDescription) { 
+                if ($driver.FileDescription.Length -gt $file_description_pad) { 
+                    $driver.FileDescription.Substring(0,($file_description_pad-3)) + "..." 
+                } else { 
+                    $driver.FileDescription 
+                }
+            } else { "" }
+
+            $productVersion = if ($null -ne $driver.ProductVersion) { 
+                if ($driver.ProductVersion.Length -gt $product_version_pad) { 
+                    $driver.ProductVersion.Substring(0,($product_version_pad-3)) + "..." 
+                } else { 
+                    $driver.ProductVersion 
+                }
+            } else { "" }
+
+            $fileVersion = if ($null -ne $driver.FileVersion) { 
+                if ($driver.FileVersion.Length -gt $file_version_pad) { 
+                    $driver.FileVersion.Substring(0,($file_version_pad-3)) + "..." 
+                } else { 
+                    $driver.FileVersion 
+                }
+            } else { "" }
+
+            $fileSizeMB = if ($null -ne $driver.Length -and $driver.Length -gt 0) { 
+                [math]::Round($driver.Length / 1MB, 2).ToString() 
+            } else { "" }
+
+            $lastWriteTime = if ($null -ne $driver.LastWriteTime) { 
+                $driver.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") 
+            } else { "" }
+
+            # Append driver information to TXT output
+            [void]$TXToutput.Append( $moduleId.PadRight($module_id_pad)               + " " +
+                                     $fileName.PadRight($file_name_pad)               + " " +
+                                     $companyName.PadRight($company_name_pad)         + " " +
+                                     $fileDescription.PadRight($file_description_pad) + " " +
+                                     $productVersion.PadRight($product_version_pad)   + " " +
+                                     $fileVersion.PadRight($file_version_pad)         + " " +
+                                     $fileSizeMB.PadRight($file_size_mb_pad)          + " " +
+                                     $lastWriteTime.PadRight($last_write_time_pad)    + "`r`n")
+
+            # CSV output (unchanged)
             [void]$CSVoutput.Append($counter.ToString() + ",")
             [void]$CSVoutput.Append((Update-Coma($driver.FileName)) + ",")
             [void]$CSVoutput.Append((Update-Coma($driver.ProductVersion)) + ",")
@@ -497,52 +803,128 @@ function GetFsutilSectorInfo()
     {
         [System.Text.StringBuilder] $fsutil_output = New-Object -TypeName System.Text.StringBuilder
 
-        $fsutil_output.Append("-- fsutil sectorinfo--" + "`r`n") | Out-Null
-        $fsutil_output.Append("fsutil_property                                         fsutil_value                   volume" + "`r`n") | Out-Null
-        $fsutil_output.Append("------------------------------------------------------- ------------------------------ ---------------" + "`r`n") | Out-Null
-
         $vol = ""
 
-        #get the volumes on the system. For now we get all of them. In the future we can devise logic to get only the SQL ones
-        $vol_array = (Get-PsDrive -PsProvider FileSystem | Select-Object Root ).Root
+        #get the list of volumes on the system. Test-Path is used to ensure the volume is valid and not a disconnected or not ready for use drive
+        $vol_array = Get-PSDrive -PsProvider FileSystem | Where-Object { $_.Root -and (Test-Path -LiteralPath $_.Root) } | Select-Object -ExpandProperty Root
+
+        Write-LogDebug "Found $($vol_array.Count) volume(s) on the system" -DebugLogLevel 3
 
         if ([String]::IsNullOrWhiteSpace($vol_array) -ne $true)
         {
+            # First pass: collect all fsutil output and determine max lengths
+            Write-LogDebug "Starting first pass to collect fsutil data and determine max column widths" -DebugLogLevel 4
+            $allFsutilData = @()
+            $maxPropertyLength = "fsutil_property".Length
+            $maxValueLength = "fsutil_value".Length
+            $maxVolumeLength = "volume".Length
+
             foreach ($vol in $vol_array)
             {
-                $vol = $vol.Trim() -replace "\\", ""
+                $volClean = $vol.Trim() -replace "\\", ""
 
-                Write-LogDebug "Disk volume for fsutil: $vol" -DebugLogLevel 4
-
-
-                #call the fsutil command for each volume
-                $fsitems = fsutil fsinfo sectorinfo $vol
-
-
-                #if the output seems proper fsutil output, then append it with formatting
-                if ($fsitems[0].ToString().StartsWith("LogicalBytesPerSector"))
+                # Check if this is a CD-ROM or other non-disk drive type (DriveType 5 = CD-ROM)
+                # We only want to run fsutil sectorinfo on disks 
+                $driveInfo = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$volClean'" -ErrorAction SilentlyContinue
+                if ($null -ne $driveInfo -and $driveInfo.DriveType -eq 5)
                 {
-
-                    foreach($item in $fsitems)
-                    {
-
-                        $fsutil_output.Append($item + $(" " * (86 - $item.Length + 1) ) + $vol + "`r`n") | Out-Null
-                    }
+                    Write-LogDebug "Skipping volume '$volClean' - CD-ROM/optical drive (DriveType: $($driveInfo.DriveType))" -DebugLogLevel 3
+                    continue
                 }
 
-                else
+                Write-LogDebug "Disk volume for fsutil (first pass): $volClean (DriveType: $(if ($null -ne $driveInfo) { $driveInfo.DriveType } else { 'N/A' }))" -DebugLogLevel 4
+
+                #call the fsutil command for each volume
+                $fsitems = fsutil fsinfo sectorinfo $volClean
+
+                if ($null -ne $fsitems -and $fsitems.Count -gt 0 -and $fsitems[0].ToString().StartsWith("LogicalBytesPerSector"))
+                {
+                    Write-LogDebug "Valid fsutil output found for volume $volClean with $($fsitems.Count) items" -DebugLogLevel 4
+                    foreach ($item in $fsitems)
+                    {
+                        # Parse the item to get property and value
+                        $colonIndex = $item.IndexOf(":")
+                        if ($colonIndex -gt 0)
+                        {
+                            $propName = $item.Substring(0, $colonIndex).Trim()
+                            $propValue = $item.Substring($colonIndex + 1).Trim()
+                            
+                            if ($propName.Length -gt $maxPropertyLength) { $maxPropertyLength = $propName.Length }
+                            if ($propValue.Length -gt $maxValueLength) { $maxValueLength = $propValue.Length }
+                        }
+                        else
+                        {
+                            if ($item.Length -gt $maxPropertyLength) { $maxPropertyLength = $item.Length }
+                        }
+                    }
+                    if ($volClean.Length -gt $maxVolumeLength) { $maxVolumeLength = $volClean.Length }
+                }
+
+                # Store the data for second pass
+                $allFsutilData += @{ Volume = $volClean; Items = $fsitems }
+            }
+
+            Write-LogDebug "First pass complete. Collected data for $($allFsutilData.Count) volume(s)" -DebugLogLevel 3
+            Write-LogDebug "Calculated column widths - Property: $maxPropertyLength, Value: $maxValueLength, Volume: $maxVolumeLength" -DebugLogLevel 3
+
+            # Build header with dynamic widths
+            Write-LogDebug "Building header with dynamic widths" -DebugLogLevel 4
+            $fsutil_output.Append("-- fsutil sectorinfo--" + "`r`n") | Out-Null
+            $fsutil_output.Append("fsutil_property".PadRight($maxPropertyLength) + " " + "fsutil_value".PadRight($maxValueLength) + " " + "volume" + "`r`n") | Out-Null
+            $fsutil_output.Append(("-" * $maxPropertyLength) + " " + ("-" * $maxValueLength) + " " + ("-" * $maxVolumeLength) + "`r`n") | Out-Null
+
+            # Calculate total line width for formatting
+            $totalLineWidth = $maxPropertyLength + 1 + $maxValueLength
+            Write-LogDebug "Total line width for formatting: $totalLineWidth" -DebugLogLevel 4
+
+            # Second pass: output the data with proper formatting
+            Write-LogDebug "Starting second pass to format and output data" -DebugLogLevel 4
+            foreach ($volData in $allFsutilData)
+            {
+                $vol = $volData.Volume
+                $fsitems = $volData.Items
+
+                Write-LogDebug "Disk volume for fsutil (second pass): $vol" -DebugLogLevel 4
+
+                #if the output seems proper fsutil output, then append it with formatting
+                if ($null -ne $fsitems -and $fsitems.Count -gt 0 -and $fsitems[0].ToString().StartsWith("LogicalBytesPerSector"))
                 {
                     foreach($item in $fsitems)
                     {
-
+                        # Parse and reformat item with proper padding
+                        $colonIndex = $item.IndexOf(":")
+                        if ($colonIndex -gt 0)
+                        {
+                            $propName = $item.Substring(0, $colonIndex).Trim()
+                            $propValue = $item.Substring($colonIndex + 1).Trim()
+                            $formattedItem = $propName.PadRight($maxPropertyLength) + " " + $propValue.PadRight($maxValueLength)
+                        }
+                        else
+                        {
+                            $formattedItem = $item.PadRight($totalLineWidth)
+                        }
+                        
+                        $fsutil_output.Append($formattedItem + " " + $vol + "`r`n") | Out-Null
+                    }
+                }
+                else
+                {
+                    Write-LogDebug "Non-standard fsutil output for volume $vol, writing raw output" -DebugLogLevel 4
+                    foreach($item in $fsitems)
+                    {
                         $fsutil_output.Append($item + "`r`n") | Out-Null
                     }
                 }
-
             }
 
+            Write-LogDebug "Writing fsutil sector info to file: $output_file_txt" -DebugLogLevel 3
             Add-Content -Path ($output_file_txt) -Value ($fsutil_output.ToString())
+            Write-LogDebug "Fsutil sector info collection completed successfully" -DebugLogLevel 3
 
+        }
+        else
+        {
+            Write-LogDebug "No valid volumes found on the system, skipping fsutil collection" -DebugLogLevel 2
         }
 
 
@@ -561,12 +943,14 @@ function GetSQLSetupLogs(){
     $collector_name = "SQLSetupLogs"
     Write-LogInformation "Executing Collector: $collector_name"
 
-    try{
+    try
+    {
+        # get the SQL setup bootstrap logs  
         Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\*\Bootstrap\' |
         ForEach-Object {
 
             [string]$SQLVersion = Split-Path -Path $_.BootstrapDir | Split-Path -Leaf
-            [string]$DestinationFolder = $global:output_folder + $env:COMPUTERNAME + "_SQL" + $SQLVersion + "_Setup_Bootstrap"
+            [string]$DestinationFolder = $global:output_folder + $global:host_name + "_SQL" + $SQLVersion + "_Setup_Bootstrap"
 
             Write-LogDebug "_.BootstrapDir: $_.BootstrapDir" -DebugLogLevel 2
             Write-LogDebug "DestinationFolder: $DestinationFolder" -DebugLogLevel 2
@@ -576,22 +960,34 @@ function GetSQLSetupLogs(){
             if(Test-Path -Path $BootstrapLogFolder){
 
                 Write-LogDebug "Executing: Copy-Item -Path ($BootstrapLogFolder) -Destination $DestinationFolder -Recurse"
-                try
-				{
-                    Copy-Item -Path ($BootstrapLogFolder) -Destination $DestinationFolder -Recurse -ErrorAction Stop
-                }
-				catch
-				{
-                    Write-LogError "Error executing Copy-Item"
-                    Write-LogError $_
-                }
+                Copy-Item -Path ($BootstrapLogFolder) -Destination $DestinationFolder -Recurse -ErrorAction Stop
 
-            } else {
-
-                Write-LogWarning "No SQL Setup logs found in '$BootstrapLogFolder'. Reason: path does not exist"
+            } 
+            else 
+            {
+                Write-LogDebug "No SQL Setup logs found in '$BootstrapLogFolder'. Reason: path does not exist" -DebugLogLevel 2
             }
 
         }
+
+        #get the SQL unattended setup logs sqlsetup*.log from %temp% folder
+        $tempPath = $env:TEMP
+        $sqlSetupLogs = Get-ChildItem -Path $tempPath -Filter "sqlsetup*.log" -ErrorAction SilentlyContinue
+
+        if ($sqlSetupLogs -and $sqlSetupLogs.Count -gt 0) 
+        {
+            foreach ($log in $sqlSetupLogs) 
+            {
+                $destinationFile = Join-Path -Path $global:output_folder -ChildPath ($global:host_name + "_UnattendedInstall_" + $log.Name)
+                Write-LogDebug "Copying the unattended SQL Setup log file '$($log.FullName)' to '$destinationFile'" -DebugLogLevel 2
+                Copy-Item -Path $log.FullName -Destination $destinationFile -ErrorAction Stop
+            }
+        } 
+        else 
+        {
+            Write-LogDebug "No Unattended SQL Setup logs found in '$tempPath'. Reason: no files found" -DebugLogLevel 2
+        }
+
     } catch {
 
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
@@ -811,10 +1207,11 @@ function GetXeventsGeneralPerf()
 
     $server = $global:sql_instance_conn_str
 
-    Import-Module .\SQLScript_xevent_core.psm1
-    Import-Module .\SQLScript_xevent_general.psm1
-    
-    try {
+    try 
+    {
+        Import-Module .\SQLScript_xevent_core.psm1
+        Import-Module .\SQLScript_xevent_general.psm1
+        
 
         ##create output filenames using the path + servername + date and time
         $partial_output_file_name = CreatePartialOutputFilename ($server)
@@ -894,10 +1291,11 @@ function GetXeventsDetailedPerf()
 
     $server = $global:sql_instance_conn_str
 
-    Import-Module .\SQLScript_xevent_core.psm1
-    Import-Module .\SQLScript_xevent_detailed.psm1
     try
     {
+        Import-Module .\SQLScript_xevent_core.psm1
+        Import-Module .\SQLScript_xevent_detailed.psm1
+        
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = CreatePartialOutputFilename ($server)
 
@@ -976,10 +1374,9 @@ function GetAlwaysOnDiag()
 
     $server = $global:sql_instance_conn_str
 
-    Import-Module .\SQLScript_AlwaysOnDiagScript.psm1
-
     try
     {
+        Import-Module .\SQLScript_AlwaysOnDiagScript.psm1
 
         #AlwaysOn Basic Info
         $collector_name = AlwaysOnDiagScript_Query #"AlwaysOnDiagScript"
@@ -1071,32 +1468,25 @@ function GetXeventsAlwaysOnMovement()
 
     $server = $global:sql_instance_conn_str
 
-    Import-Module .\SQLScript_xevent_core.psm1
-    if (-not (isHADREnabled) ) {
-        Write-LogWarning "HADR is off, will not collect data movement "
-        return
-    }
+    try 
+    {
+        Import-Module .\SQLScript_xevent_core.psm1
 
-    try {
+        if (-not (isHADREnabled) ) {
+            Write-LogWarning "HADR is off, will not collect data movement "
+            return
+        }
+
 
         $skip_AlwaysOn_DataMovement = $false;
         $SQLVersion = $global:SQLVERSION
 
-        #if (($global:sql_major_version -le 11) -or (($global:sql_major_version -eq 13) -and ($global:sql_major_build -lt 4001) ) -or (($global:sql_major_version -eq 12) -and ($global:sql_major_build -lt 5000)) )
         
         if ((checkSQLVersion -versions @("2016SP1RTM", "2014SP2RTM") -LowerThan $true))
         {
             $skip_AlwaysOn_DataMovement = $true
         } 
-<#
-        if ($SQLVersion -lt 13000004001) 
-        {
-            if (($SQLVersion -gt 13000000000)  -OR ($SQLVersion -lt 12000005000) )
-            {
-                $skip_AlwaysOn_DataMovement = $true
-            } 
-        }
-#>
+
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = CreatePartialOutputFilename ($server)
 
@@ -1168,23 +1558,22 @@ function GetXeventsAlwaysOnMovement()
             Start-SQLCmdProcess -collector_name $collector_name -is_query $true -query_text $alter_event_session_start -has_output_results $false
         }
     }
-    catch {
+    catch 
+    {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
-        return
+
     }
 
-    finally {
-
+    finally 
+    {
         if ($true -eq $IsLocked)
         {
             # signal the next waiting worker in line for the lock
             [System.Threading.Monitor]::Pulse($global:xevent_ht)
-
             [System.Threading.Monitor]::Exit($global:xevent_ht)
         }
 
         Write-LogDebug "Finally(): Lock on 'global:xevent_ht' released" -DebugLogLevel 4
-
     }
 }
 
@@ -1242,11 +1631,12 @@ function GetXeventBackupRestore
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     $server = $global:sql_instance_conn_str
-
-    Import-Module .\SQLScript_xevent_backup_restore.psm1
-    Import-Module .\SQLScript_xevent_core.psm1
     try
     {
+
+        Import-Module .\SQLScript_xevent_backup_restore.psm1
+        Import-Module .\SQLScript_xevent_core.psm1
+
         if ($global:sql_major_version -ge 13)
         {
             ##create error output filenames using the path + servername + date and time
@@ -1592,10 +1982,21 @@ function GetMiscDiagInfo()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module -Name .\SQLScript_MiscDiagInfo.psm1 
-
     try
     {
+
+        #if $global:miscDiagRanAlready is true, then we already ran this collector once, so skip
+        if ($true -eq $global:miscDiagRanAlready)
+        {
+            Write-LogDebug "Misc Diag Info collector already ran once, skipping subsequent runs" -DebugLogLevel 3
+            return
+        }
+    
+        # set this to true as we are about to run it
+        $global:miscDiagRanAlready = $true
+        
+        Import-Module -Name .\SQLScript_MiscDiagInfo.psm1 
+
         #misc DMVs
         $collector_name = MiscDiagInfo_Query #"MiscDiagInfo"
         Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
@@ -1667,8 +2068,9 @@ function GetRunningProfilerXeventTraces ()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_ProfilerTraces.psm1
-    try {
+    try 
+    {
+        Import-Module .\SQLScript_ProfilerTraces.psm1
 
         #active profiler traces and xevents
         $collector_name = "ExistingProfilerXeventTraces"
@@ -1689,9 +2091,9 @@ function GetHighCPUPerfStats ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_HighCPU_perfstats.psm1
-
-    try {
+    try 
+    {
+        Import-Module .\SQLScript_HighCPU_perfstats.psm1
 
         #SQL Server High CPU Perf Stats
         $collector_name = "HighCPU_perfstats"
@@ -1714,15 +2116,27 @@ function GetPerfStats ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_SQL_Server_PerfStats.psm1
-
     try
     {
+        Import-Module .\SQLScript_SQL_Server_PerfStats.psm1
 
         $collector = SQL_Server_PerfStats_Query #SQL_Server_PerfStats
         Start-SQLCmdProcess -collector_name "PerfStats" -input_script_name $collector #"SQL_Server_PerfStats"
+
+
+        # if the global:gAdditionalOptionsEnabled contains RedoTasksPerfStats, then we will collect the RedoTasksPerfStats collector
+
+        if ($global:gAdditionalOptionsEnabled -contains "RedoTasksPerfStats")
+        {
+            Import-Module .\SQLScript_RedoTasksPerfStats.psm1
+
+            Write-LogDebug "AdditionalOptionsEnabled contains 'RedoTasksPerfStats', calling RedoQueue_PerfStats_Query collector" -DebugLogLevel 3
+            $redo_perfstats_collector = RedoTasks_PerfStats_Query #RedoQueue_PerfStats
+            Start-SQLCmdProcess -collector_name "RedoTasks_PerfStats" -input_script_name $redo_perfstats_collector
+        }
     }
-    catch {
+    catch 
+    {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
         return
     }
@@ -1734,15 +2148,17 @@ function GetPerfStatsSnapshot ([string] $TimeOfCapture="Startup")
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_SQL_Server_PerfStats_Snapshot.psm1
-    if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
-    {
-        Write-LogWarning "No SQL Server instance specified, thus skipping execution of PerfStats shutdown collector"
-        return
-    }
-
     try
     {
+        Import-Module .\SQLScript_SQL_Server_PerfStats_Snapshot.psm1
+
+        if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
+        {
+            Write-LogWarning "No SQL Server instance specified, thus skipping execution of PerfStats shutdown collector"
+            return
+        }
+
+    
         [bool] $wait_synchonous = $false
 
         #for shutdown we must wait for the script to complete, otherwise the Kill script will terminate its execution in the middle
@@ -1784,7 +2200,7 @@ function GetTopNQueryPlansInXml ([int] $PlanCount = 5, [string] $TimeOfCapture =
         #using no wrapping quotes so I can add them later in the building of the argument list to generate file names dynamically
         $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -fileExt "_" -needExtraQuotes $false
         $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -fileExt "_" -needExtraQuotes $false
-        $executable = "bcp.exe"
+        $executable = GetSQLToolPath -toolName "bcp.exe"
 
         Write-LogInformation "Executing Collector: $collector_name"
 
@@ -1797,7 +2213,25 @@ function GetTopNQueryPlansInXml ([int] $PlanCount = 5, [string] $TimeOfCapture =
                     WHERE RowNumber = $i"
 
             # this is the bcp.exe argument list. bcp file and output files are built dynamically with the counter from the loop
-            $argument_list = "`"" + $sql +"`"" + " queryout `"" + ($output_file + $i + ".sqlplan`"") + " -T -c -S " + $server + " -o `"" + ($error_file + "_" + $i + ".out `"")
+            # build per-iteration filenames
+            $exportFile = $output_file + $i + ".sqlplan"
+            $errFile = $error_file + "_" + $i + ".out"
+
+            # determine SQL major version (fallback to 0 if not available)
+            [int]$sqlMajorVersion = 0
+            if ($null -ne $global:sql_major_version) {
+                try { $sqlMajorVersion = [int]$global:sql_major_version } catch { $sqlMajorVersion = 0 }
+            }
+
+            # For SQL Server 2025 (major version 17) and newer, append -Ym and -u to bcp args.
+            if ($sqlMajorVersion -ge 17) {
+                $argument_list = '"' + $sql + '" queryout "' + $exportFile + '" -T -c -S "' + $server + '" -Ym -u -o "' + $errFile + '"'
+                Write-LogDebug "BCP argument list (SQL >= 17): $argument_list" -DebugLogLevel 4
+            }
+            else {
+                $argument_list = '"' + $sql + '" queryout "' + $exportFile + '" -T -c -S "' + $server + '" -o "' + $errFile + '"'
+                Write-LogDebug "BCP argument list (SQL < 17): $argument_list" -DebugLogLevel 4
+            }
 
             #launch the process
             StartNewProcess -FilePath $executable -ArgumentList $argument_list -WindowStyle Hidden | Out-Null
@@ -2226,10 +2660,10 @@ function GetNeverEndingQueryInfo()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_NeverEndingQuery_perfstats.psm1
-
     try
     {
+        Import-Module .\SQLScript_NeverEndingQuery_perfstats.psm1
+
         #Never ending query collection
         $collector_name = NeverEndingQuery_perfstats_Query #"NeverEndingQuery_perfstats"
         Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
@@ -2244,9 +2678,11 @@ function GetServiceBrokerDbMailInfo ()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_SSB_DbMail_Diag.psm1
+    
     try
     {
+        Import-Module .\SQLScript_SSB_DbMail_Diag.psm1
+
         #Service Broker collection
         $collector_name = SSB_DbMail_Diag_Query #"SSB_DbMail_Diag"
         Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
@@ -2264,9 +2700,10 @@ function GetTempdbSpaceLatchingStats ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_TempDB_and_Tran_Analysis.psm1
-    try {
+    try 
+    {
 
+        Import-Module .\SQLScript_TempDB_and_Tran_Analysis.psm1
 
         #Tempdb space and latching
         $collector_name = TempDB_and_Tran_Analysis_Query #"TempDB_and_Tran_Analysis"
@@ -2283,9 +2720,10 @@ function GetTempdbSpaceLatchingStats ()
 function GetLinkedServerInfo ()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    Import-Module .\SQLScript_linked_server_config.psm1
-    try {
+    
+    try 
+    {
+        Import-Module .\SQLScript_linked_server_config.psm1
 
         #Linked Server configuration
         $collector_name = linked_server_config_Query #"linked_server_config"
@@ -2304,9 +2742,10 @@ function GetQDSInfo ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_QueryStore.psm1
+    try 
+    {
 
-    try {
+        Import-Module .\SQLScript_QueryStore.psm1
 
         #Query Store
         $collector_name = QueryStore_Query #"QueryStore"
@@ -2324,10 +2763,11 @@ function GetQDSInfo ()
 function GetReplMetadata ([string] $TimeOfCapture = "Shutdown")
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    Import-Module .\SQLScript_Repl_Metadata_Collector.psm1
+    
     try
     {
+        Import-Module .\SQLScript_Replication_Metadata_Collector.psm1
+
         #Prompt user that if they are running in quiet mode, we are not going to prompt.
         if ($global:gInteractivePrompts -eq "Quiet")
         {
@@ -2457,9 +2897,10 @@ function GetChangeDataCaptureInfo ([string] $TimeOfCapture = "Startup") {
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQlScript_ChangeDataCapture.psm1
     try
     {
+        Import-Module .\SQlScript_ChangeDataCapture.psm1
+
         [bool] $wait_synchonous = $false
 
         #for shutdown we must wait for the script to complete, otherwise the Kill script will terminate its execution in the middle
@@ -2482,10 +2923,11 @@ function GetChangeDataCaptureInfo ([string] $TimeOfCapture = "Startup") {
 function GetChangeTracking ([string] $TimeOfCapture = "Startup")
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    Import-Module .\SQLScript_Change_Tracking.psm1
+    
     try
     {
+        Import-Module .\SQLScript_Change_Tracking.psm1
+
         [bool] $wait_synchonous = $false
 
         #for shutdown we must wait for the script to complete, otherwise the Kill script will terminate its execution in the middle
@@ -2829,10 +3271,11 @@ function GetWPRTrace ()
 function GetMemoryLogs()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
-
-    Import-Module .\SQLScript_SQL_Server_Mem_Stats.psm1
+    
     try
     {
+        Import-Module .\SQLScript_SQL_Server_Mem_Stats.psm1
+
         #Change Tracking
         $collector_name = SQL_Server_Mem_Stats_Query #"SQL_Server_Mem_Stats"
         Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
@@ -2850,6 +3293,14 @@ function GetClusterInformation()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
+    Import-Module -Name FailoverClusters
+
+    if (-not (Get-Module -Name FailoverClusters -ErrorAction SilentlyContinue))
+    {
+        Write-LogInformation "FailoverClusters module is not available. Cannot collect cluster information."
+        return
+    }
+    
     $server = $global:sql_instance_conn_str
     $output_folder = $global:output_folder
     $ClusterError = 0
@@ -2909,24 +3360,39 @@ function GetClusterInformation()
 
         try
         {
-            Import-Module FailoverClusters
+            Import-Module -Name FailoverClusters
+
+            # Check if the module is loaded
+            if (-not (Get-Module -Name FailoverClusters)) {
+                Write-LogError "FailoverClusters module is not loaded. Cannot collect cluster environment info."
+                return
+            }
+
             [void]$rs_ClusterLog.Append("-- Windows Cluster Name --`r`n")
             $clusterName = Get-cluster
             [void]$rs_ClusterLog.Append("$clusterName`r`n")
 
-            # starting the cluster log collector
-            $collector_name = "ClusterLogs"
-            Write-LogInformation "Executing Collector: $collector_name"
-            $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false -fileExt ".out"
-
-            #dumping windows cluster log
-            Write-LogWarning "Collecting Windows cluster logs for all running nodes. This may take some time....."
-            $nodes =  Get-Clusternode | Where-Object {$_.state -eq 'Up'} | Select-Object name
-
-            foreach ($node in $nodes)
+            #if $global:gAdditionalOptionsEnabled contains "NoClusterLogs" then skip the cluster log collection, otherwise get the cluster logs
+            if ($global:gAdditionalOptionsEnabled -contains "NoClusterLogs")
             {
-                Write-LogInformation "   Collecting cluster log for node $($node.name)"
-                Get-ClusterLog -Node $node.name -Destination $output_folder  -UseLocalTime | Out-Null
+                 Write-LogInformation "Skipping Cluster Log collection as 'NoClusterLogs' option is enabled."
+            }
+            else
+            {
+                # starting the cluster log collector
+                $collector_name = "ClusterLogs"
+                Write-LogInformation "Executing Collector: $collector_name"
+                $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false -fileExt ".out"
+
+                #dumping windows cluster log
+                Write-LogWarning "Collecting Windows cluster logs for all running nodes. This may take some time....."
+                $nodes =  Get-Clusternode | Where-Object {$_.state -eq 'Up'} | Select-Object name
+
+                foreach ($node in $nodes)
+                {
+                    Write-LogInformation "   Collecting cluster log for node $($node.name)"
+                    Get-ClusterLog -Node $node.name -Destination $output_folder  -UseLocalTime | Out-Null
+                }
             }
         }
         catch
@@ -3407,9 +3873,8 @@ function GetSQLandAgentErrorlogs()
         Write-LogInformation "Executing Collector: $collector_name"
  
 
-        # Create the partial output and error file names
+        # Create the partial error file names
         $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
-        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
 
 
@@ -3638,7 +4103,7 @@ function GetSystemAndSQLDiagXELs()
         }
 
         #get SQLDIAG XEL files for cluster troubleshooting
-        if (IsClustered)
+        if (IsNodeOnWSFC) 
         {
 
             Write-LogDebug "Getting MSSQLSERVER_SQLDIAG*.xel files" -DebugLogLevel 3
@@ -3740,7 +4205,7 @@ function GetSQLMemoryDumpAndLogs()
             Write-LogDebug "Found $($DumpFilesTemp.Count) memory dumps from the past $months_ago months (since '$ErrorLogDateLimit')" -DebugLogLevel 4
 
 
-            # now get the memory dumps for last 2 months, of size < 100 MB, and if too many, get only the most recent 20. Dump file types of mdmp and dmp
+            # now get the memory dumps for last 2 months, of size < 200 MB, and if too many, get only the most recent 20. Dump file types of mdmp and dmp
             $dumpFileSize = 200MB
             $dumpFileSizeinMB = $dumpFileSize/1024/1024
             $dumpLimitCount = 20
@@ -3885,13 +4350,13 @@ function GetFullTextSearchLogFiles {
 
         $server = $global:sql_instance_conn_str
 
-        #build a string of servername_instancename, if there is a named instance (\) involved
-        $server_instance = $server -replace "\\", "_"
-        
-
+        #set up the error file
         $partial_error_output_file_name = CreatePartialErrorOutputFilename($server)
-        Write-LogDebug "The partial_error_output_file_name is $partial_error_output_file_name" -DebugLogLevel 3
         $error_file = BuildFinalErrorFile -partial_error_output_file_name $partial_error_output_file_name -collector_name $collector_name -needExtraQuotes $false
+
+        #set up the output file to get a list of Full-Text Search log files
+        $partial_output_file = CreatePartialOutputFilename ($server)
+        $output_file = BuildFinalOutputFile -output_file_name $partial_output_file -collector_name "FTSLogList" -needExtraQuotes $false
 
 
         [string]$DestinationFolder = $global:output_folder
@@ -3915,9 +4380,33 @@ function GetFullTextSearchLogFiles {
         $logPathsString = $logPaths -join "', '"
         Write-LogDebug "Getting FullText-Search files from '$logPathsString'" -DebugLogLevel 3
 
-
-        $FTS_logfiles = Get-ChildItem -Path $logPaths -Filter "*" | Where-Object { $_.Name -like "SQLFT*" -or $_.Name -like "FD*" }
         $FTSlog_count = 0
+
+        $SQLFTlogfiles = Get-ChildItem -Path $sqlftLogPath  | Where-Object { $_.Name -like "*SQLFT*" }
+        $FDlogfiles = Get-ChildItem -Path $fdlauncherLogPath  | Where-Object { $_.Name -like "FD*" }
+
+        # log messages in the debug log to help with testing
+        if ($SQLFTlogfiles.Count -gt 0)
+        {
+            Write-LogDebug "Found $($SQLFTlogfiles.Count) Full-Text SQLFT* log files." -DebugLogLevel 2
+        }
+
+        if ($FDlogfiles.Count -gt 0)
+        {
+            Write-LogDebug "Found $($FDlogfiles.Count) Full-Text FD* log files." -DebugLogLevel 2
+        }
+
+
+        #Combine the list of log files
+        $FTS_logfiles = $SQLFTlogfiles + $FDlogfiles
+
+
+        # Check if there are more than 300 SQLFT* log files (arbitrary choice) and let the user know
+        if ($SQLFTlogfiles.Count -gt 300)
+        {
+            Write-LogWarning "There are $($SQLFTlogfiles.Count) SQLFT* log files found. Collecting them can take a bit longer."
+        }        
+
 
         #Check if any FTS error logs found
         if ($FTS_logfiles.Count -eq 0)
@@ -3928,19 +4417,30 @@ function GetFullTextSearchLogFiles {
 
         else
         {
+
+            # Sort and output SQLFT log files in a file
+            $FTS_logfiles | 
+                Select-Object Name, @{Name="Size(KB)";Expression={[math]::Round($_.Length/1KB,2)}}, LastWriteTime |
+                Sort-Object LastWriteTime |
+                Out-File -FilePath $output_file
+
+
             #go through the FullText logs and copy them
             #if file size is > 1 GB, get 500 lines from head and tail of the file
             foreach ($FTSfile in $FTS_logfiles)
             {
-                $source = $FTS_logfiles.FullName
+                $source = $FTSfile.FullName
 
-                #Set the destination file path for header/tail fils and regular files.
-                $destination = $DestinationFolder + $server_instance + "_" + $FTSfile.Name
-                $destination_head_tail = $DestinationFolder + $server_instance + "_" + $FTSfile.Name + "_Head_and_Tail_Only"
+                #Set the destination file path for regular files.
+                $destination = $partial_output_file + "_" + $FTSfile.Name
+                
 
                 # if file size is > 1 GB, get 500 lines from head and tail of the file
                 if ($FTSfile.Length -ge 1073741824)
                 {
+                    #Set the destination file path for header/tail files.
+                    $destination_head_tail = $partial_output_file + "_Head_and_Tail_Only_" + $FTSfile.Name 
+
                     Get-Content $source -TotalCount 500 | Set-Content -Path $destination_head_tail | Out-Null
                     Add-Content -Value "`n   <<... middle part of file not captured because the file is too large (>1 GB) ...>>`n" -Path $destination_head_tail | Out-Null
                     Get-Content $source -Tail 500 | Add-Content -Path $destination_head_tail | Out-Null
@@ -3949,18 +4449,32 @@ function GetFullTextSearchLogFiles {
                 }
                 else
                 {
-                    Copy-Item -Path $source -Destination $destination | Out-Null
-                    Write-LogDebug "FulText-Search Log file '$FTSfile' copied." -DebugLogLevel 4
+                    Copy-Item -Path $source -Destination $destination -ErrorAction SilentlyContinue -ErrorVariable FTlogsCopyError | Out-Null
+
+                    #write errors to the error file
+                    $FTlogsCopyError | Out-File -FilePath $error_file -Append
                 }
 
                 $FTSlog_count++
+
+                #if file count becomes % 200, print a message on the screen that so many files have been copied
+                if ($FTSlog_count % 200 -eq 0)
+                {
+                    Write-LogInformation "   Copied $FTSlog_count Full-Text Search Log file(s) so far..."
+                }
             }
+
+            Write-LogDebug "Copied $FTSlog_count Full-Text Search Log(s) successfully." -DebugLogLevel 3
         }
 
-        Write-LogDebug "$FTSlog_count Full-Text Search Log file(s) copied successfully." -DebugLogLevel 3
+        
     }
     catch
     {
+        if ($FTlogsCopyError)
+        {
+            $FTlogsCopyError | Out-File -FilePath $error_file -Append
+        }
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
     }
 }
@@ -3969,16 +4483,17 @@ function GetFulltextSearchMetaData()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_FullTextSearchMetadata.psm1
-
-    $collector_name = FullTextSearchMetadata_Query #"FulltextSearchMetadata"
-    
     try
     {
+        Import-Module .\SQLScript_FullTextSearchMetadata.psm1
+
+        $collector_name = FullTextSearchMetadata_Query #"FulltextSearchMetadata"
+
         if($global:sql_instance_service_status -eq "Running")
         {
             #FullTextSearch.sql
             #the output is potential errors so sent to error file
+            Write-LogDebug "Collecting FullTextSearch Metadata output" -DebugLogLevel 1
             Start-SQLCmdProcess -collector_name ($collector_name) -input_script_name $collector_name
         }
         else
@@ -4082,9 +4597,11 @@ function GetHighIOPerfStats ()
 
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    Import-Module .\SQLScript_High_IO_perfstats.psm1
+    
     try
     {
+        Import-Module .\SQLScript_High_IO_perfstats.psm1
+
         #SQL Server High IO Perf Stats
         $collector_name = High_IO_perfstats_Query #"High_IO_Perfstats"
         Start-SQLCmdProcess -collector_name $collector_name -input_script_name $collector_name
@@ -4116,20 +4633,101 @@ function GetSQLAssessmentAPI()
         Write-LogInformation "Executing Collector: $collector_name"
         $output_file = BuildFinalOutputFile -output_file_name $partial_output_file_name -collector_name $collector_name -needExtraQuotes $false
 
-        if (Get-Module -ListAvailable -Name sqlserver)
+        $sqlPsModuleName = "SqlServer"
+
+        if (Get-Module -ListAvailable -Name $sqlPsModuleName)
         {
-            $Invoke_SqlAssessment_command = Get-Command -Module SqlServer -Name Invoke-SqlAssessment -ErrorAction SilentlyContinue 
-            $Get_SqlInstance_command = Get-Command -Module SqlServer -Name Get-SqlInstance -ErrorAction SilentlyContinue
+            $Invoke_SqlAssessment_command = Get-Command -Module $sqlPsModuleName -Name "Invoke-SqlAssessment" -ErrorAction SilentlyContinue 
+            $Get_SqlInstance_command = Get-Command -Module $sqlPsModuleName -Name "Get-SqlInstance" -ErrorAction SilentlyContinue
+
             if ($Invoke_SqlAssessment_command -and $Get_SqlInstance_command)
             {
-                Write-LogDebug "Invoke-SqlAssessment() function present" -DebugLogLevel 3
-                Get-SqlInstance -ServerInstance $server -TrustServerCertificate -Encrypt Mandatory | Invoke-SqlAssessment -FlattenOutput | Out-File $output_file
+                Write-LogDebug "Invoke-SqlAssessment() and Get-SqlInstance() functions present" -DebugLogLevel 3
+                $assessment = Get-SqlInstance -ServerInstance $server -TrustServerCertificate -Encrypt Mandatory | Invoke-SqlAssessment
+
+                # format the output file so it can be imported into SQL Nexus 
+
+                Write-LogDebug "Formatting the output file for SQL Nexus import" -DebugLogLevel 3                                
+                            
+                # Define column widths
+                $checkWidth = 80
+                $severityWidth = 15
+                $messageWidth = 1100
+                $HelpUrl = 200
+                $strOutput = ""
+
+                # Build identifier, header and separator with spaces between columns
+                $sqlnexus_identifier = "-- assessment_api --"
+                $header = "{0,-$checkWidth} {1,-$severityWidth} {2,-$messageWidth} {3,-$HelpUrl}" -f "Check", "Severity", "Message", "HelpURL"
+                $separator = "{0} {1} {2} {3}" -f ('-' * $checkWidth), ('-' * $severityWidth), ('-' * $messageWidth), ('-' * $HelpUrl)
+                                
+                # Write header and separator and reset the output string, no new line 
+                $strOutput += $sqlnexus_identifier + "`r`n"
+                $strOutput += $header + "`r`n"
+                $strOutput += $separator + "`r`n"
+
+                $strOutput | Out-File -FilePath $output_file -Encoding utf8 -NoNewline
+                $strOutput = ""
+
+                
+                # Initialize a counter to keep track of the number of rows written and a string builder for efficient string concatenation
+                $strOutputSB = New-Object System.Text.StringBuilder
+                $counter = 0;
+
+                
+
+                # Write each row with fixed-width formatting and space between columns
+                foreach ($item in $assessment) {
+
+                                    
+                    # Clean each field: convert newlines to spaces, trim
+                    $check   = ($item.Check    -replace "`r`n|`n|`r", " ").Trim()
+                    $sev     = ($item.Severity -replace "`r`n|`n|`r", " ").Trim()
+                    $message = ($item.Message  -replace "`r`n|`n|`r", " ").Trim()
+                    $help    = ($item.HelpLink -replace "`r`n|`n|`r", " ").Trim()
+
+                    
+                    # Skip if ALL fields are null/empty/whitespace
+                    if ([string]::IsNullOrWhiteSpace($check)   -and
+                        [string]::IsNullOrWhiteSpace($sev)     -and
+                        [string]::IsNullOrWhiteSpace($message) -and
+                        [string]::IsNullOrWhiteSpace($help)) {
+                        continue
+                    }
+
+                    
+                    $line = "{0,-$checkWidth} {1,-$severityWidth} {2,-$messageWidth} {3,-$HelpUrl}" -f `
+                        $check, $sev, $message, $help
+
+
+                    # Skip if line has no non-whitespace characters
+                    if (-not ($line -match '\S')) { continue }
+
+                    # Append the line to the StringBuilder with a new line
+                    [void]$strOutputSB.Append($line).Append("`r`n")
+
+                    # increment the counter
+                    $counter ++
+                    
+                    # Write to file every 20 lines to avoid memory issues with large files
+                    if ($counter % 20 -eq 0 -and $strOutputSB.Length -gt 0)
+                    {
+                        $strOutputSB.ToString() | Out-File -FilePath $output_file -Append -Encoding utf8 -NoNewline
+                        $strOutputSB.Clear() | Out-Null
+                    }
+                }
+
+                # Write any remaining lines to the file
+                $strOutputSB.ToString() | Out-File -FilePath $output_file -Append -Encoding utf8 -NoNewline
+                $strOutputSB.Clear() | Out-Null
+
+                Write-LogDebug "SQL Assessment API data collected and formatted successfully." -DebugLogLevel 3
+
             }
             else
             {
-                Write-LogDebug "Invoke-SqlAssessment() function NOT present. Will not collect $collector_name" -DebugLogLevel 3
+                Write-LogDebug "Invoke-SqlAssessment() and/or Get-SqlInstance() functions NOT present. Will not collect $collector_name" -DebugLogLevel 3
             }
-
         }
         else
         {
@@ -4387,10 +4985,12 @@ function GetXeventServiceBrokerDbMail
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
     $server = $global:sql_instance_conn_str
-    Import-Module .\SQLScript_xevent_core.psm1
-    Import-Module .\SQLScript_xevent_servicebroker_dbmail.psm1
+
     try
     {
+        Import-Module .\SQLScript_xevent_core.psm1
+        Import-Module .\SQLScript_xevent_servicebroker_dbmail.psm1
+
         ##create error output filenames using the path + servername + date and time
         $partial_output_file_name = CreatePartialOutputFilename ($server)
 
@@ -4769,9 +5369,6 @@ function Invoke-BasicScenario([bool] $PerfmonOnly = $false)
     # this section is intended to start a Perfmon within Basic scenario to gather a few snapshots
     # this function is called 2 times once with PerfmonOnly = true and second time with PerfmonOnly = false
 
-    # this section is intended to start a Perfmon within Basic scenario to gather a few snapshots
-    # this function is called 2 times once with PerfmonOnly = true and second time with PerfmonOnly = false
-
     if ($true -eq $PerfmonOnly)
     {
         Write-LogDebug "Launching Perfmon only within Basic" -DebugLogLevel 2
@@ -4785,6 +5382,7 @@ function Invoke-BasicScenario([bool] $PerfmonOnly = $false)
     GetFilterDrivers
     GetSysteminfoSummary
     GetDotNetVersions
+    Start-Sleep -Seconds 2
 
     if ($global:sql_instance_conn_str -eq $global:NO_INSTANCE_NAME)
     {
@@ -4801,12 +5399,17 @@ function Invoke-BasicScenario([bool] $PerfmonOnly = $false)
         }
         
         GetSQLErrorLogsDumpsSysHealth
+        GetDefaultTraces
         Start-Sleep -Seconds 2
 
-        if (IsFullTextInstalled)
+        # Check if Full Text Search Logs option is enabled and if FTS is installed and is so collect FTS logs
+        if ((IsFullTextInstalled) -and ($global:gAdditionalOptionsEnabled -contains "FullTextSearchLogs"))
         {
             GetFulltextSearchMetaData
             GetFullTextSearchLogFiles
+        }
+        else {
+            Write-LogDebug "Full Text Search Logs option is not enabled or FTS is not installed, skipping FTS log collection" -DebugLogLevel 2
         }
 
         GetPolybaseLogs
@@ -4834,10 +5437,12 @@ function Invoke-BasicScenario([bool] $PerfmonOnly = $false)
     Start-Sleep -Seconds 2
     GetIPandDNSConfig
     GetEventLogs
+
+    Start-Sleep -Seconds 1
     GetSQLAzureArcLogs
     GetAzureSQLVMInstanceMetadata
     GetEnvironmentVariables
-
+    
 }
 
 function Invoke-GeneralPerfScenario()
@@ -5329,7 +5934,7 @@ function Invoke-OnShutDown()
             #We don't deal with the clusterless AG (read-scale AGs)
             #select * from sys.availability_groups where cluster_type = 0 (0 = None, 1 = WSFC, 2 = Pacemaker)
             
-            if ((IsClustered) -or (isHADREnabled))
+            if ((IsNodeOnWSFC))
             {
                 GetClusterInformation
             }
@@ -5468,8 +6073,10 @@ function ArbitrateSelectedScenarios ([bool] $Skip = $false)
     }
 
     #set up Basic bit to ON for several scenarios, unless NoBasic bit is enabled
-    if (($false -eq (IsScenarioEnabled -scenarioBit $global:NoBasicBit)) `
-        -and ($true -eq (IsScenarioEnabled -scenarioBit ($global:generalperfBit `
+    if ($false -eq (IsScenarioEnabled -scenarioBit $global:NoBasicBit))
+    {
+        #if NoBasic is not enabled, then enable Basic scenario for these scenarios
+        if ($true -eq (IsScenarioEnabled -scenarioBit ($global:generalperfBit `
                                                         + $global:detailedperfBit `
                                                         + $global:replBit `
                                                         + $global:memoryBit `
@@ -5480,11 +6087,10 @@ function ArbitrateSelectedScenarios ([bool] $Skip = $false)
                                                         + $global:alwaysonBit `
                                                         + $global:ssbDbmailBit `
                                                         + $global:neverEndingQBit)))
-       )
-    {
-
-            
-        EnableScenario -pScenarioBit $global:basicBit
+        {
+            Write-LogDebug "NoBasic isn't enabled, and one or more scenarios are enabled. So enabling Basic scenario for those" -DebugLogLevel 2
+            EnableScenario -pScenarioBit $global:basicBit
+        }
 
     }
     else #NoBasic is enabled
@@ -6320,7 +6926,7 @@ function Stop-AlwaysOn-Xevents([string]$partial_output_file_name, [string]$parti
         $collector_name = "Xevents_Alwayson_Data_Movement_Stop"
         $alter_event_session_ag_stop = "ALTER EVENT SESSION [$global:xevent_alwayson_session] ON SERVER STATE = STOP; DROP EVENT SESSION [$global:xevent_alwayson_session] ON SERVER;"
         Start-SQLCmdProcess -collector_name $collector_name -is_query $true -query_text $alter_event_session_ag_stop -has_output_results $false
-     }
+    }
     catch
     {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
@@ -6638,7 +7244,7 @@ function Invoke-DiagnosticCleanUpAndExit()
 
         #get the sqlcmd.exe path and check if the path  is valid and not empty
         $is_sqlcmd_valid = $false
-        $sqlcmd_executable = GetSQLCmdPath
+        $sqlcmd_executable = GetSQLToolPath -toolName "sqlcmd.exe"
 
         if ($false -eq [string]::IsNullOrWhiteSpace($sqlcmd_executable))
         {
@@ -6852,9 +7458,6 @@ function Invoke-DiagnosticCleanUpAndExit()
 
         Write-LogInformation "Thank you for using SQL LogScout!" -ForegroundColor Green
 
-        #we have to remove importModule early on before we flush and close open streams
-        Remove-Module -Name CustomImportModule
-        
         #close and remove handles to the log files
         if ($global:debugLogStream)
         {
@@ -6877,19 +7480,25 @@ function Invoke-DiagnosticCleanUpAndExit()
             $global:ltDebugLogStream.Dispose()
         }
 
-        ## Remove all modules from the current session so that the script can be run again without restarting the session
+        ## Remove/unload all modules from the current session so that the script can be run again without restarting the session
 
         $LoadedModules = Get-Module  
-        ForEach ($module in $LoadedModules)
+        foreach ($module in $LoadedModules)
         {
             try 
             {
-                Remove-Module -Name $module.Name -Force -ErrorAction SilentlyContinue 
+                #if we fail to remove a specific module we report and continue
+                #ignore the SqlServer PS module, no need to remove it as it is a system module and raises errors every time
+                if ($module.Name -ne "SqlServer")
+                {
+                    #unload the module
+                    Remove-Module -Name $module.Name -Force -ErrorAction SilentlyContinue
+                }
             }
             catch 
             {
                 #if we fail to remove a specific module we report and continue
-                Microsoft.PowerShell.Utility\Write-Host "Could not remove module : $($module.Name)"
+                Microsoft.PowerShell.Utility\Write-Host "Could not unload module : '$($module.Name)' from memory. This is expected if the module is in use by another process or if it is a system module." -ForegroundColor Yellow
                 continue
             }
         } 
@@ -6943,24 +7552,20 @@ function ScenarioBitToName ([int] $pScenarioBit)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-        
-    #As a result of using scenariobits sum (scenario1 + scneario2 + scneario3) variable $scnarioBit may contain multiple scnearios not a single one
-    #in this case we should return all the names from $scnearioBitTbl, not just a single value.
-    [Boolean] $isMultipleScnearios = $false
+    #As a result of using scenariobits sum (scenario1 + scneario2 + scneario3) variable $scenarioBit may contain multiple scenarios not a single one
+    #in this case we should return all the names from $scenarioBitTbl, not just a single value.
+    [Boolean] $isMultipleScenarios = $false
     if (-not (($scenarioBit -band ($scenarioBit -1)) -eq 0))
     {
-        $isMultipleScnearios = $true
-        Write-LogDebug "ScenName has Multiple Scenarios" -Debugloglevel 5
-    } else {
-        Write-LogDebug "ScenName has a single Scenario" -DebugLevel 5
-    }
+        $isMultipleScenarios = $true
+    } 
 
     try
     {
         [string] $scenName = [String]::Empty
 
         #reverse lookup - use Value to lookup Key
-        if ($false -eq $isMultipleScnearios) 
+        if ($false -eq $isMultipleScenarios) 
         {
             #if we received a single scenario in $pScenarioBit then we use old logic for single value
             $scenName  = ($ScenarioBitTbl.GetEnumerator() | Where-Object {$_.Value -eq $pScenarioBit}).Key.ToString()
@@ -6972,7 +7577,7 @@ function ScenarioBitToName ([int] $pScenarioBit)
             $scenName = $scenName -Join ", "
         }
 
-        Write-LogDebug "Scenario bit $pScenarioBit translates to $scenName" -DebugLogLevel 5
+        Write-LogDebug "Scenario bit $pScenarioBit translates to '$scenName'" -DebugLogLevel 5
 
         return $scenName
 
@@ -7082,15 +7687,13 @@ function IsScenarioEnabled([int]$scenarioBit, [bool] $logged = $false)
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
-    #Write-LogDebug "Enabled Bits : " $global:scenario_bitvalue -DebugLogLevel 5
-
     [Boolean] $isMultipleScnearios = $false
     if (-not (($scenarioBit -band ($scenarioBit -1)) -eq 0))
     {
         $isMultipleScnearios = $true
-        Write-LogDebug "Multiple Scenarios in ScenarioBit $scenarioBit " -DebugLogLevel 5
+        Write-LogDebug "Multiple Scenarios in scenarioBit $scenarioBit " -DebugLogLevel 5
     } else {
-        Write-LogDebug "single Scenario in ScenarioBit" -DebugLogLevel 5
+        Write-LogDebug "Single Scenario in scenarioBit $scenarioBit" -DebugLogLevel 5
     }
 
     try
@@ -7648,7 +8251,9 @@ function GetPerformanceDataAndLogs
         if ($global:gui_mode)
         {
             GenerateXeventFileFromGUI
+            Write-LogDebug "gAdditionalOptionsEnabled contains these: $global:gAdditionalOptionsEnabled" -DebugLogLevel 3
         }
+
         #intitialize $global variables here 
         InitializeGlobalsFromSQL
 
@@ -7832,3 +8437,241 @@ function CopyrightAndWarranty()
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE. `n`n"
 }
+
+# SIG # Begin signature block
+# MIIr5AYJKoZIhvcNAQcCoIIr1TCCK9ECAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAjQJ3NZeEyzsdb
+# hCI7bPR/N5xS/dGycNKO+rCLdkYIB6CCEW4wggh+MIIHZqADAgECAhM2AAACDeKE
+# D0nu2y38AAIAAAINMA0GCSqGSIb3DQEBCwUAMEExEzARBgoJkiaJk/IsZAEZFgNH
+# QkwxEzARBgoJkiaJk/IsZAEZFgNBTUUxFTATBgNVBAMTDEFNRSBDUyBDQSAwMTAe
+# Fw0yNTEwMjMyMzA5MzBaFw0yNjA0MjYyMzE5MzBaMCQxIjAgBgNVBAMTGU1pY3Jv
+# c29mdCBBenVyZSBDb2RlIFNpZ24wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+# AoIBAQCpj9ry6z6v08TIeKoxS2+5c928SwYKDXCyPWZHpm3xIHTqBBmlTM1GO7X4
+# ap5jj/wroH7TzukJtfLR6Z4rBkjdlocHYJ2qU7ggik1FDeVL1uMnl5fPAB0ETjqt
+# rk3Lt2xT27XUoNlKfnFcnmVpIaZ6fnSAi2liEhbHqce5qEJbGwv6FiliSJzkmeTK
+# 6YoQQ4jq0kK9ToBGMmRiLKZXTO1SCAa7B4+96EMK3yKIXnBMdnKhWewBsU+t1LHW
+# vB8jt8poBYSg5+91Faf9oFDvl5+BFWVbJ9+mYWbOzJ9/ZX1J4yvUoZChaykKGaTl
+# k51DUoZymsBuatWbJsGzo0d43gMLAgMBAAGjggWKMIIFhjApBgkrBgEEAYI3FQoE
+# HDAaMAwGCisGAQQBgjdbAQEwCgYIKwYBBQUHAwMwPQYJKwYBBAGCNxUHBDAwLgYm
+# KwYBBAGCNxUIhpDjDYTVtHiE8Ys+hZvdFs6dEoFgg93NZoaUjDICAWQCAQ4wggJ2
+# BggrBgEFBQcBAQSCAmgwggJkMGIGCCsGAQUFBzAChlZodHRwOi8vY3JsLm1pY3Jv
+# c29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDEu
+# YW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUy
+# MDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDIuYW1lLmdibC9haWEv
+# QlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBS
+# BggrBgEFBQcwAoZGaHR0cDovL2NybDMuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAx
+# LkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZG
+# aHR0cDovL2NybDQuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDCBrQYIKwYBBQUHMAKGgaBsZGFwOi8vL0NO
+# PUFNRSUyMENTJTIwQ0ElMjAwMSxDTj1BSUEsQ049UHVibGljJTIwS2V5JTIwU2Vy
+# dmljZXMsQ049U2VydmljZXMsQ049Q29uZmlndXJhdGlvbixEQz1BTUUsREM9R0JM
+# P2NBQ2VydGlmaWNhdGU/YmFzZT9vYmplY3RDbGFzcz1jZXJ0aWZpY2F0aW9uQXV0
+# aG9yaXR5MB0GA1UdDgQWBBS6kl+vZengaA7Cc8nJtd6sYRNA3jAOBgNVHQ8BAf8E
+# BAMCB4AwRQYDVR0RBD4wPKQ6MDgxHjAcBgNVBAsTFU1pY3Jvc29mdCBDb3Jwb3Jh
+# dGlvbjEWMBQGA1UEBRMNMjM2MTY3KzUwNjA0MjCCAeYGA1UdHwSCAd0wggHZMIIB
+# 1aCCAdGgggHNhj9odHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ1JM
+# L0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwxLmFtZS5nYmwv
+# Y3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwyLmFtZS5n
+# YmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwzLmFt
+# ZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmw0
+# LmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGgb1sZGFwOi8v
+# L0NOPUFNRSUyMENTJTIwQ0ElMjAwMSgyKSxDTj1CWTJQS0lDU0NBMDEsQ049Q0RQ
+# LENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNlcnZpY2VzLENOPUNvbmZp
+# Z3VyYXRpb24sREM9QU1FLERDPUdCTD9jZXJ0aWZpY2F0ZVJldm9jYXRpb25MaXN0
+# P2Jhc2U/b2JqZWN0Q2xhc3M9Y1JMRGlzdHJpYnV0aW9uUG9pbnQwHwYDVR0jBBgw
+# FoAUllGE4Gtve/7YBqvD8oXmKa5q+dQwHwYDVR0lBBgwFgYKKwYBBAGCN1sBAQYI
+# KwYBBQUHAwMwDQYJKoZIhvcNAQELBQADggEBAJKGB9zyDWN/9twAY6qCLnfDCKc/
+# PuXoCYI5Snobtv15QHAJwwBJ7mr907EmcwECzMnK2M2auU/OUHjdXYUOG5TV5L7W
+# xvf0xBqluWldZjvnv2L4mANIOk18KgcSmlhdVHT8AdehHXSs7NMG2di0cPzY+4Ol
+# 2EJ3nw2JSZimBQdRcoZxDjoCGFmHV8lOHpO2wfhacq0T5NK15yQqXEdT+iRivdhd
+# i/n26SOuPDa6Y/cCKca3CQloCQ1K6NUzt+P6E8GW+FtvcLza5dAWjJLVvfemwVyl
+# JFdnqejZPbYBRdNefyLZjFsRTBaxORl6XG3kiz2t6xeFLLRTJgPPATx1S7Awggjo
+# MIIG0KADAgECAhMfAAAAUeqP9pxzDKg7AAAAAABRMA0GCSqGSIb3DQEBCwUAMDwx
+# EzARBgoJkiaJk/IsZAEZFgNHQkwxEzARBgoJkiaJk/IsZAEZFgNBTUUxEDAOBgNV
+# BAMTB2FtZXJvb3QwHhcNMjEwNTIxMTg0NDE0WhcNMjYwNTIxMTg1NDE0WjBBMRMw
+# EQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRUwEwYDVQQD
+# EwxBTUUgQ1MgQ0EgMDEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDJ
+# mlIJfQGejVbXKpcyFPoFSUllalrinfEV6JMc7i+bZDoL9rNHnHDGfJgeuRIYO1LY
+# /1f4oMTrhXbSaYRCS5vGc8145WcTZG908bGDCWr4GFLc411WxA+Pv2rteAcz0eHM
+# H36qTQ8L0o3XOb2n+x7KJFLokXV1s6pF/WlSXsUBXGaCIIWBXyEchv+sM9eKDsUO
+# LdLTITHYJQNWkiryMSEbxqdQUTVZjEz6eLRLkofDAo8pXirIYOgM770CYOiZrcKH
+# K7lYOVblx22pdNawY8Te6a2dfoCaWV1QUuazg5VHiC4p/6fksgEILptOKhx9c+ia
+# piNhMrHsAYx9pUtppeaFAgMBAAGjggTcMIIE2DASBgkrBgEEAYI3FQEEBQIDAgAC
+# MCMGCSsGAQQBgjcVAgQWBBQSaCRCIUfL1Gu+Mc8gpMALI38/RzAdBgNVHQ4EFgQU
+# llGE4Gtve/7YBqvD8oXmKa5q+dQwggEEBgNVHSUEgfwwgfkGBysGAQUCAwUGCCsG
+# AQUFBwMBBggrBgEFBQcDAgYKKwYBBAGCNxQCAQYJKwYBBAGCNxUGBgorBgEEAYI3
+# CgMMBgkrBgEEAYI3FQYGCCsGAQUFBwMJBggrBgEFBQgCAgYKKwYBBAGCN0ABAQYL
+# KwYBBAGCNwoDBAEGCisGAQQBgjcKAwQGCSsGAQQBgjcVBQYKKwYBBAGCNxQCAgYK
+# KwYBBAGCNxQCAwYIKwYBBQUHAwMGCisGAQQBgjdbAQEGCisGAQQBgjdbAgEGCisG
+# AQQBgjdbAwEGCisGAQQBgjdbBQEGCisGAQQBgjdbBAEGCisGAQQBgjdbBAIwGQYJ
+# KwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwCwYDVR0PBAQDAgGGMBIGA1UdEwEB/wQI
+# MAYBAf8CAQAwHwYDVR0jBBgwFoAUKV5RXmSuNLnrrJwNp4x1AdEJCygwggFoBgNV
+# HR8EggFfMIIBWzCCAVegggFToIIBT4YxaHR0cDovL2NybC5taWNyb3NvZnQuY29t
+# L3BraWluZnJhL2NybC9hbWVyb290LmNybIYjaHR0cDovL2NybDIuYW1lLmdibC9j
+# cmwvYW1lcm9vdC5jcmyGI2h0dHA6Ly9jcmwzLmFtZS5nYmwvY3JsL2FtZXJvb3Qu
+# Y3JshiNodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9hbWVyb290LmNybIaBqmxkYXA6
+# Ly8vQ049YW1lcm9vdCxDTj1BTUVSb290LENOPUNEUCxDTj1QdWJsaWMlMjBLZXkl
+# MjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxDTj1Db25maWd1cmF0aW9uLERDPUFNRSxE
+# Qz1HQkw/Y2VydGlmaWNhdGVSZXZvY2F0aW9uTGlzdD9iYXNlP29iamVjdENsYXNz
+# PWNSTERpc3RyaWJ1dGlvblBvaW50MIIBqwYIKwYBBQUHAQEEggGdMIIBmTBHBggr
+# BgEFBQcwAoY7aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL2NlcnRz
+# L0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUHMAKGK2h0dHA6Ly9jcmwyLmFt
+# ZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUHMAKGK2h0dHA6
+# Ly9jcmwzLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUH
+# MAKGK2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQw
+# gaIGCCsGAQUFBzAChoGVbGRhcDovLy9DTj1hbWVyb290LENOPUFJQSxDTj1QdWJs
+# aWMlMjBLZXklMjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxDTj1Db25maWd1cmF0aW9u
+# LERDPUFNRSxEQz1HQkw/Y0FDZXJ0aWZpY2F0ZT9iYXNlP29iamVjdENsYXNzPWNl
+# cnRpZmljYXRpb25BdXRob3JpdHkwDQYJKoZIhvcNAQELBQADggIBAFAQI7dPD+jf
+# XtGt3vJp2pyzA/HUu8hjKaRpM3opya5G3ocprRd7vdTHb8BDfRN+AD0YEmeDB5HK
+# QoG6xHPI5TXuIi5sm/LeADbV3C2q0HQOygS/VT+m1W7a/752hMIn+L4ZuyxVeSBp
+# fwf7oQ4YSZPh6+ngZvBHgfBaVz4O9/wcfw91QDZnTgK9zAh9yRKKls2bziPEnxeO
+# ZMVNaxyV0v152PY2xjqIafIkUjK6vY9LtVFjJXenVUAmn3WCPWNFC1YTIIHw/mD2
+# cTfPy7QA1pT+GPARAKt0bKtq9aCd/Ym0b5tPbpgCiRtzyb7fbNS1dE740re0COE6
+# 7YV2wbeo2sXixzvLftH8L7s9xv9wV+G22qyKt6lmKLjFK1yMw4Ni5fMabcgmzRvS
+# jAcbqgp3tk4a8emaaH0rz8MuuIP+yrxtREPXSqL/C5bzMzsikuDW9xH10graZzSm
+# PjilzpRfRdu20/9UQmC7eVPZ4j1WNa1oqPHfzET3ChIzJ6Q9G3NPCB+7KwX0OQmK
+# yv7IDimj8U/GlsHD1z+EF/fYMf8YXG15LamaOAohsw/ywO6SYSreVW+5Y0mzJutn
+# BC9Cm9ozj1+/4kqksrlhZgR/CSxhFH3BTweH8gP2FEISRtShDZbuYymynY1un+Ry
+# fiK9+iVTLdD1h/SxyxDpZMtimb4CgJQlMYIZzDCCGcgCAQEwWDBBMRMwEQYKCZIm
+# iZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRUwEwYDVQQDEwxBTUUg
+# Q1MgQ0EgMDECEzYAAAIN4oQPSe7bLfwAAgAAAg0wDQYJYIZIAWUDBAIBBQCgga4w
+# GQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisG
+# AQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINEdXCpnceA+lw4hXPRhv6Q1qqT/3LfZ
+# Huzfz6pcSGrRMEIGCisGAQQBgjcCAQwxNDAyoBSAEgBNAGkAYwByAG8AcwBvAGYA
+# dKEagBhodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20wDQYJKoZIhvcNAQEBBQAEggEA
+# NA5cFUXK1cewoASxUp/kNBp3kLnelYnRkkWopMTlkMLddKUW+JUC9XEACHm3r8yc
+# flCYeHVAOmlTBiuKafh5nXAoZtQeQn9sMYT0Y5Fp8CwHWEUKLPm5bhEDxUagGsWj
+# vJQtI5TpFYvDHytYPE1oZZhhs9RqSVqrbWgsWDUuZ1g81w1DcFflou1yoif+3Ty6
+# VRn3Pgzd+Sx7jSIAHllQCY6JsKDw7FroX/eGSDIAWSoUqBcCF3xaeZ2SmD2BkZWd
+# lblMd5A8k6xnYCkgN377a0EgzJ9TcxT58WwLurMQ61eQ2anKISbhMSIA0wi1psUw
+# bAX579LP/BsNI2TWhrD226GCF5QwgheQBgorBgEEAYI3AwMBMYIXgDCCF3wGCSqG
+# SIb3DQEHAqCCF20wghdpAgEDMQ8wDQYJYIZIAWUDBAIBBQAwggFSBgsqhkiG9w0B
+# CRABBKCCAUEEggE9MIIBOQIBAQYKKwYBBAGEWQoDATAxMA0GCWCGSAFlAwQCAQUA
+# BCDoBlVT/vLlgBwF42ovMVfKY7cFxOrj/3KKINfff0kRKAIGaWjo97CLGBMyMDI2
+# MDIwNDE2MzUyNy4zMzVaMASAAgH0oIHRpIHOMIHLMQswCQYDVQQGEwJVUzETMBEG
+# A1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWlj
+# cm9zb2Z0IENvcnBvcmF0aW9uMSUwIwYDVQQLExxNaWNyb3NvZnQgQW1lcmljYSBP
+# cGVyYXRpb25zMScwJQYDVQQLEx5uU2hpZWxkIFRTUyBFU046QTkzNS0wM0UwLUQ5
+# NDcxJTAjBgNVBAMTHE1pY3Jvc29mdCBUaW1lLVN0YW1wIFNlcnZpY2WgghHqMIIH
+# IDCCBQigAwIBAgITMwAAAgy5ZOM1nOz0rgABAAACDDANBgkqhkiG9w0BAQsFADB8
+# MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVk
+# bW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSYwJAYDVQQDEx1N
+# aWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EgMjAxMDAeFw0yNTAxMzAxOTQzMDBaFw0y
+# NjA0MjIxOTQzMDBaMIHLMQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3Rv
+# bjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0
+# aW9uMSUwIwYDVQQLExxNaWNyb3NvZnQgQW1lcmljYSBPcGVyYXRpb25zMScwJQYD
+# VQQLEx5uU2hpZWxkIFRTUyBFU046QTkzNS0wM0UwLUQ5NDcxJTAjBgNVBAMTHE1p
+# Y3Jvc29mdCBUaW1lLVN0YW1wIFNlcnZpY2UwggIiMA0GCSqGSIb3DQEBAQUAA4IC
+# DwAwggIKAoICAQDKAVYmPeRtga/U6jzqyqLD0MAool23gcBN58+Z/XskYwNJsZ+O
+# +wVyQYl8dPTK1/BC2xAic1m+JvckqjVaQ32KmURsEZotirQY4PKVW+eXwRt3r6sz
+# gLuic6qoHlbXox/l0HJtgURkzDXWMkKmGSL7z8/crqcvmYqv8t/slAF4J+mpzb9t
+# MFVmjwKXONVdRwg9Q3WaPZBC7Wvoi7PRIN2jgjSBnHYyAZSlstKNrpYb6+Gu6oSF
+# kQzGpR65+QNDdkP4ufOf4PbOg3fb4uGPjI8EPKlpwMwai1kQyX+fgcgCoV9J+o8M
+# YYCZUet3kzhhwRzqh6LMeDjaXLP701SXXiXc2ZHzuDHbS/sZtJ3627cVpClXEIUv
+# g2xpr0rPlItHwtjo1PwMCpXYqnYKvX8aJ8nawT9W8FUuuyZPG1852+q4jkVleKL7
+# x+7el8ETehbdkwdhAXyXimaEzWetNNSmG/KfHAp9czwsL1vKr4Rgn+pIIkZHuomd
+# f5e481K+xIWhLCPdpuV87EqGOK/jbhOnZEqwdvA0AlMaLfsmCemZmupejaYuEk05
+# /6cCUxgF4zCnkJeYdMAP+9Z4kVh7tzRFsw/lZSl2D7EhIA6Knj6RffH2k7YtSGSv
+# 86CShzfiXaz9y6sTu8SGqF6ObL/eu/DkivyVoCfUXWLjiSJsrS63D0EHHQIDAQAB
+# o4IBSTCCAUUwHQYDVR0OBBYEFHUORSH/sB/rQ/beD0l5VxQ706GIMB8GA1UdIwQY
+# MBaAFJ+nFV0AXmJdg/Tl0mWnG1M1GelyMF8GA1UdHwRYMFYwVKBSoFCGTmh0dHA6
+# Ly93d3cubWljcm9zb2Z0LmNvbS9wa2lvcHMvY3JsL01pY3Jvc29mdCUyMFRpbWUt
+# U3RhbXAlMjBQQ0ElMjAyMDEwKDEpLmNybDBsBggrBgEFBQcBAQRgMF4wXAYIKwYB
+# BQUHMAKGUGh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2lvcHMvY2VydHMvTWlj
+# cm9zb2Z0JTIwVGltZS1TdGFtcCUyMFBDQSUyMDIwMTAoMSkuY3J0MAwGA1UdEwEB
+# /wQCMAAwFgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwDgYDVR0PAQH/BAQDAgeAMA0G
+# CSqGSIb3DQEBCwUAA4ICAQDZMPr4gVmwwf4GMB5ZfHSr34uhug6yzu4HUT+JWMZq
+# z9uhLZBoX5CPjdKJzwAVvYoNuLmS0+9lA5S74rvKqd/u9vp88VGk6U7gMceatdqp
+# KlbVRdn2ZfrMcpI4zOc6BtuYrzJV4cEs1YmX95uiAxaED34w02BnfuPZXA0edsDB
+# bd4ixFU8X/1J0DfIUk1YFYPOrmwmI2k16u6TcKO0YpRlwTdCq9vO0eEIER1SLmQN
+# BzX9h2ccCvtgekOaBoIQ3ZRai8Ds1f+wcKCPzD4qDX3xNgvLFiKoA6ZSG9S/yOrG
+# aiSGIeDy5N9VQuqTNjryuAzjvf5W8AQp31hV1GbUDOkbUdd+zkJWKX4FmzeeN52E
+# EbykoWcJ5V9M4DPGN5xpFqXy9aO0+dR0UUYWuqeLhDyRnVeZcTEu0xgmo+pQHauF
+# VASsVORMp8TF8dpesd+tqkkQ8VNvI20oOfnTfL+7ZgUMf7qNV0ll0Wo5nlr1CJva
+# 1bfk2Hc5BY1M9sd3blBkezyvJPn4j0bfOOrCYTwYsNsjiRl/WW18NOpiwqciwFlU
+# NqtWCRMzC9r84YaUMQ82Bywk48d4uBon5ZA8pXXS7jwJTjJj5USeRl9vjT98PDZy
+# CFO2eFSOFdDdf6WBo/WZUA2hGZ0q+J7j140fbXCfOUIm0j23HaAV0ckDS/nmC/oF
+# 1jCCB3EwggVZoAMCAQICEzMAAAAVxedrngKbSZkAAAAAABUwDQYJKoZIhvcNAQEL
+# BQAwgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQH
+# EwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xMjAwBgNV
+# BAMTKU1pY3Jvc29mdCBSb290IENlcnRpZmljYXRlIEF1dGhvcml0eSAyMDEwMB4X
+# DTIxMDkzMDE4MjIyNVoXDTMwMDkzMDE4MzIyNVowfDELMAkGA1UEBhMCVVMxEzAR
+# BgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1p
+# Y3Jvc29mdCBDb3Jwb3JhdGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUtU3Rh
+# bXAgUENBIDIwMTAwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDk4aZM
+# 57RyIQt5osvXJHm9DtWC0/3unAcH0qlsTnXIyjVX9gF/bErg4r25PhdgM/9cT8dm
+# 95VTcVrifkpa/rg2Z4VGIwy1jRPPdzLAEBjoYH1qUoNEt6aORmsHFPPFdvWGUNzB
+# RMhxXFExN6AKOG6N7dcP2CZTfDlhAnrEqv1yaa8dq6z2Nr41JmTamDu6GnszrYBb
+# fowQHJ1S/rboYiXcag/PXfT+jlPP1uyFVk3v3byNpOORj7I5LFGc6XBpDco2LXCO
+# Mcg1KL3jtIckw+DJj361VI/c+gVVmG1oO5pGve2krnopN6zL64NF50ZuyjLVwIYw
+# XE8s4mKyzbnijYjklqwBSru+cakXW2dg3viSkR4dPf0gz3N9QZpGdc3EXzTdEonW
+# /aUgfX782Z5F37ZyL9t9X4C626p+Nuw2TPYrbqgSUei/BQOj0XOmTTd0lBw0gg/w
+# EPK3Rxjtp+iZfD9M269ewvPV2HM9Q07BMzlMjgK8QmguEOqEUUbi0b1qGFphAXPK
+# Z6Je1yh2AuIzGHLXpyDwwvoSCtdjbwzJNmSLW6CmgyFdXzB0kZSU2LlQ+QuJYfM2
+# BjUYhEfb3BvR/bLUHMVr9lxSUV0S2yW6r1AFemzFER1y7435UsSFF5PAPBXbGjfH
+# CBUYP3irRbb1Hode2o+eFnJpxq57t7c+auIurQIDAQABo4IB3TCCAdkwEgYJKwYB
+# BAGCNxUBBAUCAwEAATAjBgkrBgEEAYI3FQIEFgQUKqdS/mTEmr6CkTxGNSnPEP8v
+# BO4wHQYDVR0OBBYEFJ+nFV0AXmJdg/Tl0mWnG1M1GelyMFwGA1UdIARVMFMwUQYM
+# KwYBBAGCN0yDfQEBMEEwPwYIKwYBBQUHAgEWM2h0dHA6Ly93d3cubWljcm9zb2Z0
+# LmNvbS9wa2lvcHMvRG9jcy9SZXBvc2l0b3J5Lmh0bTATBgNVHSUEDDAKBggrBgEF
+# BQcDCDAZBgkrBgEEAYI3FAIEDB4KAFMAdQBiAEMAQTALBgNVHQ8EBAMCAYYwDwYD
+# VR0TAQH/BAUwAwEB/zAfBgNVHSMEGDAWgBTV9lbLj+iiXGJo0T2UkFvXzpoYxDBW
+# BgNVHR8ETzBNMEugSaBHhkVodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpL2Ny
+# bC9wcm9kdWN0cy9NaWNSb29DZXJBdXRfMjAxMC0wNi0yMy5jcmwwWgYIKwYBBQUH
+# AQEETjBMMEoGCCsGAQUFBzAChj5odHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtp
+# L2NlcnRzL01pY1Jvb0NlckF1dF8yMDEwLTA2LTIzLmNydDANBgkqhkiG9w0BAQsF
+# AAOCAgEAnVV9/Cqt4SwfZwExJFvhnnJL/Klv6lwUtj5OR2R4sQaTlz0xM7U518Jx
+# Nj/aZGx80HU5bbsPMeTCj/ts0aGUGCLu6WZnOlNN3Zi6th542DYunKmCVgADsAW+
+# iehp4LoJ7nvfam++Kctu2D9IdQHZGN5tggz1bSNU5HhTdSRXud2f8449xvNo32X2
+# pFaq95W2KFUn0CS9QKC/GbYSEhFdPSfgQJY4rPf5KYnDvBewVIVCs/wMnosZiefw
+# C2qBwoEZQhlSdYo2wh3DYXMuLGt7bj8sCXgU6ZGyqVvfSaN0DLzskYDSPeZKPmY7
+# T7uG+jIa2Zb0j/aRAfbOxnT99kxybxCrdTDFNLB62FD+CljdQDzHVG2dY3RILLFO
+# Ry3BFARxv2T5JL5zbcqOCb2zAVdJVGTZc9d/HltEAY5aGZFrDZ+kKNxnGSgkujhL
+# mm77IVRrakURR6nxt67I6IleT53S0Ex2tVdUCbFpAUR+fKFhbHP+CrvsQWY9af3L
+# wUFJfn6Tvsv4O+S3Fb+0zj6lMVGEvL8CwYKiexcdFYmNcP7ntdAoGokLjzbaukz5
+# m/8K6TT4JDVnK+ANuOaMmdbhIurwJ0I9JZTmdHRbatGePu1+oDEzfbzL6Xu/OHBE
+# 0ZDxyKs6ijoIYn/ZcGNTTY3ugm2lBRDBcQZqELQdVTNYs6FwZvKhggNNMIICNQIB
+# ATCB+aGB0aSBzjCByzELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24x
+# EDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlv
+# bjElMCMGA1UECxMcTWljcm9zb2Z0IEFtZXJpY2EgT3BlcmF0aW9uczEnMCUGA1UE
+# CxMeblNoaWVsZCBUU1MgRVNOOkE5MzUtMDNFMC1EOTQ3MSUwIwYDVQQDExxNaWNy
+# b3NvZnQgVGltZS1TdGFtcCBTZXJ2aWNloiMKAQEwBwYFKw4DAhoDFQDvu8hkhEMt
+# 5Z8Ldefls7z1LVU8pqCBgzCBgKR+MHwxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpX
+# YXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQg
+# Q29ycG9yYXRpb24xJjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQSAy
+# MDEwMA0GCSqGSIb3DQEBCwUAAgUA7S3B4zAiGA8yMDI2MDIwNDEzMDIyN1oYDzIw
+# MjYwMjA1MTMwMjI3WjB0MDoGCisGAQQBhFkKBAExLDAqMAoCBQDtLcHjAgEAMAcC
+# AQACAhHvMAcCAQACAhqwMAoCBQDtLxNjAgEAMDYGCisGAQQBhFkKBAIxKDAmMAwG
+# CisGAQQBhFkKAwKgCjAIAgEAAgMHoSChCjAIAgEAAgMBhqAwDQYJKoZIhvcNAQEL
+# BQADggEBAD36ic0aP72QYyQ+hxGRoSWsbcLRjPSjUs84HpR7n2IeI4hDuklydQAY
+# pAzRpvp1gB/tDUExhNnRxVF/JMuv1ni7+1G8F19GD/kPjgq039OJe5pq7nq3UCC8
+# atbnFqXmb+XKp9i0w3cKKrMi3UaaoDvb2srhDegok8Ffz9pqjKaPnNp+JnptGExc
+# ZyJKeP/suXpGX2auTJrCw3OqLy1gRo23i7HRIUq9FtG/gqNTxeobuj+f1aUIcdeo
+# bmpL/3mbcK640YG/DnmYQXv9yZSyL6r9Uma/+oYK2Lk4aKR3QWTh2ejYHX5tTvfC
+# NtFNhk8ldddwGPaeYgThgSaIj64EwLgxggQNMIIECQIBATCBkzB8MQswCQYDVQQG
+# EwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwG
+# A1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSYwJAYDVQQDEx1NaWNyb3NvZnQg
+# VGltZS1TdGFtcCBQQ0EgMjAxMAITMwAAAgy5ZOM1nOz0rgABAAACDDANBglghkgB
+# ZQMEAgEFAKCCAUowGgYJKoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMC8GCSqGSIb3
+# DQEJBDEiBCB4CiOvuuWgYW+KT9/xG6kJ8CMlGDmfIQ42U7ta6oQLOTCB+gYLKoZI
+# hvcNAQkQAi8xgeowgecwgeQwgb0EINUo17cFMZN46MI5NfIAg9Ux5cO5xM9inre5
+# riuOZ8ItMIGYMIGApH4wfDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0
+# b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3Jh
+# dGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUtU3RhbXAgUENBIDIwMTACEzMA
+# AAIMuWTjNZzs9K4AAQAAAgwwIgQgT+jPnBIIP9shvRM8rjFVYz7ININcDtUTh1HB
+# 3F0DtIUwDQYJKoZIhvcNAQELBQAEggIALc86bA2yKVqll5lRoZ1pvMN4mQELkDjs
+# jJiV9sqZ+2aVRTtMTevDJlxqxpJKoyLn5i91uDC+IttfyYptV8Fa/OWr0N6BHUfW
+# 36QRG//TsHcZlPPIePPTfbVxpxupTXSM/0sPtMLL5MwjHy1Fhj+LHAHAMYZSeCnI
+# TXDNQ85B2SMGV4EZCYnjR0IRvIUqMDHD3ZAF2qcGQdOr1HOpP7sKUFmMTIpwZiJY
+# IjLkYMyxHEkKkWVBLn/SpCvbKpGnI/4btzw+lCBpkfzkGn9UMTBlbASMcjDFwOht
+# aJGFMp3yW2REdlG+DoEaAXQ3JyVOMASdULFJOQ2rZEnnTOK1bi09NzSV5nopWZ84
+# TpEs3uN78+dgZRG3rytS56FvMvuCLw2hof337nOXDUInrUh59eHd2PvVCDRmHN2W
+# 9ZUde7GXevEz1zqc6kY3MML8094k95JEM/ohpGVvzCgckOR8t79PI655ZVqUmlgj
+# OKgb6mmx2aJT9eeEzhLk73x47HCqgfaqttYRJCmxtDshcK/yM6Hk+l43DOzhB0yq
+# CO3otSHXZ3nGIPSS8OcmRg/7QfKr73mOgUJscM0+pnl1cuQ3DyV+U56mluL+ieZz
+# s1dlL6Atz7M4hGPl2tR0100pJ08C4H2AZZzQ4Q5zT/IADp5ZDjhViKQ7sBXyJb+T
+# K21i9eJN+DU=
+# SIG # End signature block
