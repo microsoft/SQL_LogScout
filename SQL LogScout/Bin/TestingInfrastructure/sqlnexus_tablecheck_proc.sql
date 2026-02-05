@@ -10,15 +10,40 @@ IF OBJECT_ID ('dbo.proc_SqlNexusTableValidation') IS NOT NULL
 BEGIN
     DROP PROCEDURE dbo.proc_SqlNexusTableValidation
 END
+GO
 
 USE tempdb
 GO
-CREATE PROCEDURE dbo.proc_ExclusionsInclusions @scenario_name VARCHAR(100), @database_name SYSNAME, @exclusion_tag VARCHAR(32)
+CREATE PROCEDURE dbo.proc_ExclusionsInclusions 
+	@scenario_name VARCHAR(100), 
+	@database_name SYSNAME, 
+	@exclusion_tags NVARCHAR(MAX) -- use JSON 
 AS
 BEGIN
 	SET NOCOUNT ON
 	
 	DECLARE @ProductVersion VARCHAR(32) , @sql_major_version INT, @sql_major_build INT, @sql VARCHAR(MAX),  @object varchar(64)
+
+	--Expected exclusion tags. Cast to upper due to case sensitivity in JSON parsing
+	DECLARE @ExpReplMetadata VARCHAR(32) = UPPER('ReplMetaData'),
+			@ExpNeverEnding VARCHAR(32) = UPPER('NoNeverEndingQuery'),
+			@ExpNoAlwaysOn VARCHAR(32) = UPPER('NoAlwaysOn'),
+			@ExpNoMissingMSI VARCHAR(32) = UPPER('NoMissingMSI'),
+			@ExpBasicAssessmentAPIExclusion VARCHAR(32) = UPPER('BasicAssessmentAPIExclusion')
+
+
+
+	--validate the exclusion_tags parameter
+ 	IF @exclusion_tags IS NULL OR ISJSON(@exclusion_tags) <> 1 
+		RETURN 3003003;
+
+	-- declare a temp variable to hold each exclusion tag from the JSON array
+	DECLARE @ExclusionTagTable TABLE (ExclusionTags NVARCHAR(64))
+
+	-- Parse JSON into a table
+	INSERT INTO @ExclusionTagTable (ExclusionTags)
+	SELECT LTRIM(RTRIM(UPPER([value]))) AS Tag
+	FROM OPENJSON(@exclusion_tags)
 
 	--create the sqlversion temp table
 	IF OBJECT_ID ('tempdb..#sqlversion') IS NOT NULL
@@ -34,7 +59,7 @@ BEGIN
 	--get the SQL Server major build and version into a temp table
 	IF OBJECT_ID(@object) IS NOT NULL
 	BEGIN
-		SET @sqL ='
+		SET @sql ='
 		INSERT INTO #sqlversion (MajorVersion , MajorBuild )
 		SELECT  CAST(PARSENAME(PropertyValue,4) AS INT) as MajorVersion, 
 				CAST(PARSENAME(PropertyValue,2) AS INT) as MajorBuild
@@ -50,10 +75,6 @@ BEGIN
 		@sql_major_build = MajorBuild
 	FROM #sqlversion
 
-
-	DECLARE @SQLVERSION BIGINT =  PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) 
-							+ RIGHT(REPLICATE ('0', 3) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 3), 3)  
-							+ RIGHT (replicate ('0', 6) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) , 6)
 
 
 	--Implement the exceptions now. #temptablelist_sqlnexus is already created by parent proc so it exist in this session
@@ -123,6 +144,12 @@ BEGIN
 
 
 	END
+	--exclude the tables that are not needed for Basic scenario
+	ELSE IF (@scenario_name IN ('Basic'))
+
+	BEGIN
+		DECLARE @placeholder INT
+	END
 
 	--exclude Xevent tables (from RML Utils) in versions earlier than SQL 2016
 	ELSE IF (@scenario_name IN ('BackupRestore'))
@@ -167,7 +194,11 @@ BEGIN
 				'tbl_hadr_ag_automatic_seeding',
 				'tbl_hadr_ag_physical_seeding_stats')
 		END
-		IF (@exclusion_tag = 'NoAlwaysOn')
+
+		IF EXISTS 
+			(SELECT 1 
+			FROM @ExclusionTagTable 
+			WHERE ExclusionTags = @ExpNoAlwaysOn)
 		BEGIN
 			DELETE FROM #temptablelist_sqlnexus 
 			WHERE SchemaName = 'ReadTrace' 
@@ -180,7 +211,10 @@ BEGIN
 	-- those would be excluded separately using 'CDC' tag, e.g. in a nested IF check
 	ELSE IF (@scenario_name IN ('Replication') )
 	BEGIN
-		IF (@exclusion_tag = 'ReplMetaData')
+		IF EXISTS 
+			(SELECT 1 
+			FROM @ExclusionTagTable 
+			WHERE ExclusionTags = @ExpReplMetadata)
 		BEGIN
 			DELETE FROM #temptablelist_sqlnexus 
 			WHERE SchemaName = 'dbo' 
@@ -250,8 +284,10 @@ BEGIN
 
 	-- Exclude Never-ending Query tables
 	ELSE IF (@scenario_name IN ('NeverEndingQuery'))
+
 	BEGIN
-		IF (@SQLVERSION < 13000004001 OR @exclusion_tag = 'NoNeverEndingQuery')
+		IF (@sql_major_version < 13 OR EXISTS (SELECT 1 FROM @ExclusionTagTable 
+												WHERE ExclusionTags = @ExpNeverEnding))
 		BEGIN
 			DELETE FROM #temptablelist_sqlnexus 
 			
@@ -261,7 +297,9 @@ BEGIN
 	-- exclude the missing msi/msp tables if the exclusion tag is set
 	ELSE IF (@scenario_name IN ('Setup'))
 	BEGIN
-		IF (@exclusion_tag = 'NoMissingMSI')
+		IF EXISTS 
+			(SELECT 1 FROM @ExclusionTagTable 
+				WHERE ExclusionTags = @ExpNoMissingMSI)
 		BEGIN
 			DELETE FROM #temptablelist_sqlnexus 
 			WHERE SchemaName = 'dbo' 
@@ -271,20 +309,41 @@ BEGIN
 		END
 	END
 
+	-- run any additional exclusions for Basic scenario tables here (since Basic is included in many scenarios)
+	IF EXISTS 
+		(SELECT 1 
+		FROM @ExclusionTagTable 
+		WHERE ExclusionTags = @ExpBasicAssessmentAPIExclusion)
+	BEGIN
+		DELETE FROM #temptablelist_sqlnexus 
+		WHERE SchemaName = 'dbo' 
+			AND TableName IN (
+				'tbl_assessment_api'
+			)
+	END
+
+	IF (@sql_major_version < 17)
+	BEGIN
+		DELETE FROM #temptablelist_sqlnexus 
+		WHERE SchemaName = 'dbo' 
+			AND TableName IN (
+				'tbl_dm_os_memory_health_history'
+			)
+	END
 END
 GO
 
 CREATE PROCEDURE dbo.proc_SqlNexusTableValidation
-	@scenarioname VARCHAR(100), 
-	@databasename SYSNAME, 
-	@exclusion VARCHAR(32)
+	@ScenarioName VARCHAR(100), 
+	@DatabaseName SYSNAME, 
+	@ExclusionTagsJson NVARCHAR(MAX)  -- e.g., N'["bug","log","temp"]'
 AS
 BEGIN
 	SET NOCOUNT ON
 -- Validate the parameter db name and scenario name
 -- only accept single scenario names (no combinations)
-	IF (EXISTS (SELECT name FROM master.sys.databases  WHERE (name = @databasename)) 
-				and @scenarioname in (
+	IF (EXISTS (SELECT name FROM master.sys.databases  WHERE (name = @DatabaseName)) 
+				and @ScenarioName in (
 					'AlwaysOn',
 					'GeneralPerf',
 					'DetailedPerf',
@@ -357,7 +416,13 @@ BEGIN
 			('dbo', 'tbl_sys_assemblies'),
 			('dbo', 'tbl_clr_loaded_assemblies'),
 			('dbo', 'tbl_clr_appdomains'),
-			('dbo','tbl_sqlagent_jobs')
+			('dbo','tbl_sqlagent_jobs'),
+			('dbo','tbl_assessment_api'),
+			('dbo','tbl_dm_os_memory_health_history'),
+			('dbo','tbl_disk_volume_information'),
+			('dbo','tbl_disk_information'),
+			('dbo','tbl_running_drivers')
+
 
 		--create the list of Basic scenario tables for reuse in other scenarios
 		IF  OBJECT_ID('tempdb..#tablelist_LightPerfScenario') IS NOT NULL 
@@ -436,7 +501,7 @@ BEGIN
 			('dbo','tbl_dm_xtp_transaction_stats')
 
 		--now go through each scenario and the tables expected for it
-		IF (@scenarioname = 'AlwaysOn')
+		IF (@ScenarioName = 'AlwaysOn')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_hadr_endpoints_principals'),
@@ -488,7 +553,7 @@ BEGIN
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 			
 		END
-		ELSE IF ((@scenarioname = 'GeneralPerf') Or (@scenarioname = 'DetailedPerf'))
+		ELSE IF ((@ScenarioName = 'GeneralPerf') Or (@ScenarioName = 'DetailedPerf'))
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('ReadTrace','tblUniqueBatches'),
@@ -521,7 +586,7 @@ BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 		END
-		ELSE IF ((@scenarioname = 'Setup'))
+		ELSE IF ((@ScenarioName = 'Setup'))
 		BEGIN
 			-- insert the tables for Setup scenario
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
@@ -532,7 +597,7 @@ BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 		END
-		ELSE IF (@scenarioname = 'BackupRestore')
+		ELSE IF (@ScenarioName = 'BackupRestore')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','CounterDetails'),
@@ -566,7 +631,7 @@ BEGIN
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 
 		END
-		ELSE IF (@scenarioname = 'IO')
+		ELSE IF (@ScenarioName = 'IO')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','Counters'),
@@ -581,7 +646,7 @@ BEGIN
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 
 		END
-		ELSE IF (@scenarioname = 'LightPerf')
+		ELSE IF (@ScenarioName = 'LightPerf')
 		BEGIN
 
 			--insert the tables for LightPerf scenario
@@ -595,7 +660,7 @@ BEGIN
 
 		END
 
-		ELSE IF (@scenarioname = 'Replication')
+		ELSE IF (@ScenarioName = 'Replication')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_repl_sourceserver'),
@@ -645,7 +710,7 @@ BEGIN
 
 		END
 
-		ELSE IF (@scenarioname = 'Memory')
+		ELSE IF (@ScenarioName = 'Memory')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_Query_Execution_Memory_MemScript'),
@@ -665,17 +730,18 @@ BEGIN
             ('dbo','tbl_dm_db_xtp_table_memory_stats'),
             ('dbo','tbl_dm_db_xtp_memory_consumers'),
             ('dbo','tbl_dm_db_xtp_object_stats'),
+			('dbo','tbl_dm_db_xtp_checkpoint_files'),
             ('dbo','tbl_dm_xtp_system_memory_consumers'),
             ('dbo','tbl_dm_xtp_system_memory_consumers_summary'),
             ('dbo','tbl_dm_xtp_gc_stats'),
             ('dbo','tbl_dm_xtp_gc_queue_stats')
-			
+						
 			--add the basic scenario tables
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) 
             SELECT SchemaName,TableName FROM #tablelist_BasicScenario 
 
 		END
-		ELSE IF (@scenarioname = 'ServiceBrokerDBMail')
+		ELSE IF (@ScenarioName = 'ServiceBrokerDBMail')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_sysmail_profileaccount'),
@@ -691,7 +757,7 @@ BEGIN
 
 		END
 
-		ELSE IF (@scenarioname = 'NeverEndingQuery')
+		ELSE IF (@ScenarioName = 'NeverEndingQuery')
 		BEGIN
 			INSERT INTO #temptablelist_sqlnexus (SchemaName,TableName) VALUES
 			('dbo','tbl_CPU_bound_query_never_completes')
@@ -703,14 +769,14 @@ BEGIN
 		END
 		
 		--call the stored proc to implement exceptions
-		EXEC dbo.proc_ExclusionsInclusions @scenario_name = @scenarioname , @database_name = @databasename, @exclusion_tag = @exclusion
+		EXEC dbo.proc_ExclusionsInclusions @scenario_name = @ScenarioName , @database_name = @DatabaseName, @exclusion_tags = @ExclusionTagsJson
 		
 		--select from the table to show any missing tables
 		Exec(
-		'SELECT '''+ @databasename+''' DBName ,t1.SchemaName, t1.TableName , ''No'' Present 
+		'SELECT '''+ @DatabaseName+''' DBName ,t1.SchemaName, t1.TableName , ''No'' Present 
 		FROM #temptablelist_sqlnexus t1 
-			LEFT OUTER JOIN '+ @databasename+'.INFORMATION_SCHEMA.TABLES t2
-			ON t1.tablename = t2.TABLE_NAME and t1.SchemaName = t2.TABLE_SCHEMA 
+			LEFT OUTER JOIN '+ @DatabaseName+'.INFORMATION_SCHEMA.TABLES t2
+			ON t1.TableName = t2.TABLE_NAME and t1.SchemaName = t2.TABLE_SCHEMA 
 		WHERE t2.TABLE_NAME IS NULL AND t2.TABLE_SCHEMA IS NULL 
 		ORDER BY t1.TableName')
 		
@@ -718,21 +784,23 @@ BEGIN
 		--else send some other large value code back out to indicate success
 		IF (@@ROWCOUNT > 0)
 		BEGIN
-		    SELECT ' '
-			SELECT 2002002 AS EXIT_CODE
+		    --SELECT ' '
+			--SELECT 2002002 AS EXIT_CODE
+			RETURN 2002002
 		END
 		ELSE
 		BEGIN
-		    SELECT ' '
-			SELECT 1001001 AS EXIT_CODE
+		    --SELECT ' '
+			--SELECT 1001001 AS EXIT_CODE
+			RETURN 1001001
 		END
 	END
 	ELSE
 	BEGIN
 		--if the db name or scenario name is invalid, send some large value code out to indicate failure
-		SELECT 'Scenario name or database name is invalid' as 'Error_Message'
-		SELECT 3003003 AS EXIT_CODE
+		--SELECT 'Scenario name or database name is invalid' as 'Error_Message'
+		--SELECT 3003003 AS EXIT_CODE
+		RETURN 3003003
 	END
 END
 GO
---exec tempdb..proc_SqlNexusTableValidation 'LightPerf','sqlnexus'

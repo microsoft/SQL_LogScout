@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>SQL LogScout Documentation</title>
   <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
     html {
       color: #1a1a1a;
       background-color: #fdfdfd;
@@ -248,6 +251,8 @@ gets you here</p>
 <li><a href="#automate-data-collection">Automate data
 collection</a></li>
 <li><a href="#interrupt-execution">Interrupt execution</a></li>
+<li><a href="#stop-execution-automatically-by-using-a-stop-file">Stop
+execution automatically by using a .stop file</a></li>
 <li><a href="#parameters">Parameters</a></li>
 <li><a href="#examples">Examples</a></li>
 </ul></li>
@@ -779,6 +784,56 @@ LogScout will run once plus three repetitions, or 4 times altogether.
 This option would typically be combined with other parameters used for
 automation like DiagStartTime, DiagStopTime, InteractivePrompts,
 etc.</p>
+<h3 id="additionaloptionsenabled">AdditionalOptionsEnabled</h3>
+<p>Provides you the ability to turn on/off some additional options that
+may apply across multiple scenarios. You can pass multiple values
+seperated by a ‘+’ sign (e.g NoClusterLogs+TrackCausality). Valid
+options are:</p>
+<ul>
+<li><code>NoClusterLogs</code></li>
+<li><code>TrackCausality</code></li>
+<li><code>RedoTasksPerfStats</code></li>
+<li><code>FullTextSearchLogs</code></li>
+</ul>
+<p><code>NoClusterLogs</code> option disables the collection of Cluster
+Logs, which happens by default. Disabling this option may speed up log
+collection for scenarios where Cluster logs are of no interest.</p>
+<p><code>TrackCausality</code> enables the TRACK_CAUSALITY option in the
+core Xevent trace [xevent_SQLLogScout] to assist with matching
+statements in a batch and their precise order.</p>
+<table>
+<colgroup>
+<col style="width: 100%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">:warning: WARNING</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Be cautious when enabling TrackCausality
+as it will cause the XEvent files to grow quicker due to extra
+information logged and might impact SQL Server performance
+slightly.</td>
+</tr>
+</tbody>
+</table>
+<p><code>RedoTasksPerfStats</code> option enables (turns on) an
+additional perf statistics collector that captures information about
+availability group redo threads running on the system. When enabled, the
+redo tasks log is collected as part of any of the performance scenarios
+(GeneralPerf, DetailedPerf, LightPerf) . This option is helpful when
+troubleshooting Read queueing scenarios. For more information, see <a
+href="https://learn.microsoft.com/troubleshoot/sql/database-engine/availability-groups/troubleshooting-recovery-queuing-in-alwayson-availability-group#how-to-diagnose-recovery-redo-queueing">How
+to diagnose recovery (redo) queueing</a>.</p>
+<p><code>FullTextSearchLogs</code> option enables the collection of
+Full-Text Search log. This collector was previously enabled by default
+in the Basic scenario, but is now an additional option since it isn’t
+needed frequently. You must be collecting the Basic scenario to capture
+these logs. Full-Text Search Log files (SQLFT<em>.LOG, FD</em>, and
+FDLAUNCHERRORLOG*) and an output file with Full-Text metadata are
+collected.</p>
 <h3 id="help">help</h3>
 <p>You can use this parameter to display help information on how to call
 SQL_LogScout. The way to invoke this is use
@@ -919,8 +974,9 @@ configuration, log info, etc)</li>
 <li>.NET Framework and .NET Core versions</li>
 <li>Event logs (system and application in both .CSV and .TXT
 formats)</li>
-<li>Full-Text Search Log files and output file with Full-Text
-metadata</li>
+<li>Full-Text Search Log files and output file with Full-Text metadata
+(if requested via <a
+href="#additionaloptionsenabled">AdditionalOptionsEnabled</a>)</li>
 <li>SQL Server dumps found in the errorlog directory. SQL LogScout
 collects up to 20 dumps if they were created in the last 2 months and
 are less than 200 MB in size.</li>
@@ -929,6 +985,8 @@ are less than 200 MB in size.</li>
 <li>SQL Errorlogs</li>
 <li>SQL Agent logs</li>
 <li>SystemHealth XELs</li>
+<li>Default trace files <a
+href="https://learn.microsoft.com/sql/database-engine/configure-windows/default-trace-enabled-server-configuration-option">(log_*.trc)</a></li>
 <li>Polybase logs</li>
 <li>Azure Arc Agent logs (if SQL Server enabled for Azure Arc). More
 info available at <a
@@ -977,8 +1035,11 @@ collection is configured to use the rollover option and collects up to
 50 XEL files, each 500 MB in size : max_file_size=(500),
 max_rollover_files=(50).</li>
 <li>List of actively-running SQL traces and Xevents</li>
-<li>Snapshots of SQL DMVs that track waits/blocking and high CPU
-queries</li>
+<li>Periodic snapshots of SQL DMVs that track waits/blocking and high
+CPU queries. Known as the Perfstats scripts these capture performance
+statistics to help analyze current state of requests on the system. When
+the <code>RedoTasksPerfStats</code> additional option is enabled, an
+extra perf statistic is collected about redo system tasks.</li>
 <li>Query Data Store (QDS) info (if that is active)</li>
 <li>Tempdb contention info from SQL DMVs/system views</li>
 <li>Linked Server metadata (SQL DMVs/system views)</li>
@@ -1102,6 +1163,7 @@ Server components:</p>
 <li>Basic scenario logs</li>
 <li>All SQL Setup logs from the SQL Server Bootstrap folders on the
 system.</li>
+<li>Unattended installation log(s) - %temp%.log</li>
 <li>Registry keys of the installed programs on the system</li>
 <li>Missing MSI/MSP output files showing what installation packages may
 be missing. The summary file shows the only missing and potentially
@@ -1145,7 +1207,10 @@ counters</li>
 <p>Collects everything that the GeneralPerf scenario does (includes
 Basic scenario), <em>except</em> the Extended Event traces. This is
 intended to capture light perf data to get an overall system performance
-view without detailed execution of queries (no XEvents).</p>
+view without detailed execution of queries (no XEvents). Typically this
+is used for long-term performance collection as well as on very busy
+systems where Extended Events information isn’t needed to analyze the
+problem.</p>
 <h2 id="processmonitor">13. ProcessMonitor</h2>
 <p>Collects a <a
 href="https://docs.microsoft.com/en-us/sysinternals/downloads/procmon">Process
@@ -1157,7 +1222,7 @@ the path in quotes even if there are spaces in the path name.</p>
 <h2 id="service-broker-and-database-mail">14. Service Broker and
 Database mail</h2>
 <p>Collect logs to help troubleshoot SQL Service Broker and Database
-mail scenarios. The scenarion includes the following logs:</p>
+mail scenarios. The scenario includes the following logs:</p>
 <ul>
 <li>Basic scenario</li>
 <li>Service Broker configuration information (SQL DMVs/system
@@ -1168,6 +1233,8 @@ counters</li>
 extended events collection is configured to use the rollover option and
 collects up to 50 XEL files, each 500 MB in size : max_file_size=(500),
 max_rollover_files=(50).</li>
+<li>Database Mail related metadata (DMVs) on configuration, profiles,
+mail items, accounts and others.</li>
 </ul>
 <h2 id="never-ending-query">15. Never Ending Query</h2>
 <p>Collect logs to help troubleshoot Never Ending Query scenarios. The
@@ -1328,6 +1395,12 @@ SQL_LogScout is run repeatedly. If you need to run this long-term over
 many days or months even, you can specify a large value as this
 parameter is of integer data type (see <a
 href="https://learn.microsoft.com/dotnet/api/system.int32.maxvalue">Int32.MaxValue</a>).</li>
+<li><strong>-AdditionalOptionsEnabled</strong> - provides you the
+ability to turn on/off some additional options that may apply across
+multiple scenarios. You can pass multiple values separated by a ‘+’ sign
+(e.g NoClusterLogs+TrackCausality). Valid options are
+<code>NoClusterLogs</code>, <code>TrackCausality</code>,
+<code>RedoTasksPerfStats</code></li>
 </ul>
 <p>Examples:</p>
 <ol type="1">
@@ -1339,7 +1412,7 @@ during execution.</li>
 <div class="sourceCode" id="cb26"><pre
 class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="op">.</span>\ScheduleSQLLogScoutAsTask<span class="op">.</span><span class="fu">ps1</span> <span class="op">-</span>Scenario <span class="st">&quot;GeneralPerf&quot;</span> <span class="op">-</span>SQLInstance <span class="st">&quot;.\SQLInstance01&quot;</span> <span class="op">-</span>StartTime <span class="st">&quot;2024-05-06 14:18&quot;</span> <span class="op">-</span>EndTime <span class="st">&quot;+00:10:00&quot;</span> <span class="op">-</span>Once <span class="op">-</span>DeleteFolderOrNew <span class="st">&quot;DeleteDefaultFolder&quot;</span> <span class="op">-</span>LogonType <span class="st">&quot;S4U&quot;</span></span></code></pre></div>
 <ol type="1">
-<li>Run SQL_LogScout starting 6 hours from now, running continously for
+<li>Run SQL_LogScout starting 6 hours from now, running continuously for
 48 executions recycling the logs every 30 minutes. The total run time
 would be 24 hours (48 runs * 30 minutes). A new folder is created for
 each execution and the user isn’t to be logged in during runtime.</li>
@@ -1747,15 +1820,18 @@ termination of any processes launched by SQL LogScout during collection.
 However, on rare occasions you may be left with processes still running.
 One such occasion is if you closed the Commmand Prompt or PowerShell
 window before SQL LogScout has completed.</p>
-<p>The parameters for this script are below are optional: -
-<strong>ServerName</strong> - You can provide an exact server name
+<p>The parameters for this script are below are optional:</p>
+<ul>
+<li><strong>ServerName</strong> - You can provide an exact server name
 similar to the main SQL_LogScout script. This will skip prompting for
-the instance you want to select. - <strong>EndActiveConsoles</strong> -
-Defaults to false. If true, on the machine running this script we will
-identify any processes that are running SQL_LogScout.ps1 with the same
-instance name and kill those sessions. Use with warning. This is
-meaningful if you are running the session on a different user account
-and the console is still active.</p>
+the instance you want to select.</li>
+<li><strong>EndActiveConsoles</strong> - Defaults to false. If true, on
+the machine running this script we will identify any processes that are
+running SQL_LogScout.ps1 with the same instance name and kill those
+sessions. Use with warning. This is meaningful if you are running the
+session on a different user account and the console is still
+active.</li>
+</ul>
 <table>
 <colgroup>
 <col style="width: 100%" />

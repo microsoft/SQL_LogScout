@@ -1,4 +1,6 @@
 
+[int] $script:is_node_clustered = 2 # 0 = not clustered, 1 = clustered, 2 = unknown/starting state
+
 #=======================================Start of \OUTPUT and \Internal directories and files Section
 function InitCriticalDirectories()
 {
@@ -1016,107 +1018,146 @@ function execSQLQuery()
     }
 }
 
-function GetSQLCmdPath() 
+function GetSQLToolPath([string]$toolName = "sqlcmd.exe") 
 {
-    Write-LogDebug "Inside" $MyInvocation.MyCommand
+    Write-LogDebug "Inside $($MyInvocation.MyCommand) - searching for $toolName"
 
     try 
     {
-        [string] $sqlcmd_executable = ""
-
-        # use the global sqlcmdpath variable if it isn't empty. The Test-Path validation will be done just once for perf reasons. 
-        # If empty, populate by finding the path to sqlcmd.exe  with highest version
-        if (([string]::IsNullOrWhiteSpace($global:sqlcmdPath) -eq $false) -and ($global:sqlcmdPath -match "sqlcmd.exe"))
+        [string] $tool_executable = ""
+        [string] $tool_exe = $toolName
+        
+        # Check cached global variables first based on tool name
+        switch ($toolName.ToLower()) 
         {
-            $sqlcmd_executable = $global:sqlcmdPath
+            "sqlcmd.exe" { 
+                # use the global sqlcmdPath variable if it isn't empty and points to the correct tool
+                if (([string]::IsNullOrWhiteSpace($global:sqlcmdPath) -eq $false) -and ($global:sqlcmdPath -match $tool_exe))
+                {
+                    return $global:sqlcmdPath
+                }
+            }
+            "bcp.exe" { 
+                # use the global bcpPath variable if it isn't empty and points to the correct tool
+                if (([string]::IsNullOrWhiteSpace($global:bcpPath) -eq $false) -and ($global:bcpPath -match $tool_exe))
+                {
+                    return $global:bcpPath
+                }
+            }
+            default {
+                Write-LogError "Unsupported tool name: $toolName. Supported tools: sqlcmd.exe, bcp.exe"
+                return $null
+            }
         }
-        else
+
+        #if no path cached, find the highest version of the tool on the system 
+        # first start by trying the common case C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\... 
+        $tool_fullpath = (Get-ChildItem "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\*\Tools\Binn\$tool_exe" -ErrorAction SilentlyContinue |
+                            Sort-Object -Property FullName -Descending | 
+                            Select-Object -First 1 -Property FullName).FullName
+        
+        #if path is valid, assign to the appropriate global variable and use it
+        if (([string]::IsNullOrWhiteSpace($tool_fullpath) -eq $false) -and (Test-Path -Path $tool_fullpath))
         {
-            #if no  path to sqlcmd, find the highest version of sqlcmd.exe on the system 
-            # first start by trying the common case C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\... 
-            $sqlcmd_fullpath =  (Get-ChildItem "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\*\Tools\Binn\SQLCMD.EXE" -ErrorAction SilentlyContinue|
-                                    Sort-Object -Property FullName -Descending | 
-                                    Select-Object -First 1 -Property FullName).FullName
+            $tool_executable = $tool_fullpath
             
-            #if path is valid, assign to the global variable and use it
-            if (([string]::IsNullOrWhiteSpace($sqlcmd_fullpath) -eq $false) -and (Test-Path -Path $sqlcmd_fullpath))
+            # Set the appropriate global variable based on tool name
+            switch ($toolName.ToLower()) 
             {
-                $sqlcmd_executable = $global:sqlcmdPath = $sqlcmd_fullpath
-                Write-LogDebug "SQLCMD path found in common location and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
+                "sqlcmd.exe"    { $global:sqlcmdPath = $tool_fullpath   }
+                "bcp.exe"       { $global:bcpPath = $tool_fullpath      }
+            }
+            
+            Write-LogDebug "$tool_exe path found in common location and assigned to global variable is '$tool_fullpath'" -DebugLogLevel 2
+        }
+        else 
+        {
+            #if no path found thus far, second choice is to get the path from the registry and append the executable name
+
+            # Get the ODBCToolsPath values from the registry
+            $paths = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\*\Tools\ClientSetup\" -Name "ODBCToolsPath" -ErrorAction SilentlyContinue).ODBCToolsPath
+
+            # Append the tool executable name to each path
+            $paths = $paths | ForEach-Object { $_ + $tool_exe }
+
+            # Extract the version numbers and sort the paths based on these numbers
+            $sortedPaths = $paths | Sort-Object {
+                # Extract the version number using a regular expression and sort it
+                if ($_ -match '\\ODBC\\(\d+)\\') 
+                {
+                    [int]$matches[1]
+                } 
+                else {0}
+            } -Descending
+
+            # Get the one path with the highest version number
+            $tool_path_reg = $sortedPaths | Select-Object -First 1
+
+            #if path is valid, assign to appropriate global variable
+            if (([string]::IsNullOrWhiteSpace($tool_path_reg) -eq $false) -and (Test-Path -Path $tool_path_reg))
+            {
+                $tool_executable = $tool_path_reg
+                
+                # Set the appropriate global variable based on tool name
+                switch ($toolName.ToLower()) 
+                {
+                    "sqlcmd.exe"    { $global:sqlcmdPath = $tool_path_reg   }
+                    "bcp.exe"       { $global:bcpPath = $tool_path_reg      }
+                }
+                
+                Write-LogDebug "$tool_exe path discovered in registry and assigned to global variable is '$tool_path_reg'" -DebugLogLevel 2
             }
             else 
             {
-                #if no path found thus far, second choice is to get the path from the registry and append the executable name
-
-                # Get the ODBCToolsPath values from the registry
-                $paths = (Get-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\*\Tools\ClientSetup\" -Name "ODBCToolsPath" -ErrorAction SilentlyContinue).ODBCToolsPath
-
-                # Append "sqlcmd.exe" to each path
-                $paths = $paths | ForEach-Object { $_ + "sqlcmd.exe" }
-
-                # Extract the version numbers and sort the paths based on these numbers
-                $sortedPaths = $paths | Sort-Object {
-                    # Extract the version number using a regular expression and sort it
-                    if ($_ -match '\\ODBC\\(\d+)\\') 
-                    {
-                        [int]$matches[1]
-                    } 
-                    else {0}
-                } -Descending
-
-                # Get the one path with the highest version number
-                $sqlcmd_path_reg = $sortedPaths | Select-Object -First 1
-
-
-                #if path is valid, assign to global variable
-                if (([string]::IsNullOrWhiteSpace($sqlcmd_path_reg) -eq $false) -and (Test-Path -Path $sqlcmd_path_reg))
+                #if no path found thus far, third choice is to look in the Environment variable PATH and pick one if found (last one seems the highest version typically)
+                $tool_path_env = ((Get-Command -Name $tool_exe -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -Last 1)
+           
+                #if path is valid, assign to appropriate global variable and local return variable
+                # else log an error and continue without the tool
+                if (($tool_path_env).Name -match $toolName)
                 {
-                    $sqlcmd_executable = $global:sqlcmdPath = $sqlcmd_path_reg
-                    Write-LogDebug "SQLCMD.EXE path discovered in registry and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
-                }
-                else 
-                {
-                    #if no path found thus far, third choice is to look in the Environment variable PATH and pick one if found (last one seems the highest version typically)
-                    $sqlcmd_path_env = ((Get-Command -Name "sqlcmd.exe" -CommandType Application -ErrorAction SilentlyContinue) | Select-Object -Last 1)
-               
-                    #if path is valid, assign to global variable and local return variable
-                    # else log an error and continue without T-SQL collections
-                    if (($sqlcmd_path_env).Name -match "sqlcmd")
+                    if ( ([string]::IsNullOrWhiteSpace(($tool_path_env.Source)) -eq $false) -and (Test-Path -Path ($tool_path_env.Source) ))
                     {
+                        $tool_executable = $tool_path_env.Source
                         
-                        if ( ([string]::IsNullOrWhiteSpace(($sqlcmd_path_env.Source)) -eq $false) -and (Test-Path -Path ($sqlcmd_path_env.Source) ))
+                        # Set the appropriate global variable based on tool name
+                        switch ($toolName.ToLower()) 
                         {
-                            $sqlcmd_executable = $global:sqlcmdPath  = $sqlcmd_path_env.Source
-                             Write-LogDebug "SQLCMD.EXE path discovered in environment variable PATH and assigned to global variable is '$global:sqlcmdPath'" -DebugLogLevel 2
-
+                            "sqlcmd.exe"    { $global:sqlcmdPath = $tool_path_env.Source }
+                            "bcp.exe"       { $global:bcpPath = $tool_path_env.Source }
                         }
-                        # in older version like SQL 2012, the registry key ODBCToolsPath is not present AND the Get-Command.Source property is not populated, so hard-codiing the sqlcmd.exe directly
-                        else
-                        {
-                            $sqlcmd_executable = "sqlcmd.exe"
-                            Write-LogDebug  "SQLCMD.EXE discovered in environment variable PATH, but it's an older version so assigned executable directly: '$sqlcmd_executable'" -DebugLogLevel 2
-                        }
-
+                        
+                        Write-LogDebug "$tool_exe path discovered in environment variable PATH and assigned to global variable is '$($tool_path_env.Source)'" -DebugLogLevel 2
                     }
+                    # in older version like SQL 2012, the registry key ODBCToolsPath is not present AND the Get-Command.Source property is not populated, so using the executable directly
                     else
                     {
-                        $sqlcmd_executable = $null
-                        Write-LogError "SQLCMD.EXE not found. Continuing without T-SQL script execution."
-                        Write-LogInformation "To enable T-SQL collections, install SQLCMD (ODBC) from your installation media or download from Microsoft."
+                        $tool_executable = $tool_exe
+                        Write-LogDebug "$tool_exe discovered in environment variable PATH, but it's an older version so assigned executable directly: '$tool_executable'" -DebugLogLevel 2
                     }
-                    
+                }
+                else
+                {
+                    $tool_executable = $null
+                    Write-LogError "$tool_exe not found. Continuing without $toolName functionality."
+                    Write-LogInformation "To enable $toolName functionality, install SQL Server client tools from your installation media or download from Microsoft."
                 }
             }
         }
         
-        return $sqlcmd_executable
+        return $tool_executable
             
     }
     catch 
     {
         HandleCatchBlock -function_name $($MyInvocation.MyCommand) -err_rec $PSItem
     }
-    
+}
+
+# Backward compatibility wrapper for existing GetSQLCmdPath calls
+function GetSQLCmdPath() 
+{
+    return GetSQLToolPath -toolName "sqlcmd.exe"
 }
 
 
@@ -1143,7 +1184,7 @@ function Start-SQLCmdProcess([string]$collector_name, [string]$input_script_name
         $input_script = BuildInputScript $global:present_directory $input_script_name 
 
         #get the path to sqlcmd.exe
-        $executable = GetSQLCmdPath
+        $executable = GetSQLToolPath -toolName "sqlcmd.exe" 
 
         if ([string]::IsNullOrWhiteSpace($executable))
         {
@@ -1272,8 +1313,8 @@ function IsSqlFCI()
 
 }
 
-#check if cluster - based on cluster service status and cluster registry key
-function IsClustered()
+#check if current node is part of a Windows Server Failover Cluster - based on cluster service status and cluster registry key
+function IsNodeOnWSFC()
 {
     Write-LogDebug "Inside" $MyInvocation.MyCommand
 
@@ -1286,14 +1327,14 @@ function IsClustered()
         #optimization with $is_clustered global to avoid querying the cluster service status and registry key 
         #if we already know this is a cluster. This function is called in multiple spots so we need the optimization
     
-        if ($global:is_clustered -eq 2) #if global set to 2 (default), we need to check whether it is a cluster and set accordingly
+        if ($script:is_node_clustered -eq 2) #if global set to 2 (default), we need to check whether it is a cluster and set accordingly
         {
             $clusServiceisRunning = $false
             $clusRegKeyExists = $false
             $ClusterServiceKey="HKLM:\Cluster"
 
             # Check if cluster service is running
-            if ((Get-Service |  Where-Object  {$_.Displayname -match "Cluster Service"}).Status -eq "Running") 
+            if ((Get-Service |  Where-Object  {$_.Name -match "ClusSvc"}).Status -eq "Running") 
             {
                 $clusServiceisRunning =  $true
                 Write-LogDebug "Cluster service is running: $clusServiceisRunning  " -DebugLogLevel 2   
@@ -1309,21 +1350,21 @@ function IsClustered()
             #if both conditions are true, then this is a cluster
             if (($clusRegKeyExists -eq $true) -and ($clusServiceisRunning -eq $true ))
             {
-                $global:is_clustered = 1
+                $script:is_node_clustered = 1
             }
             else #not a cluster
             {
-                $global:is_clustered = 0
+                $script:is_node_clustered = 0
             }
         }
 
         # now that we have the global variable set, we can return cluster status
-        if ($global:is_clustered -eq 1)
+        if ($script:is_node_clustered -eq 1)
         {
             Write-LogDebug "This is a Windows Cluster for sure!" -DebugLogLevel 2
             return $true
         }
-        elseif ($global:is_clustered -eq 0) 
+        elseif ($script:is_node_clustered -eq 0) 
         {
             Write-LogDebug "This is Not a Windows Cluster!" -DebugLogLevel 2
             return $false
@@ -1333,6 +1374,7 @@ function IsClustered()
             Write-LogDebug "If we're here, there's a problem. Could not determine if this is a Windows Cluster!" -DebugLogLevel 2
             return $false
         }
+
 
     }
     catch 
@@ -2086,3 +2128,241 @@ function GetComputerPlatform
     }
 }
 
+
+# SIG # Begin signature block
+# MIIr5wYJKoZIhvcNAQcCoIIr2DCCK9QCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA2iVgrbLCliMU6
+# ljh1UU/YOPv4yfmULI8pfcZoVyTmtqCCEW4wggh+MIIHZqADAgECAhM2AAACDeKE
+# D0nu2y38AAIAAAINMA0GCSqGSIb3DQEBCwUAMEExEzARBgoJkiaJk/IsZAEZFgNH
+# QkwxEzARBgoJkiaJk/IsZAEZFgNBTUUxFTATBgNVBAMTDEFNRSBDUyBDQSAwMTAe
+# Fw0yNTEwMjMyMzA5MzBaFw0yNjA0MjYyMzE5MzBaMCQxIjAgBgNVBAMTGU1pY3Jv
+# c29mdCBBenVyZSBDb2RlIFNpZ24wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+# AoIBAQCpj9ry6z6v08TIeKoxS2+5c928SwYKDXCyPWZHpm3xIHTqBBmlTM1GO7X4
+# ap5jj/wroH7TzukJtfLR6Z4rBkjdlocHYJ2qU7ggik1FDeVL1uMnl5fPAB0ETjqt
+# rk3Lt2xT27XUoNlKfnFcnmVpIaZ6fnSAi2liEhbHqce5qEJbGwv6FiliSJzkmeTK
+# 6YoQQ4jq0kK9ToBGMmRiLKZXTO1SCAa7B4+96EMK3yKIXnBMdnKhWewBsU+t1LHW
+# vB8jt8poBYSg5+91Faf9oFDvl5+BFWVbJ9+mYWbOzJ9/ZX1J4yvUoZChaykKGaTl
+# k51DUoZymsBuatWbJsGzo0d43gMLAgMBAAGjggWKMIIFhjApBgkrBgEEAYI3FQoE
+# HDAaMAwGCisGAQQBgjdbAQEwCgYIKwYBBQUHAwMwPQYJKwYBBAGCNxUHBDAwLgYm
+# KwYBBAGCNxUIhpDjDYTVtHiE8Ys+hZvdFs6dEoFgg93NZoaUjDICAWQCAQ4wggJ2
+# BggrBgEFBQcBAQSCAmgwggJkMGIGCCsGAQUFBzAChlZodHRwOi8vY3JsLm1pY3Jv
+# c29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDEu
+# YW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUy
+# MDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDIuYW1lLmdibC9haWEv
+# QlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBS
+# BggrBgEFBQcwAoZGaHR0cDovL2NybDMuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAx
+# LkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZG
+# aHR0cDovL2NybDQuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDCBrQYIKwYBBQUHMAKGgaBsZGFwOi8vL0NO
+# PUFNRSUyMENTJTIwQ0ElMjAwMSxDTj1BSUEsQ049UHVibGljJTIwS2V5JTIwU2Vy
+# dmljZXMsQ049U2VydmljZXMsQ049Q29uZmlndXJhdGlvbixEQz1BTUUsREM9R0JM
+# P2NBQ2VydGlmaWNhdGU/YmFzZT9vYmplY3RDbGFzcz1jZXJ0aWZpY2F0aW9uQXV0
+# aG9yaXR5MB0GA1UdDgQWBBS6kl+vZengaA7Cc8nJtd6sYRNA3jAOBgNVHQ8BAf8E
+# BAMCB4AwRQYDVR0RBD4wPKQ6MDgxHjAcBgNVBAsTFU1pY3Jvc29mdCBDb3Jwb3Jh
+# dGlvbjEWMBQGA1UEBRMNMjM2MTY3KzUwNjA0MjCCAeYGA1UdHwSCAd0wggHZMIIB
+# 1aCCAdGgggHNhj9odHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ1JM
+# L0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwxLmFtZS5nYmwv
+# Y3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwyLmFtZS5n
+# YmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmwzLmFt
+# ZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6Ly9jcmw0
+# LmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGgb1sZGFwOi8v
+# L0NOPUFNRSUyMENTJTIwQ0ElMjAwMSgyKSxDTj1CWTJQS0lDU0NBMDEsQ049Q0RQ
+# LENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNlcnZpY2VzLENOPUNvbmZp
+# Z3VyYXRpb24sREM9QU1FLERDPUdCTD9jZXJ0aWZpY2F0ZVJldm9jYXRpb25MaXN0
+# P2Jhc2U/b2JqZWN0Q2xhc3M9Y1JMRGlzdHJpYnV0aW9uUG9pbnQwHwYDVR0jBBgw
+# FoAUllGE4Gtve/7YBqvD8oXmKa5q+dQwHwYDVR0lBBgwFgYKKwYBBAGCN1sBAQYI
+# KwYBBQUHAwMwDQYJKoZIhvcNAQELBQADggEBAJKGB9zyDWN/9twAY6qCLnfDCKc/
+# PuXoCYI5Snobtv15QHAJwwBJ7mr907EmcwECzMnK2M2auU/OUHjdXYUOG5TV5L7W
+# xvf0xBqluWldZjvnv2L4mANIOk18KgcSmlhdVHT8AdehHXSs7NMG2di0cPzY+4Ol
+# 2EJ3nw2JSZimBQdRcoZxDjoCGFmHV8lOHpO2wfhacq0T5NK15yQqXEdT+iRivdhd
+# i/n26SOuPDa6Y/cCKca3CQloCQ1K6NUzt+P6E8GW+FtvcLza5dAWjJLVvfemwVyl
+# JFdnqejZPbYBRdNefyLZjFsRTBaxORl6XG3kiz2t6xeFLLRTJgPPATx1S7Awggjo
+# MIIG0KADAgECAhMfAAAAUeqP9pxzDKg7AAAAAABRMA0GCSqGSIb3DQEBCwUAMDwx
+# EzARBgoJkiaJk/IsZAEZFgNHQkwxEzARBgoJkiaJk/IsZAEZFgNBTUUxEDAOBgNV
+# BAMTB2FtZXJvb3QwHhcNMjEwNTIxMTg0NDE0WhcNMjYwNTIxMTg1NDE0WjBBMRMw
+# EQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRUwEwYDVQQD
+# EwxBTUUgQ1MgQ0EgMDEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDJ
+# mlIJfQGejVbXKpcyFPoFSUllalrinfEV6JMc7i+bZDoL9rNHnHDGfJgeuRIYO1LY
+# /1f4oMTrhXbSaYRCS5vGc8145WcTZG908bGDCWr4GFLc411WxA+Pv2rteAcz0eHM
+# H36qTQ8L0o3XOb2n+x7KJFLokXV1s6pF/WlSXsUBXGaCIIWBXyEchv+sM9eKDsUO
+# LdLTITHYJQNWkiryMSEbxqdQUTVZjEz6eLRLkofDAo8pXirIYOgM770CYOiZrcKH
+# K7lYOVblx22pdNawY8Te6a2dfoCaWV1QUuazg5VHiC4p/6fksgEILptOKhx9c+ia
+# piNhMrHsAYx9pUtppeaFAgMBAAGjggTcMIIE2DASBgkrBgEEAYI3FQEEBQIDAgAC
+# MCMGCSsGAQQBgjcVAgQWBBQSaCRCIUfL1Gu+Mc8gpMALI38/RzAdBgNVHQ4EFgQU
+# llGE4Gtve/7YBqvD8oXmKa5q+dQwggEEBgNVHSUEgfwwgfkGBysGAQUCAwUGCCsG
+# AQUFBwMBBggrBgEFBQcDAgYKKwYBBAGCNxQCAQYJKwYBBAGCNxUGBgorBgEEAYI3
+# CgMMBgkrBgEEAYI3FQYGCCsGAQUFBwMJBggrBgEFBQgCAgYKKwYBBAGCN0ABAQYL
+# KwYBBAGCNwoDBAEGCisGAQQBgjcKAwQGCSsGAQQBgjcVBQYKKwYBBAGCNxQCAgYK
+# KwYBBAGCNxQCAwYIKwYBBQUHAwMGCisGAQQBgjdbAQEGCisGAQQBgjdbAgEGCisG
+# AQQBgjdbAwEGCisGAQQBgjdbBQEGCisGAQQBgjdbBAEGCisGAQQBgjdbBAIwGQYJ
+# KwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwCwYDVR0PBAQDAgGGMBIGA1UdEwEB/wQI
+# MAYBAf8CAQAwHwYDVR0jBBgwFoAUKV5RXmSuNLnrrJwNp4x1AdEJCygwggFoBgNV
+# HR8EggFfMIIBWzCCAVegggFToIIBT4YxaHR0cDovL2NybC5taWNyb3NvZnQuY29t
+# L3BraWluZnJhL2NybC9hbWVyb290LmNybIYjaHR0cDovL2NybDIuYW1lLmdibC9j
+# cmwvYW1lcm9vdC5jcmyGI2h0dHA6Ly9jcmwzLmFtZS5nYmwvY3JsL2FtZXJvb3Qu
+# Y3JshiNodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9hbWVyb290LmNybIaBqmxkYXA6
+# Ly8vQ049YW1lcm9vdCxDTj1BTUVSb290LENOPUNEUCxDTj1QdWJsaWMlMjBLZXkl
+# MjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxDTj1Db25maWd1cmF0aW9uLERDPUFNRSxE
+# Qz1HQkw/Y2VydGlmaWNhdGVSZXZvY2F0aW9uTGlzdD9iYXNlP29iamVjdENsYXNz
+# PWNSTERpc3RyaWJ1dGlvblBvaW50MIIBqwYIKwYBBQUHAQEEggGdMIIBmTBHBggr
+# BgEFBQcwAoY7aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL2NlcnRz
+# L0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUHMAKGK2h0dHA6Ly9jcmwyLmFt
+# ZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUHMAKGK2h0dHA6
+# Ly9jcmwzLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUH
+# MAKGK2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQw
+# gaIGCCsGAQUFBzAChoGVbGRhcDovLy9DTj1hbWVyb290LENOPUFJQSxDTj1QdWJs
+# aWMlMjBLZXklMjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxDTj1Db25maWd1cmF0aW9u
+# LERDPUFNRSxEQz1HQkw/Y0FDZXJ0aWZpY2F0ZT9iYXNlP29iamVjdENsYXNzPWNl
+# cnRpZmljYXRpb25BdXRob3JpdHkwDQYJKoZIhvcNAQELBQADggIBAFAQI7dPD+jf
+# XtGt3vJp2pyzA/HUu8hjKaRpM3opya5G3ocprRd7vdTHb8BDfRN+AD0YEmeDB5HK
+# QoG6xHPI5TXuIi5sm/LeADbV3C2q0HQOygS/VT+m1W7a/752hMIn+L4ZuyxVeSBp
+# fwf7oQ4YSZPh6+ngZvBHgfBaVz4O9/wcfw91QDZnTgK9zAh9yRKKls2bziPEnxeO
+# ZMVNaxyV0v152PY2xjqIafIkUjK6vY9LtVFjJXenVUAmn3WCPWNFC1YTIIHw/mD2
+# cTfPy7QA1pT+GPARAKt0bKtq9aCd/Ym0b5tPbpgCiRtzyb7fbNS1dE740re0COE6
+# 7YV2wbeo2sXixzvLftH8L7s9xv9wV+G22qyKt6lmKLjFK1yMw4Ni5fMabcgmzRvS
+# jAcbqgp3tk4a8emaaH0rz8MuuIP+yrxtREPXSqL/C5bzMzsikuDW9xH10graZzSm
+# PjilzpRfRdu20/9UQmC7eVPZ4j1WNa1oqPHfzET3ChIzJ6Q9G3NPCB+7KwX0OQmK
+# yv7IDimj8U/GlsHD1z+EF/fYMf8YXG15LamaOAohsw/ywO6SYSreVW+5Y0mzJutn
+# BC9Cm9ozj1+/4kqksrlhZgR/CSxhFH3BTweH8gP2FEISRtShDZbuYymynY1un+Ry
+# fiK9+iVTLdD1h/SxyxDpZMtimb4CgJQlMYIZzzCCGcsCAQEwWDBBMRMwEQYKCZIm
+# iZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRUwEwYDVQQDEwxBTUUg
+# Q1MgQ0EgMDECEzYAAAIN4oQPSe7bLfwAAgAAAg0wDQYJYIZIAWUDBAIBBQCgga4w
+# GQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisG
+# AQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGOIOAsjLHaGs3zvGi18o2oeR2N2XXUZ
+# NDkvzJZ9LIbbMEIGCisGAQQBgjcCAQwxNDAyoBSAEgBNAGkAYwByAG8AcwBvAGYA
+# dKEagBhodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20wDQYJKoZIhvcNAQEBBQAEggEA
+# kavbjDEW/DuE1fg2OEDco9PlT+mi7xVrhckYQOsxuuSl0Ii1tXemlJa0zYgLOx1X
+# 15YXYlTuT8yQr0U69lTgocQ6XOZi2LiH9SeFB2NOxuoqNxt4h6kCGE5u8tcqPArm
+# iPXX6WWWx935r5meeyPi72N5Sf70A7OpOExfKde5GkPfIZ1KgKk0pD0T1rmM2Nv9
+# CKGGjHQPAqejSmJYXbgCKJ4OJI7TLvTnzxTRHUZ6BZ6dqDgI7CGldYl4VOUnS/mD
+# 0kiSzsrHRX5WPW2gJc9Tlf0tp0DsRm0h+9kGn1WVb+bWVf9zxK72MOkxfVy8VN9K
+# 3EF91fBcDklRGRAN4F8vq6GCF5cwgheTBgorBgEEAYI3AwMBMYIXgzCCF38GCSqG
+# SIb3DQEHAqCCF3AwghdsAgEDMQ8wDQYJYIZIAWUDBAIBBQAwggFSBgsqhkiG9w0B
+# CRABBKCCAUEEggE9MIIBOQIBAQYKKwYBBAGEWQoDATAxMA0GCWCGSAFlAwQCAQUA
+# BCB5GWQ2xIWQ0SEVm9jnwIHTrhoUwj2mVgZL8A/PMB3Y6wIGaW+QihzbGBMyMDI2
+# MDIwNDE2MzUyNy4yMzNaMASAAgH0oIHRpIHOMIHLMQswCQYDVQQGEwJVUzETMBEG
+# A1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWlj
+# cm9zb2Z0IENvcnBvcmF0aW9uMSUwIwYDVQQLExxNaWNyb3NvZnQgQW1lcmljYSBP
+# cGVyYXRpb25zMScwJQYDVQQLEx5uU2hpZWxkIFRTUyBFU046ODkwMC0wNUUwLUQ5
+# NDcxJTAjBgNVBAMTHE1pY3Jvc29mdCBUaW1lLVN0YW1wIFNlcnZpY2WgghHtMIIH
+# IDCCBQigAwIBAgITMwAAAg4syyh9lSB1YwABAAACDjANBgkqhkiG9w0BAQsFADB8
+# MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVk
+# bW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSYwJAYDVQQDEx1N
+# aWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EgMjAxMDAeFw0yNTAxMzAxOTQzMDNaFw0y
+# NjA0MjIxOTQzMDNaMIHLMQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3Rv
+# bjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0
+# aW9uMSUwIwYDVQQLExxNaWNyb3NvZnQgQW1lcmljYSBPcGVyYXRpb25zMScwJQYD
+# VQQLEx5uU2hpZWxkIFRTUyBFU046ODkwMC0wNUUwLUQ5NDcxJTAjBgNVBAMTHE1p
+# Y3Jvc29mdCBUaW1lLVN0YW1wIFNlcnZpY2UwggIiMA0GCSqGSIb3DQEBAQUAA4IC
+# DwAwggIKAoICAQCs5t7iRtXt0hbeo9ME78ZYjIo3saQuWMBFQ7X4s9vooYRABTOf
+# 2poTHatx+EwnBUGB1V2t/E6MwsQNmY5XpM/75aCrZdxAnrV9o4Tu5sBepbbfehsr
+# OWRBIGoJE6PtWod1CrFehm1diz3jY3H8iFrh7nqefniZ1SnbcWPMyNIxuGFzpQiD
+# A+E5YS33meMqaXwhdb01Cluymh/3EKvknj4dIpQZEWOPM3jxbRVAYN5J2tOrYkJc
+# dDx0l02V/NYd1qkvUBgPxrKviq5kz7E6AbOifCDSMBgcn/X7RQw630Qkzqhp0kDU
+# 2qei/ao9IHmuuReXEjnjpgTsr4Ab33ICAKMYxOQe+n5wqEVcE9OTyhmWZJS5AnWU
+# Tniok4mgwONBWQ1DLOGFkZwXT334IPCqd4/3/Ld/ItizistyUZYsml/C4ZhdALbv
+# fYwzv31Oxf8NTmV5IGxWdHnk2Hhh4bnzTKosEaDrJvQMiQ+loojM7f5bgdyBBnYQ
+# Bm5+/iJsxw8k227zF2jbNI+Ows8HLeZGt8t6uJ2eVjND1B0YtgsBP0csBlnnI+4+
+# dvLYRt0cAqw6PiYSz5FSZcbpi0xdAH/jd3dzyGArbyLuo69HugfGEEb/sM07rcoP
+# 1o3cZ8eWMb4+MIB8euOb5DVPDnEcFi4NDukYM91g1Dt/qIek+rtE88VS8QIDAQAB
+# o4IBSTCCAUUwHQYDVR0OBBYEFIVxRGlSEZE+1ESK6UGI7YNcEIjbMB8GA1UdIwQY
+# MBaAFJ+nFV0AXmJdg/Tl0mWnG1M1GelyMF8GA1UdHwRYMFYwVKBSoFCGTmh0dHA6
+# Ly93d3cubWljcm9zb2Z0LmNvbS9wa2lvcHMvY3JsL01pY3Jvc29mdCUyMFRpbWUt
+# U3RhbXAlMjBQQ0ElMjAyMDEwKDEpLmNybDBsBggrBgEFBQcBAQRgMF4wXAYIKwYB
+# BQUHMAKGUGh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2lvcHMvY2VydHMvTWlj
+# cm9zb2Z0JTIwVGltZS1TdGFtcCUyMFBDQSUyMDIwMTAoMSkuY3J0MAwGA1UdEwEB
+# /wQCMAAwFgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwDgYDVR0PAQH/BAQDAgeAMA0G
+# CSqGSIb3DQEBCwUAA4ICAQB14L2TL+L8OXLxnGSal2h30mZ7FsBFooiYkUVOY05F
+# 9pnwPTVufEDGWEpNNy2OfaUHWIOoQ/9/rjwO0hS2SpB0BzMAk2gyz92NGWOpWbpB
+# dMvrrRDpiWZi/uLS4ZGdRn3P2DccYmlkNP+vaRAXvnv+mp27KgI79mJ9hGyCQbvt
+# MIjkbYoLqK7sF7Wahn9rLjX1y5QJL4lvEy3QmA9KRBj56cEv/lAvzDq7eSiqRq/p
+# Cyqyc8uzmQ8SeKWyWu6DjUA9vi84QsmLjqPGCnH4cPyg+t95RpW+73snhew1iCV+
+# wXu2RxMnWg7EsD5eLkJHLszUIPd+XClD+FTvV03GfrDDfk+45flH/eKRZc3MUZtn
+# hLJjPwv3KoKDScW4iV6SbCRycYPkqoWBrHf7SvDA7GrH2UOtz1Wa1k27sdZgpG6/
+# c9CqKI8CX5vgaa+A7oYHb4ZBj7S8u8sgxwWK7HgWDRByOH3CiJu4LJ8h3TiRkRAr
+# mHRp0lbNf1iAKuL886IKE912v0yq55t8jMxjBU7uoLsrYVIoKkzh+sAkgkpGOoZL
+# 14+dlxVM91Bavza4kODTUlwzb+SpXsSqVx8nuB6qhUy7pqpgww1q4SNhAxFnFxsx
+# iTlaoL75GNxPR605lJ2WXehtEi7/+YfJqvH+vnqcpqCjyQ9hNaVzuOEHX4Myuqcj
+# wjCCB3EwggVZoAMCAQICEzMAAAAVxedrngKbSZkAAAAAABUwDQYJKoZIhvcNAQEL
+# BQAwgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQH
+# EwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xMjAwBgNV
+# BAMTKU1pY3Jvc29mdCBSb290IENlcnRpZmljYXRlIEF1dGhvcml0eSAyMDEwMB4X
+# DTIxMDkzMDE4MjIyNVoXDTMwMDkzMDE4MzIyNVowfDELMAkGA1UEBhMCVVMxEzAR
+# BgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1p
+# Y3Jvc29mdCBDb3Jwb3JhdGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUtU3Rh
+# bXAgUENBIDIwMTAwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQDk4aZM
+# 57RyIQt5osvXJHm9DtWC0/3unAcH0qlsTnXIyjVX9gF/bErg4r25PhdgM/9cT8dm
+# 95VTcVrifkpa/rg2Z4VGIwy1jRPPdzLAEBjoYH1qUoNEt6aORmsHFPPFdvWGUNzB
+# RMhxXFExN6AKOG6N7dcP2CZTfDlhAnrEqv1yaa8dq6z2Nr41JmTamDu6GnszrYBb
+# fowQHJ1S/rboYiXcag/PXfT+jlPP1uyFVk3v3byNpOORj7I5LFGc6XBpDco2LXCO
+# Mcg1KL3jtIckw+DJj361VI/c+gVVmG1oO5pGve2krnopN6zL64NF50ZuyjLVwIYw
+# XE8s4mKyzbnijYjklqwBSru+cakXW2dg3viSkR4dPf0gz3N9QZpGdc3EXzTdEonW
+# /aUgfX782Z5F37ZyL9t9X4C626p+Nuw2TPYrbqgSUei/BQOj0XOmTTd0lBw0gg/w
+# EPK3Rxjtp+iZfD9M269ewvPV2HM9Q07BMzlMjgK8QmguEOqEUUbi0b1qGFphAXPK
+# Z6Je1yh2AuIzGHLXpyDwwvoSCtdjbwzJNmSLW6CmgyFdXzB0kZSU2LlQ+QuJYfM2
+# BjUYhEfb3BvR/bLUHMVr9lxSUV0S2yW6r1AFemzFER1y7435UsSFF5PAPBXbGjfH
+# CBUYP3irRbb1Hode2o+eFnJpxq57t7c+auIurQIDAQABo4IB3TCCAdkwEgYJKwYB
+# BAGCNxUBBAUCAwEAATAjBgkrBgEEAYI3FQIEFgQUKqdS/mTEmr6CkTxGNSnPEP8v
+# BO4wHQYDVR0OBBYEFJ+nFV0AXmJdg/Tl0mWnG1M1GelyMFwGA1UdIARVMFMwUQYM
+# KwYBBAGCN0yDfQEBMEEwPwYIKwYBBQUHAgEWM2h0dHA6Ly93d3cubWljcm9zb2Z0
+# LmNvbS9wa2lvcHMvRG9jcy9SZXBvc2l0b3J5Lmh0bTATBgNVHSUEDDAKBggrBgEF
+# BQcDCDAZBgkrBgEEAYI3FAIEDB4KAFMAdQBiAEMAQTALBgNVHQ8EBAMCAYYwDwYD
+# VR0TAQH/BAUwAwEB/zAfBgNVHSMEGDAWgBTV9lbLj+iiXGJo0T2UkFvXzpoYxDBW
+# BgNVHR8ETzBNMEugSaBHhkVodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpL2Ny
+# bC9wcm9kdWN0cy9NaWNSb29DZXJBdXRfMjAxMC0wNi0yMy5jcmwwWgYIKwYBBQUH
+# AQEETjBMMEoGCCsGAQUFBzAChj5odHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtp
+# L2NlcnRzL01pY1Jvb0NlckF1dF8yMDEwLTA2LTIzLmNydDANBgkqhkiG9w0BAQsF
+# AAOCAgEAnVV9/Cqt4SwfZwExJFvhnnJL/Klv6lwUtj5OR2R4sQaTlz0xM7U518Jx
+# Nj/aZGx80HU5bbsPMeTCj/ts0aGUGCLu6WZnOlNN3Zi6th542DYunKmCVgADsAW+
+# iehp4LoJ7nvfam++Kctu2D9IdQHZGN5tggz1bSNU5HhTdSRXud2f8449xvNo32X2
+# pFaq95W2KFUn0CS9QKC/GbYSEhFdPSfgQJY4rPf5KYnDvBewVIVCs/wMnosZiefw
+# C2qBwoEZQhlSdYo2wh3DYXMuLGt7bj8sCXgU6ZGyqVvfSaN0DLzskYDSPeZKPmY7
+# T7uG+jIa2Zb0j/aRAfbOxnT99kxybxCrdTDFNLB62FD+CljdQDzHVG2dY3RILLFO
+# Ry3BFARxv2T5JL5zbcqOCb2zAVdJVGTZc9d/HltEAY5aGZFrDZ+kKNxnGSgkujhL
+# mm77IVRrakURR6nxt67I6IleT53S0Ex2tVdUCbFpAUR+fKFhbHP+CrvsQWY9af3L
+# wUFJfn6Tvsv4O+S3Fb+0zj6lMVGEvL8CwYKiexcdFYmNcP7ntdAoGokLjzbaukz5
+# m/8K6TT4JDVnK+ANuOaMmdbhIurwJ0I9JZTmdHRbatGePu1+oDEzfbzL6Xu/OHBE
+# 0ZDxyKs6ijoIYn/ZcGNTTY3ugm2lBRDBcQZqELQdVTNYs6FwZvKhggNQMIICOAIB
+# ATCB+aGB0aSBzjCByzELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24x
+# EDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlv
+# bjElMCMGA1UECxMcTWljcm9zb2Z0IEFtZXJpY2EgT3BlcmF0aW9uczEnMCUGA1UE
+# CxMeblNoaWVsZCBUU1MgRVNOOjg5MDAtMDVFMC1EOTQ3MSUwIwYDVQQDExxNaWNy
+# b3NvZnQgVGltZS1TdGFtcCBTZXJ2aWNloiMKAQEwBwYFKw4DAhoDFQBK6HY/ZWLn
+# OcMEQsjkDAoB/JZWCKCBgzCBgKR+MHwxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpX
+# YXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQg
+# Q29ycG9yYXRpb24xJjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQSAy
+# MDEwMA0GCSqGSIb3DQEBCwUAAgUA7S3S7TAiGA8yMDI2MDIwNDE0MTUwOVoYDzIw
+# MjYwMjA1MTQxNTA5WjB3MD0GCisGAQQBhFkKBAExLzAtMAoCBQDtLdLtAgEAMAoC
+# AQACAhnNAgH/MAcCAQACAhNcMAoCBQDtLyRtAgEAMDYGCisGAQQBhFkKBAIxKDAm
+# MAwGCisGAQQBhFkKAwKgCjAIAgEAAgMHoSChCjAIAgEAAgMBhqAwDQYJKoZIhvcN
+# AQELBQADggEBALgXTSEo42wjLxYsZSWpgZvj4tT0qTLhNHOY6fkXroQhH4KfqCBn
+# QoJ81gOjjSS7L7DMC0766Q31OevwZvV/6lSH5qgjPUx1ejN8kttL6PjF8Q6+96Ww
+# hh/93xunj7EOKbZMDblDZzZja0JtavoUQ/wjaVvE4KT4KIzzBla+s1sUZvCxLlX0
+# /PNpd/uPLLYqfvLOLRCrgMGF5kCyskfmHEOyhFI9HJ2ZcmUThT0J3UfhM393cOrJ
+# 8vULfDKmpnxw46sRdxGouezb77G3eehWZ4O7lTMn5EDqym7WvTjmQ9jL5oYy5wUU
+# /Ew6AIV/aANtPGb0Euk8pIZBq3bUt8T9PMYxggQNMIIECQIBATCBkzB8MQswCQYD
+# VQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEe
+# MBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSYwJAYDVQQDEx1NaWNyb3Nv
+# ZnQgVGltZS1TdGFtcCBQQ0EgMjAxMAITMwAAAg4syyh9lSB1YwABAAACDjANBglg
+# hkgBZQMEAgEFAKCCAUowGgYJKoZIhvcNAQkDMQ0GCyqGSIb3DQEJEAEEMC8GCSqG
+# SIb3DQEJBDEiBCDx6KOZ6JXc0cMBnIhNi6N1ERt3RRrttJ5Q2vngcSdx0zCB+gYL
+# KoZIhvcNAQkQAi8xgeowgecwgeQwgb0EIAF0HXMl8OmBkK267mxobKSihwOdP0eU
+# NXQMypPzTxKGMIGYMIGApH4wfDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hp
+# bmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jw
+# b3JhdGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUtU3RhbXAgUENBIDIwMTAC
+# EzMAAAIOLMsofZUgdWMAAQAAAg4wIgQgrb4hmZtEY3u7RJP6/zdCTkUUGMjjQQuY
+# B2lFj8o9V+cwDQYJKoZIhvcNAQELBQAEggIAqPO+CQenOJ8lBIR5v0FCPIgIZb59
+# mX7guzWr/qajRvVTB5BWfjLHmAntnbrNjLkauYpBduef4VNRf/kjXE76AJwg5tCl
+# VN2UVpU1vibjCj5XJog8Eji30hmyp5cp9BiEB43ePWh07as8uNEMoaQhwcU5PLUH
+# VyXa8gSCIYK4w+wsXhKe2NsYCrR0eDl5sEmamZ/1AsXWkM+q3rbWCjJ9zBEtfC3P
+# fz6MtP65OXRvglq/RfB/HfR5qdrO2htoAfCK8S2T6rnQ9ThT1LzRxNTIXPbJX5Sg
+# jkc2omzm7BxeJD7LwfxRdzWmWo5Dmjaji5LdS8GYq3JFPNlh2ExS7LgQpEiOgfEJ
+# pepZRJe7cPwlacuA5NmlDIc8Y/dV3f04Yxl33JQ2UkpuipThTXzmYQtSk6fUjF+d
+# DJ8N9VlWWHDgCfsd9R1TVPVHvUCQP81ZJH5LCSJpn7F0vf2BFPeJqkTTNrznXwqo
+# WSMb6zXQ/V2Y+8PXsvNki46dzRjcWkGX/4gh6TcMdSIaZGQJjdRacvLT/GCwLU4P
+# wqDsRwGNRPBoYTqcKhxBjKJQGFd8KcupXHX1Si4+MqDOoiYdo90iPbxcA5twO1jF
+# gUqd7tpE5LFjceW+2wX1N3lUMtYALYuifAel2Yh88PePzUyoEGvJLOdCtTL36vFU
+# h8HVBjNwyKsq/wA=
+# SIG # End signature block

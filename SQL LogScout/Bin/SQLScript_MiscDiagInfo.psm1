@@ -30,18 +30,12 @@
     PRINT ''
 
 
-    DECLARE @sql_major_version INT, @sql_major_build INT, @sql NVARCHAR(max), @sql_minor_version INT
-    SELECT @sql_major_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) AS INT)),
-        @sql_major_build = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) AS INT)) ,
-        @sql_minor_version = (CAST(PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 3) AS INT))
 
     -- ParsName is used to extract MajorVersion , MinorVersion and Build from ProductVersion e.g. 16.0.1105.1 will comeback AS 16000001105
 
     DECLARE @SQLVERSION BIGINT =  PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 4) 
                                 + RIGHT(REPLICATE ('0', 3) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 3), 3)  
                                 + RIGHT (replicate ('0', 6) + PARSENAME(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(20)), 2) , 6)
-
-
 
     CREATE TABLE #summary (PropertyName NVARCHAR(50) primary key, PropertyValue NVARCHAR(256))
     INSERT INTO #summary VALUES ('ProductVersion', cast (SERVERPROPERTY('ProductVersion') AS NVARCHAR(max)))
@@ -264,7 +258,7 @@
 
     PRINT ''
     RAISERROR ('-- sysaltfiles--', 0, 1) WITH NOWAIT
-    SELECT af.dbid as [dbid],  db_name(af.dbid) as [database_name], fileid, groupid, [size], [maxsize], [growth], [status],rtrim(af.filename) as [filename],rtrim(af.name) as [filename]
+    SELECT af.dbid as [dbid],  db_name(af.dbid) as [database_name], fileid, groupid, [size], [maxsize], [growth], [status],rtrim(af.filename) as [filename],rtrim(af.name) as [logical_filename]
     FROM master.sys.sysaltfiles af
     WHERE af.dbid != db_id('tempdb')
     ORDER BY af.dbid,af.fileid
@@ -280,7 +274,7 @@
     --removed AG related dmvs as a part of issue #162
     PRINT ''
     PRINT '-- sys.change_tracking_databases --'
-    SELECT * FROM sys.change_tracking_databases
+    SELECT database_id,is_auto_cleanup_on,retention_period,retention_period_units,retention_period_units_desc FROM sys.change_tracking_databases
 
 
     PRINT ''
@@ -316,7 +310,8 @@
         start_date,
         '0x' + CONVERT(VARCHAR(64),thumbprint,2) AS thumbprint,
         CONVERT(VARCHAR(256), attested_by) AS attested_by,
-        pvt_key_last_backup_date
+        pvt_key_last_backup_date,
+        key_length
     FROM master.sys.certificates 
     PRINT ''
 
@@ -411,8 +406,9 @@
         BEGIN
 
             SET @dbcc_log_info = 'DBCC LOGINFO (''' + @dbname + ''') WITH NO_INFOMSGS'
-            
-            IF ((@sql_major_version >= 14) or (@sql_major_version >= 13) and (@sql_major_build >= 5026 ))
+
+            IF ((@SQLVERSION >= 14000001000) --14.0.1000
+              OR (@SQLVERSION >= 13000005026 )) --13.0.5026.0 - SQL 2016 SP2
             BEGIN
             
                 INSERT INTO #loginfo_all_dbs(
@@ -801,35 +797,41 @@ WITH LastExecution AS (
         SELECT TOP 1 @database_name = database_name
         FROM @databases;
 
-        -- Construct the dynamic SQL to insert the assemblies into the temporary table
-        DECLARE @SQLTxt NVARCHAR(MAX) = '
-            INSERT INTO #assemblies (database_name, assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined)
-            SELECT ''' + @database_name + ''', assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined
-            FROM ' + QUOTENAME(@database_name) + '.sys.assemblies
-            WHERE assembly_id <> 1';
+        IF HAS_PERMS_BY_NAME(@database_name, 'DATABASE', 'CONNECT') = 1
+	    BEGIN
 
-        EXEC sp_executesql @SQLTxt;
-
-        -- Construct the dynamic SQL to insert the assembly modules into the temporary table
-        SET @SQLTxt = '
-            INSERT INTO #assembly_modules (database_name, object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id)
-            SELECT ''' + @database_name + ''', object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id
-            FROM ' + QUOTENAME(@database_name) + '.sys.assembly_modules';
-
-        EXEC sp_executesql @SQLTxt;
-
-        -- Construct the dynamic SQL to insert the assembly types into the temporary table
-        SET @SQLTxt = '
-            INSERT INTO #assembly_types (database_name, name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type)
-            SELECT ''' + @database_name + ''', name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type
-            FROM ' + QUOTENAME(@database_name) + '.sys.assembly_types
-            WHERE schema_id <> SCHEMA_ID(''sys'')';
-
-        EXEC sp_executesql @SQLTxt;
-
-        -- Remove the processed database from the table variable
-        DELETE FROM @databases
-        WHERE database_name = @database_name;
+          -- Construct the dynamic SQL to insert the assemblies into the temporary table
+          DECLARE @SQLTxt NVARCHAR(MAX) = '
+              INSERT INTO #assemblies (database_name, assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined)
+              SELECT ''' + @database_name + ''', assembly_id, name, principal_id, clr_name, permission_set, permission_set_desc, is_visible, create_date, modify_date, is_user_defined
+              FROM ' + QUOTENAME(@database_name) + '.sys.assemblies
+              WHERE assembly_id <> 1';
+  
+          EXEC sp_executesql @SQLTxt;
+  
+          -- Construct the dynamic SQL to insert the assembly modules into the temporary table
+          SET @SQLTxt = '
+              INSERT INTO #assembly_modules (database_name, object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id)
+              SELECT ''' + @database_name + ''', object_id, assembly_id, assembly_class, assembly_method, null_on_null_input, execute_as_principal_id
+              FROM ' + QUOTENAME(@database_name) + '.sys.assembly_modules';
+  
+          EXEC sp_executesql @SQLTxt;
+  
+          -- Construct the dynamic SQL to insert the assembly types into the temporary table
+          SET @SQLTxt = '
+              INSERT INTO #assembly_types (database_name, name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type)
+              SELECT ''' + @database_name + ''', name, system_type_id, user_type_id, schema_id, principal_id, max_length, precision, scale, collation_name, is_nullable, is_user_defined, is_assembly_type, default_object_id, rule_object_id, assembly_id, assembly_class, is_binary_ordered, is_fixed_length, prog_id, assembly_qualified_name, is_table_type
+              FROM ' + QUOTENAME(@database_name) + '.sys.assembly_types
+              WHERE schema_id <> SCHEMA_ID(''sys'')';
+  
+          EXEC sp_executesql @SQLTxt;
+        
+        END;
+        
+          -- Remove the processed database from the table variable
+          DELETE FROM @databases
+          WHERE database_name = @database_name;
+        
     END;
 
     -- Select the results from the temporary tables
@@ -851,6 +853,99 @@ WITH LastExecution AS (
     DROP TABLE #assembly_types;
 
     PRINT ''
+
+    IF OBJECT_ID ('sys.database_scoped_configurations') IS NOT NULL
+	BEGIN
+
+      PRINT '-- sys.database_scoped_configurations --'
+  
+	  DECLARE @database_id INT
+	  DECLARE @cont INT
+	  DECLARE @maxcont INT
+	  DECLARE @is_value_default BIT
+      DECLARE @sql NVARCHAR(MAX)
+
+	  DECLARE @dbtable TABLE (
+	  id INT IDENTITY (1,1) PRIMARY KEY,
+	  database_id INT,
+	  dbname SYSNAME
+	  )
+	  
+	  INSERT INTO @dbtable
+	  SELECT database_id, name FROM sys.databases WHERE state_desc='ONLINE' AND name NOT IN ('model','tempdb') ORDER BY name
+	  
+	  SET @cont = 1
+	  SET @maxcont = (SELECT MAX(id) FROM @dbtable)
+     
+      --create the schema
+	  SELECT  @database_id as database_id , @dbname as dbname, configuration_id, name, value, value_for_secondary, @is_value_default AS is_value_default 
+	  INTO #db_scoped_config
+	  FROM sys.database_scoped_configurations
+	  WHERE 1=0
+	  
+	  --insert from all databases
+	  WHILE (@cont<=@maxcont)
+	  BEGIN
+	    BEGIN TRY
+	      
+          SELECT @database_id = database_id,
+	    	     @dbname = dbname 
+	      FROM @dbtable
+	      WHERE id = @cont
+	      
+          IF HAS_PERMS_BY_NAME(@dbname, 'DATABASE', 'CONNECT') = 1
+	      BEGIN
+	      
+            IF (@SQLVERSION >= 14000001000) --14.0.1000
+	        BEGIN
+	          SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, is_value_default FROM [' + @dbname + '].sys.database_scoped_configurations'
+	        END
+	        
+            ELSE
+	        BEGIN
+	        	SET @sql = ' INSERT INTO #db_scoped_config SELECT ' + CONVERT(VARCHAR,@database_id) + ',''' + @dbname + ''', configuration_id, name, value, value_for_secondary, NULL FROM [' + @dbname + '].sys.database_scoped_configurations'
+	        END
+	    	--PRINT @sql
+	    	EXEC (@sql)
+	      END
+	      
+          SET @cont = @cont + 1
+	    
+	    END TRY
+	    
+        BEGIN CATCH
+	    	PRINT 'Exception occured in: `"' + OBJECT_NAME(@@PROCID)  + '`"'     
+	    	PRINT 'Msg ' + isnull(cast(Error_Number() as nvarchar(50)), '') + ', Level ' + isnull(cast(Error_Severity() as nvarchar(50)),'') + ', State ' + isnull(cast(Error_State() as nvarchar(50)),'') + ', Server ' + @@servername + ', Line ' + isnull(cast(Error_Line() as nvarchar(50)),'') + char(10) +  Error_Message() + char(10);
+	    	
+            -- Increment the counter to avoid infinite loop. 
+            SET @cont = @cont + 1
+	    END CATCH
+
+	  END
+	  		
+	  SELECT 
+	  	database_id, 
+	  	CONVERT(VARCHAR(48), dbname) AS dbname, 
+	  	configuration_id, 
+	  	name, 
+	  	CONVERT(VARCHAR(256), value) AS value, 
+	  	CONVERT(VARCHAR(256),value_for_secondary) AS value_for_secondary, 
+	  	is_value_default 
+	  FROM #db_scoped_config
+	
+    END
+
+    IF (@SQLVERSION >= 17000000925) --17.0.925.4 [SQL Server 2025 RC1]
+    BEGIN
+        PRINT ''
+        RAISERROR ('-- sys.dm_os_memory_health_history --', 0, 1) WITH NOWAIT
+        EXEC sp_executesql N'SELECT snapshot_time,severity_level,severity_level_desc,allocation_potential_memory_mb,reclaimable_cache_memory_mb,clerk_type,pages_allocated_kb,out_of_memory_event_count,memgrant_timeout_count,memgrant_waiter_count FROM sys.dm_os_memory_health_history CROSS APPLY OPENJSON(top_memory_clerks) WITH (clerk_type sysname ''$.clerk_type'',pages_allocated_kb bigint ''$.pages_allocated_kb'') ORDER BY snapshot_time DESC, pages_allocated_kb DESC'
+
+    END
+
+    PRINT ''
+    RAISERROR ('-- Script End --', 0, 1) WITH NOWAIT
+    PRINT 'Script End Time        ' + CONVERT (VARCHAR(30), GETDATE(), 126) 
     "
 
     if ($true -eq $returnVariable)
@@ -866,7 +961,7 @@ WITH LastExecution AS (
         Set-Content -Path $fileName -Value $content
     } else 
     {
-        Write-LogDebug "$filName already exists, could be from GUI"
+        Write-LogDebug "$fileName already exists, likely generated by GUI"
     }
 
     #check if command was successful, then add the file to the list for cleanup AND return collector name
@@ -885,3 +980,242 @@ WITH LastExecution AS (
     }
 
     
+
+# SIG # Begin signature block
+# MIIsDwYJKoZIhvcNAQcCoIIsADCCK/wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA5o/GXvzVfsrWS
+# Ai0oRfCtpL3XGrBZcO45SkmeBeU7kKCCEX0wggiNMIIHdaADAgECAhM2AAACDnmX
+# oOn9X5/TAAIAAAIOMA0GCSqGSIb3DQEBCwUAMEExEzARBgoJkiaJk/IsZAEZFgNH
+# QkwxEzARBgoJkiaJk/IsZAEZFgNBTUUxFTATBgNVBAMTDEFNRSBDUyBDQSAwMTAe
+# Fw0yNTEwMjMyMzEyMDNaFw0yNjA0MjYyMzIyMDNaMCQxIjAgBgNVBAMTGU1pY3Jv
+# c29mdCBBenVyZSBDb2RlIFNpZ24wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+# AoIBAQCfrw9mbjhRpCz0Wh+dmWU4nlBbeiDkl5NfNWFA9NWUAfDcSAEtWiJTZLIB
+# Vt+E5kjpxQfCeObdxk0aaPKmhkANla5kJ5egjmrttmGvsI/SPeeQ890j/QO4YI4g
+# QWpXnt8EswtW6xzmRdMMP+CASyAYJ0oWQMVXXMNhBG9VBdrZe+L1+DzLawq42AWG
+# NoKL6JdGg21P0W11MN1OtwrhubgTqEBkgYp7m1Bt4EeOxBz0GwZfPODbLVTblACS
+# LmGlfEePEdVamqIUTTdsrAKG8NM/gGx010AiqAv6p2sCtSeZpvV7fkppLY9ajdm8
+# Yc4Kf1KNI3U5ZNMdLIDz9fA5Q+ulAgMBAAGjggWZMIIFlTApBgkrBgEEAYI3FQoE
+# HDAaMAwGCisGAQQBgjdbAQEwCgYIKwYBBQUHAwMwPQYJKwYBBAGCNxUHBDAwLgYm
+# KwYBBAGCNxUIhpDjDYTVtHiE8Ys+hZvdFs6dEoFgg93NZoaUjDICAWQCAQ4wggJ2
+# BggrBgEFBQcBAQSCAmgwggJkMGIGCCsGAQUFBzAChlZodHRwOi8vY3JsLm1pY3Jv
+# c29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDEu
+# YW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUy
+# MDAxKDIpLmNydDBSBggrBgEFBQcwAoZGaHR0cDovL2NybDIuYW1lLmdibC9haWEv
+# QlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBS
+# BggrBgEFBQcwAoZGaHR0cDovL2NybDMuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAx
+# LkFNRS5HQkxfQU1FJTIwQ1MlMjBDQSUyMDAxKDIpLmNydDBSBggrBgEFBQcwAoZG
+# aHR0cDovL2NybDQuYW1lLmdibC9haWEvQlkyUEtJQ1NDQTAxLkFNRS5HQkxfQU1F
+# JTIwQ1MlMjBDQSUyMDAxKDIpLmNydDCBrQYIKwYBBQUHMAKGgaBsZGFwOi8vL0NO
+# PUFNRSUyMENTJTIwQ0ElMjAwMSxDTj1BSUEsQ049UHVibGljJTIwS2V5JTIwU2Vy
+# dmljZXMsQ049U2VydmljZXMsQ049Q29uZmlndXJhdGlvbixEQz1BTUUsREM9R0JM
+# P2NBQ2VydGlmaWNhdGU/YmFzZT9vYmplY3RDbGFzcz1jZXJ0aWZpY2F0aW9uQXV0
+# aG9yaXR5MB0GA1UdDgQWBBSbKJrguVhFagj1tSbzFntHGtugCTAOBgNVHQ8BAf8E
+# BAMCB4AwVAYDVR0RBE0wS6RJMEcxLTArBgNVBAsTJE1pY3Jvc29mdCBJcmVsYW5k
+# IE9wZXJhdGlvbnMgTGltaXRlZDEWMBQGA1UEBRMNMjM2MTY3KzUwNjA1MjCCAeYG
+# A1UdHwSCAd0wggHZMIIB1aCCAdGgggHNhj9odHRwOi8vY3JsLm1pY3Jvc29mdC5j
+# b20vcGtpaW5mcmEvQ1JML0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0dHA6
+# Ly9jcmwxLmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyGMWh0
+# dHA6Ly9jcmwyLmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5jcmyG
+# MWh0dHA6Ly9jcmwzLmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgyKS5j
+# cmyGMWh0dHA6Ly9jcmw0LmFtZS5nYmwvY3JsL0FNRSUyMENTJTIwQ0ElMjAwMSgy
+# KS5jcmyGgb1sZGFwOi8vL0NOPUFNRSUyMENTJTIwQ0ElMjAwMSgyKSxDTj1CWTJQ
+# S0lDU0NBMDEsQ049Q0RQLENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNl
+# cnZpY2VzLENOPUNvbmZpZ3VyYXRpb24sREM9QU1FLERDPUdCTD9jZXJ0aWZpY2F0
+# ZVJldm9jYXRpb25MaXN0P2Jhc2U/b2JqZWN0Q2xhc3M9Y1JMRGlzdHJpYnV0aW9u
+# UG9pbnQwHwYDVR0jBBgwFoAUllGE4Gtve/7YBqvD8oXmKa5q+dQwHwYDVR0lBBgw
+# FgYKKwYBBAGCN1sBAQYIKwYBBQUHAwMwDQYJKoZIhvcNAQELBQADggEBAKaBh/B8
+# 42UPFqNHP+m2mYSY80orKjPVnXEb+KlCoxL1Ikl2DfziE1PBZXtCDbYtvyMqC9Pj
+# KvB8TNz71+CWrO0lqV2f0KITMmtXiCy+yThBqLYvUZrbrRzlXYv2lQmqWMy0OqrK
+# TIdMza2iwUp2gdLnKzG7DQ8IcbguYXwwh+GzbeUjY9hEi7sX7dgVP4Ls1UQNkRqR
+# FcRPOAoTBZvBGhPSkOAnl9CShvCHfKrHl0yzBk/k/lnt4Di6A6wWq4Ew1BveHXMH
+# 1ZT+sdRuikm5YLLqLc/HhoiT3rid5EHVQK3sng95fIdBMgj26SScMvyKWNC9gKkp
+# emezUSM/c91wEhwwggjoMIIG0KADAgECAhMfAAAAUeqP9pxzDKg7AAAAAABRMA0G
+# CSqGSIb3DQEBCwUAMDwxEzARBgoJkiaJk/IsZAEZFgNHQkwxEzARBgoJkiaJk/Is
+# ZAEZFgNBTUUxEDAOBgNVBAMTB2FtZXJvb3QwHhcNMjEwNTIxMTg0NDE0WhcNMjYw
+# NTIxMTg1NDE0WjBBMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQB
+# GRYDQU1FMRUwEwYDVQQDEwxBTUUgQ1MgQ0EgMDEwggEiMA0GCSqGSIb3DQEBAQUA
+# A4IBDwAwggEKAoIBAQDJmlIJfQGejVbXKpcyFPoFSUllalrinfEV6JMc7i+bZDoL
+# 9rNHnHDGfJgeuRIYO1LY/1f4oMTrhXbSaYRCS5vGc8145WcTZG908bGDCWr4GFLc
+# 411WxA+Pv2rteAcz0eHMH36qTQ8L0o3XOb2n+x7KJFLokXV1s6pF/WlSXsUBXGaC
+# IIWBXyEchv+sM9eKDsUOLdLTITHYJQNWkiryMSEbxqdQUTVZjEz6eLRLkofDAo8p
+# XirIYOgM770CYOiZrcKHK7lYOVblx22pdNawY8Te6a2dfoCaWV1QUuazg5VHiC4p
+# /6fksgEILptOKhx9c+iapiNhMrHsAYx9pUtppeaFAgMBAAGjggTcMIIE2DASBgkr
+# BgEEAYI3FQEEBQIDAgACMCMGCSsGAQQBgjcVAgQWBBQSaCRCIUfL1Gu+Mc8gpMAL
+# I38/RzAdBgNVHQ4EFgQUllGE4Gtve/7YBqvD8oXmKa5q+dQwggEEBgNVHSUEgfww
+# gfkGBysGAQUCAwUGCCsGAQUFBwMBBggrBgEFBQcDAgYKKwYBBAGCNxQCAQYJKwYB
+# BAGCNxUGBgorBgEEAYI3CgMMBgkrBgEEAYI3FQYGCCsGAQUFBwMJBggrBgEFBQgC
+# AgYKKwYBBAGCN0ABAQYLKwYBBAGCNwoDBAEGCisGAQQBgjcKAwQGCSsGAQQBgjcV
+# BQYKKwYBBAGCNxQCAgYKKwYBBAGCNxQCAwYIKwYBBQUHAwMGCisGAQQBgjdbAQEG
+# CisGAQQBgjdbAgEGCisGAQQBgjdbAwEGCisGAQQBgjdbBQEGCisGAQQBgjdbBAEG
+# CisGAQQBgjdbBAIwGQYJKwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwCwYDVR0PBAQD
+# AgGGMBIGA1UdEwEB/wQIMAYBAf8CAQAwHwYDVR0jBBgwFoAUKV5RXmSuNLnrrJwN
+# p4x1AdEJCygwggFoBgNVHR8EggFfMIIBWzCCAVegggFToIIBT4YxaHR0cDovL2Ny
+# bC5taWNyb3NvZnQuY29tL3BraWluZnJhL2NybC9hbWVyb290LmNybIYjaHR0cDov
+# L2NybDIuYW1lLmdibC9jcmwvYW1lcm9vdC5jcmyGI2h0dHA6Ly9jcmwzLmFtZS5n
+# YmwvY3JsL2FtZXJvb3QuY3JshiNodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9hbWVy
+# b290LmNybIaBqmxkYXA6Ly8vQ049YW1lcm9vdCxDTj1BTUVSb290LENOPUNEUCxD
+# Tj1QdWJsaWMlMjBLZXklMjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxDTj1Db25maWd1
+# cmF0aW9uLERDPUFNRSxEQz1HQkw/Y2VydGlmaWNhdGVSZXZvY2F0aW9uTGlzdD9i
+# YXNlP29iamVjdENsYXNzPWNSTERpc3RyaWJ1dGlvblBvaW50MIIBqwYIKwYBBQUH
+# AQEEggGdMIIBmTBHBggrBgEFBQcwAoY7aHR0cDovL2NybC5taWNyb3NvZnQuY29t
+# L3BraWluZnJhL2NlcnRzL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYIKwYBBQUHMAKG
+# K2h0dHA6Ly9jcmwyLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9vdC5jcnQwNwYI
+# KwYBBQUHMAKGK2h0dHA6Ly9jcmwzLmFtZS5nYmwvYWlhL0FNRVJvb3RfYW1lcm9v
+# dC5jcnQwNwYIKwYBBQUHMAKGK2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0FNRVJv
+# b3RfYW1lcm9vdC5jcnQwgaIGCCsGAQUFBzAChoGVbGRhcDovLy9DTj1hbWVyb290
+# LENOPUFJQSxDTj1QdWJsaWMlMjBLZXklMjBTZXJ2aWNlcyxDTj1TZXJ2aWNlcyxD
+# Tj1Db25maWd1cmF0aW9uLERDPUFNRSxEQz1HQkw/Y0FDZXJ0aWZpY2F0ZT9iYXNl
+# P29iamVjdENsYXNzPWNlcnRpZmljYXRpb25BdXRob3JpdHkwDQYJKoZIhvcNAQEL
+# BQADggIBAFAQI7dPD+jfXtGt3vJp2pyzA/HUu8hjKaRpM3opya5G3ocprRd7vdTH
+# b8BDfRN+AD0YEmeDB5HKQoG6xHPI5TXuIi5sm/LeADbV3C2q0HQOygS/VT+m1W7a
+# /752hMIn+L4ZuyxVeSBpfwf7oQ4YSZPh6+ngZvBHgfBaVz4O9/wcfw91QDZnTgK9
+# zAh9yRKKls2bziPEnxeOZMVNaxyV0v152PY2xjqIafIkUjK6vY9LtVFjJXenVUAm
+# n3WCPWNFC1YTIIHw/mD2cTfPy7QA1pT+GPARAKt0bKtq9aCd/Ym0b5tPbpgCiRtz
+# yb7fbNS1dE740re0COE67YV2wbeo2sXixzvLftH8L7s9xv9wV+G22qyKt6lmKLjF
+# K1yMw4Ni5fMabcgmzRvSjAcbqgp3tk4a8emaaH0rz8MuuIP+yrxtREPXSqL/C5bz
+# MzsikuDW9xH10graZzSmPjilzpRfRdu20/9UQmC7eVPZ4j1WNa1oqPHfzET3ChIz
+# J6Q9G3NPCB+7KwX0OQmKyv7IDimj8U/GlsHD1z+EF/fYMf8YXG15LamaOAohsw/y
+# wO6SYSreVW+5Y0mzJutnBC9Cm9ozj1+/4kqksrlhZgR/CSxhFH3BTweH8gP2FEIS
+# RtShDZbuYymynY1un+RyfiK9+iVTLdD1h/SxyxDpZMtimb4CgJQlMYIZ6DCCGeQC
+# AQEwWDBBMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1F
+# MRUwEwYDVQQDEwxBTUUgQ1MgQ0EgMDECEzYAAAIOeZeg6f1fn9MAAgAAAg4wDQYJ
+# YIZIAWUDBAIBBQCgga4wGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYB
+# BAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIIFsDgQatoMX
+# UlfIxZ6rzi64YwnJV+2gUnZigNAs/oILMEIGCisGAQQBgjcCAQwxNDAyoBSAEgBN
+# AGkAYwByAG8AcwBvAGYAdKEagBhodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20wDQYJ
+# KoZIhvcNAQEBBQAEggEAX4HpEpp/TTxWTkxMxAu3mAHrP1cvpEbpJFoQ/KaVZzm8
+# QYOeMHQILxBoGyuW8IGdpDt1qdbAVCAuvaz7BSPcuT9pO9zoTwfTgoDAjjpy2ehF
+# gj8vq+wgACq5tfbA1ifBTAKcpGPgKWc7L704xoxBqWY9MphhLm/5Mkl7ebsPWiWv
+# +9Z55kYpeXZRxiiCoa9dAlWnNiX6z3yKCYjc9Npun3tO5cAUim5Q2/0xyabxIdZ9
+# R5cpfRUH6pjBwU9Ab6Ql77oFZn+j+sTc5M0coNBPlBGHN15XB2SMI8m3Gq4oUhuN
+# CIitHoqWyKZayV50N6UafovGBjIoID8aqsj25RNK56GCF7AwghesBgorBgEEAYI3
+# AwMBMYIXnDCCF5gGCSqGSIb3DQEHAqCCF4kwgheFAgEDMQ8wDQYJYIZIAWUDBAIB
+# BQAwggFaBgsqhkiG9w0BCRABBKCCAUkEggFFMIIBQQIBAQYKKwYBBAGEWQoDATAx
+# MA0GCWCGSAFlAwQCAQUABCAXuCe7YjYha7OsnuiYtXdwxkbPsMjaoLvJ8AH9HdVI
+# tAIGaXSr3pISGBMyMDI2MDIwNDE2MzUyOC43MzhaMASAAgH0oIHZpIHWMIHTMQsw
+# CQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9u
+# ZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMS0wKwYDVQQLEyRNaWNy
+# b3NvZnQgSXJlbGFuZCBPcGVyYXRpb25zIExpbWl0ZWQxJzAlBgNVBAsTHm5TaGll
+# bGQgVFNTIEVTTjo2NTFBLTA1RTAtRDk0NzElMCMGA1UEAxMcTWljcm9zb2Z0IFRp
+# bWUtU3RhbXAgU2VydmljZaCCEf4wggcoMIIFEKADAgECAhMzAAACFRgD04EHJnxT
+# AAEAAAIVMA0GCSqGSIb3DQEBCwUAMHwxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpX
+# YXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQg
+# Q29ycG9yYXRpb24xJjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQSAy
+# MDEwMB4XDTI1MDgxNDE4NDgyMFoXDTI2MTExMzE4NDgyMFowgdMxCzAJBgNVBAYT
+# AlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYD
+# VQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xLTArBgNVBAsTJE1pY3Jvc29mdCBJ
+# cmVsYW5kIE9wZXJhdGlvbnMgTGltaXRlZDEnMCUGA1UECxMeblNoaWVsZCBUU1Mg
+# RVNOOjY1MUEtMDVFMC1EOTQ3MSUwIwYDVQQDExxNaWNyb3NvZnQgVGltZS1TdGFt
+# cCBTZXJ2aWNlMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAw3HV3hVx
+# L0lEYPV03XeNKZ517VIbgexhlDPdpXwDS0BYtxPwi4XYpZR1ld0u6cr2Xjuugdg5
+# 0DUx5WHL0QhY2d9vkJSk02rE/75hcKt91m2Ih287QRxRMmFu3BF6466k8qp5uXtf
+# e6uciq49YaS8p+dzv3uTarD4hQ8UT7La95pOJiRqxxd0qOGLECvHLEXPXioNSx9p
+# yhzhm6lt7ezLxJeFVYtxShkavPoZN0dOCiYeh4KgoKoyagzMuSiLCiMUW4Ue4Qsm
+# 658FJNGTNh7V5qXYVA6k5xjw5WeWdKOz0i9A5jBcbY9fVOo/cA8i1bytzcDTxb3n
+# ctcly8/OYeNstkab/Isq3Cxe1vq96fIHE1+ZGmJjka1sodwqPycVp/2tb+BjulPL
+# 5D6rgUXTPF84U82RLKHV57bB8fHRpgnjcWBQuXPgVeSXpERWimt0NF2lCOLzqgrv
+# S/vYqde5Ln9YlKKhAZ/xDE0TLIIr6+I/2JTtXP34nfjTENVqMBISWcakIxAwGb3R
+# B5yHCxynIFNVLcfKAsEdC5U2em0fAvmVv0sonqnv17cuaYi2eCLWhoK1Ic85Dw7s
+# /lhcXrBpY4n/Rl5l3wHzs4vOIhu87DIy5QUaEupEsyY0NWqgI4BWl6v1wgse+l8D
+# WFeUXofhUuCgVTuTHN3K8idoMbn8Q3edUIECAwEAAaOCAUkwggFFMB0GA1UdDgQW
+# BBSJIXfxcqAwFqGj9jdwQtdSqadj1zAfBgNVHSMEGDAWgBSfpxVdAF5iXYP05dJl
+# pxtTNRnpcjBfBgNVHR8EWDBWMFSgUqBQhk5odHRwOi8vd3d3Lm1pY3Jvc29mdC5j
+# b20vcGtpb3BzL2NybC9NaWNyb3NvZnQlMjBUaW1lLVN0YW1wJTIwUENBJTIwMjAx
+# MCgxKS5jcmwwbAYIKwYBBQUHAQEEYDBeMFwGCCsGAQUFBzAChlBodHRwOi8vd3d3
+# Lm1pY3Jvc29mdC5jb20vcGtpb3BzL2NlcnRzL01pY3Jvc29mdCUyMFRpbWUtU3Rh
+# bXAlMjBQQ0ElMjAyMDEwKDEpLmNydDAMBgNVHRMBAf8EAjAAMBYGA1UdJQEB/wQM
+# MAoGCCsGAQUFBwMIMA4GA1UdDwEB/wQEAwIHgDANBgkqhkiG9w0BAQsFAAOCAgEA
+# d42HtV+kGbvxzLBTC5O7vkCIBPy/BwpjCzeL53hAiEOebp+VdNnwm9GVCfYq3KMf
+# rj4UvKQTUAaS5Zkwe1gvZ3ljSSnCOyS5OwNu9dpg3ww+QW2eOcSLkyVAWFrLn6Ii
+# g3TC/zWMvVhqXtdFhG2KJ1lSbN222csY3E3/BrGluAlvET9gmxVyyxNy59/7JF5z
+# IGcJibydxs94JL1BtPgXJOfZzQ+/3iTc6eDtmaWT6DKdnJocp8wkXKWPIsBEfkD6
+# k1Qitwvt0mHrORah75SjecOKt4oWayVLkPTho12e0ongEg1cje5fxSZGthrMrWKv
+# I4R7HEC7k8maH9ePA3ViH0CVSSOefaPTGMzIhHCo5p3jG5SMcyO3eA9uEaYQJITJ
+# lLG3BwwGmypY7C/8/nj1SOhgx1HgJ0ywOJL9xfP4AOcWmCfbsqgGbCaC7WH5sINd
+# zfMar8V7YNFqkbCGUKhc8GpIyE+MKnyVn33jsuaGAlNRg7dVRUSoYLJxvUsw9GOw
+# yBpBwbE9sqOLm+HsO00oF23PMio7WFXcFTZAjp3ujihBAfLrXICgGOHPdkZ042u1
+# LZqOcnlr3XzvgMe+mPPyasW8f0rtzJj3V5E/EKiyQlPxj9Mfq2x9himnlXWGZCVP
+# eEBROrNbDYBfazTyLNCOTsRtksOSV3FBtPnpQtLN754wggdxMIIFWaADAgECAhMz
+# AAAAFcXna54Cm0mZAAAAAAAVMA0GCSqGSIb3DQEBCwUAMIGIMQswCQYDVQQGEwJV
+# UzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UE
+# ChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMTIwMAYDVQQDEylNaWNyb3NvZnQgUm9v
+# dCBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkgMjAxMDAeFw0yMTA5MzAxODIyMjVaFw0z
+# MDA5MzAxODMyMjVaMHwxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9u
+# MRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRp
+# b24xJjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQSAyMDEwMIICIjAN
+# BgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA5OGmTOe0ciELeaLL1yR5vQ7VgtP9
+# 7pwHB9KpbE51yMo1V/YBf2xK4OK9uT4XYDP/XE/HZveVU3Fa4n5KWv64NmeFRiMM
+# tY0Tz3cywBAY6GB9alKDRLemjkZrBxTzxXb1hlDcwUTIcVxRMTegCjhuje3XD9gm
+# U3w5YQJ6xKr9cmmvHaus9ja+NSZk2pg7uhp7M62AW36MEBydUv626GIl3GoPz130
+# /o5Tz9bshVZN7928jaTjkY+yOSxRnOlwaQ3KNi1wjjHINSi947SHJMPgyY9+tVSP
+# 3PoFVZhtaDuaRr3tpK56KTesy+uDRedGbsoy1cCGMFxPLOJiss254o2I5JasAUq7
+# vnGpF1tnYN74kpEeHT39IM9zfUGaRnXNxF803RKJ1v2lIH1+/NmeRd+2ci/bfV+A
+# utuqfjbsNkz2K26oElHovwUDo9Fzpk03dJQcNIIP8BDyt0cY7afomXw/TNuvXsLz
+# 1dhzPUNOwTM5TI4CvEJoLhDqhFFG4tG9ahhaYQFzymeiXtcodgLiMxhy16cg8ML6
+# EgrXY28MyTZki1ugpoMhXV8wdJGUlNi5UPkLiWHzNgY1GIRH29wb0f2y1BzFa/Zc
+# UlFdEtsluq9QBXpsxREdcu+N+VLEhReTwDwV2xo3xwgVGD94q0W29R6HXtqPnhZy
+# acaue7e3PmriLq0CAwEAAaOCAd0wggHZMBIGCSsGAQQBgjcVAQQFAgMBAAEwIwYJ
+# KwYBBAGCNxUCBBYEFCqnUv5kxJq+gpE8RjUpzxD/LwTuMB0GA1UdDgQWBBSfpxVd
+# AF5iXYP05dJlpxtTNRnpcjBcBgNVHSAEVTBTMFEGDCsGAQQBgjdMg30BATBBMD8G
+# CCsGAQUFBwIBFjNodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtpb3BzL0RvY3Mv
+# UmVwb3NpdG9yeS5odG0wEwYDVR0lBAwwCgYIKwYBBQUHAwgwGQYJKwYBBAGCNxQC
+# BAweCgBTAHUAYgBDAEEwCwYDVR0PBAQDAgGGMA8GA1UdEwEB/wQFMAMBAf8wHwYD
+# VR0jBBgwFoAU1fZWy4/oolxiaNE9lJBb186aGMQwVgYDVR0fBE8wTTBLoEmgR4ZF
+# aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraS9jcmwvcHJvZHVjdHMvTWljUm9v
+# Q2VyQXV0XzIwMTAtMDYtMjMuY3JsMFoGCCsGAQUFBwEBBE4wTDBKBggrBgEFBQcw
+# AoY+aHR0cDovL3d3dy5taWNyb3NvZnQuY29tL3BraS9jZXJ0cy9NaWNSb29DZXJB
+# dXRfMjAxMC0wNi0yMy5jcnQwDQYJKoZIhvcNAQELBQADggIBAJ1VffwqreEsH2cB
+# MSRb4Z5yS/ypb+pcFLY+TkdkeLEGk5c9MTO1OdfCcTY/2mRsfNB1OW27DzHkwo/7
+# bNGhlBgi7ulmZzpTTd2YurYeeNg2LpypglYAA7AFvonoaeC6Ce5732pvvinLbtg/
+# SHUB2RjebYIM9W0jVOR4U3UkV7ndn/OOPcbzaN9l9qRWqveVtihVJ9AkvUCgvxm2
+# EhIRXT0n4ECWOKz3+SmJw7wXsFSFQrP8DJ6LGYnn8AtqgcKBGUIZUnWKNsIdw2Fz
+# Lixre24/LAl4FOmRsqlb30mjdAy87JGA0j3mSj5mO0+7hvoyGtmW9I/2kQH2zsZ0
+# /fZMcm8Qq3UwxTSwethQ/gpY3UA8x1RtnWN0SCyxTkctwRQEcb9k+SS+c23Kjgm9
+# swFXSVRk2XPXfx5bRAGOWhmRaw2fpCjcZxkoJLo4S5pu+yFUa2pFEUep8beuyOiJ
+# Xk+d0tBMdrVXVAmxaQFEfnyhYWxz/gq77EFmPWn9y8FBSX5+k77L+DvktxW/tM4+
+# pTFRhLy/AsGConsXHRWJjXD+57XQKBqJC4822rpM+Zv/Cuk0+CQ1ZyvgDbjmjJnW
+# 4SLq8CdCPSWU5nR0W2rRnj7tfqAxM328y+l7vzhwRNGQ8cirOoo6CGJ/2XBjU02N
+# 7oJtpQUQwXEGahC0HVUzWLOhcGbyoYIDWTCCAkECAQEwggEBoYHZpIHWMIHTMQsw
+# CQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9u
+# ZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMS0wKwYDVQQLEyRNaWNy
+# b3NvZnQgSXJlbGFuZCBPcGVyYXRpb25zIExpbWl0ZWQxJzAlBgNVBAsTHm5TaGll
+# bGQgVFNTIEVTTjo2NTFBLTA1RTAtRDk0NzElMCMGA1UEAxMcTWljcm9zb2Z0IFRp
+# bWUtU3RhbXAgU2VydmljZaIjCgEBMAcGBSsOAwIaAxUAj6eTejbuYE1Ifjbfrt6t
+# XevCUSCggYMwgYCkfjB8MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3Rv
+# bjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0
+# aW9uMSYwJAYDVQQDEx1NaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EgMjAxMDANBgkq
+# hkiG9w0BAQsFAAIFAO0tqhwwIhgPMjAyNjAyMDQxMTIxMDBaGA8yMDI2MDIwNTEx
+# MjEwMFowdzA9BgorBgEEAYRZCgQBMS8wLTAKAgUA7S2qHAIBADAKAgEAAgIViwIB
+# /zAHAgEAAgISiDAKAgUA7S77nAIBADA2BgorBgEEAYRZCgQCMSgwJjAMBgorBgEE
+# AYRZCgMCoAowCAIBAAIDB6EgoQowCAIBAAIDAYagMA0GCSqGSIb3DQEBCwUAA4IB
+# AQBrLZ3XO1wMVB4He8jOf3DV9mcxZtGtWM81QzCG/AAvmb1BZjvtTWZydyErnCLG
+# Cc8WKzRGq5AfWJw9lYCbxKGlSBskcWiFzfvtSCMLOSByGI0gMgmSxJQrXzF7KMjh
+# esXjmkK+t9WeeWG7+NqOMXD64zYnC0/fElSCe8c+yJvgHwc6NZ9jYjXcU8DWW1WZ
+# VCjI3YbPUzEUqZ2IbWmRfLivgs1Wn5+PAcJXR7TfRmLSsE5M5ebx7jiubtKXlPdm
+# XynIyroA+qvxMKxUlVyOcHx94OpjGUWRdMBoYSDVEi8zZmSuN+SOic0kPx3fsVtI
+# aH+MKlW0Q355OAcnpRH7c6bVMYIEDTCCBAkCAQEwgZMwfDELMAkGA1UEBhMCVVMx
+# EzARBgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoT
+# FU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUt
+# U3RhbXAgUENBIDIwMTACEzMAAAIVGAPTgQcmfFMAAQAAAhUwDQYJYIZIAWUDBAIB
+# BQCgggFKMBoGCSqGSIb3DQEJAzENBgsqhkiG9w0BCRABBDAvBgkqhkiG9w0BCQQx
+# IgQgyb228wgkcklQ0xUr7AZD/cgp2w9Hcpz3pyuyNh+L5U4wgfoGCyqGSIb3DQEJ
+# EAIvMYHqMIHnMIHkMIG9BCBwEPR2PDrTFLcrtQsKrUi7oz5JNRCF/KRHMihSNe7s
+# ijCBmDCBgKR+MHwxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAw
+# DgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24x
+# JjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQSAyMDEwAhMzAAACFRgD
+# 04EHJnxTAAEAAAIVMCIEIAy84l0FlIwqrldfB3TmTArja2bSHILWYvHOj9pAXLHS
+# MA0GCSqGSIb3DQEBCwUABIICAJuN+ZCvfOuhhKszM3jOp0ptdbR/I+OPyy5xa+/U
+# KE5/cWFnmCVMkmeZQsrgAtJMPYqU+XIdh7gfDZ5OHJoLQ1dRHzGykp2wwkG0cd14
+# OzrY709BnJzBz4ve7Z6VHSW1WZHlMXDIzSPrM7ndhNBiFFGh4UDoh4y9SOC1Ikl1
+# UebiEPCZm2xURq2jzR4KtnjDTtv1/znTyu7mnI13A9qIC8at18g2ZNhgy//TtuQc
+# JacxbxEV3FMMpAD4VB/MKYQ0pwIVPw2BAUaKFXGyvdKEFli6c/TTQc26qhtq8H8i
+# HMUppLEwPwq0v53RafqNoBA694niIxDgr1NU8jUwd8inSSse0HSpNmuCuZdX5Ncb
+# JOIvL1Yt7irQuVNoNd+DLl4r0xIJWQQ+uD41/OY78WhVteywkO9uEzeEXPZzpxFs
+# cNp4IsLQGSeOBaSWwDccPmKAQr8eqSHjb/KQsS1DN0jvVN0osJCtyLZ8lIwswiwA
+# +KYatvq69Mm49YfefuSJj4XDApOM52WKJYAErCZvf1pkkvS8CdgOtCjKKhIxOO3G
+# 9fjkpV+TR78hG5YKcse21sRfIajn++w2vc9d6KYgBVG55miBHfLiDvGn6OKid/5Y
+# xHceMVx27gOdqjaKqd3rEQQ3Eu9OatSHS1/YR1FLewNE4VfWzGm9N5971k91pGkR
+# 04X4
+# SIG # End signature block

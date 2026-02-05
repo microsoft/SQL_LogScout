@@ -438,7 +438,7 @@
 
 			<TabControl Margin="5" BorderBrush="Transparent" BorderThickness="5" >
 				<TabItem Header="Perfmon" >
-					<ListView x:Name="listExtraSkills" ItemsSource="{Binding}">
+					<ListView x:Name="listPerfmon" ItemsSource="{Binding}">
 						<ListView.ItemTemplate>
 							<DataTemplate>
 								<CheckBox IsChecked="{Binding State}" Content="{Binding Caption}" />
@@ -581,6 +581,15 @@
 						</TreeView>
 					</StackPanel>
 				</TabItem>
+				<TabItem Header="AdditionalOptionsEnabled" >
+                    <ListView x:Name="list_additional_options_enabled" ItemsSource="{Binding}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding State, Mode=TwoWay}" Content="{Binding Caption}" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </TabItem>
 			</TabControl>
 		</Border>
 		<StackPanel Grid.Row="3" Grid.ColumnSpan="3">
