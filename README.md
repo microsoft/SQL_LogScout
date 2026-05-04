@@ -1,4 +1,26 @@
+# SQL LogScout
+
+[![licence badge]][licence]
+[![stars badge]][stars]
+[![forks badge]][forks]
+[![issues badge]][issues]
+
+[licence badge]:https://img.shields.io/badge/license-MIT-blue.svg
+[stars badge]:https://img.shields.io/github/stars/Microsoft/SQL_logscout.svg
+[forks badge]:https://img.shields.io/github/forks/Microsoft/SQL_logscout.svg
+[issues badge]:https://img.shields.io/github/issues/Microsoft/SQL_logscout.svg
+
+[licence]:https://github.com/microsoft/SQL_logscout/blob/master/license.md
+[stars]:https://github.com/Microsoft/SQL_logscout/stargazers
+[forks]:https://github.com/Microsoft/SQL_logscout/network
+[issues]:https://github.com/Microsoft/SQL_logscout/issues
+
+
 [https://aka.ms/sqllogscout](https://aka.ms/sqllogscout) gets you here
+
+ **Note:** For SQL Server on Linux, see [SQL LogScout Linux](README-LINUX.md).
+
+ ## Table of Contents
 
 1. [Introduction](#introduction)
 1. [Minimum Requirements](#minimum-requirements)
@@ -58,7 +80,7 @@ SQL LogScout is developed and maintained by members of the Microsoft SQL Server 
    $ExecutionContext.SessionState.LanguageMode = "FullLanguage"
    ```
 
-# How get get SQL LogScout
+# How get SQL LogScout
 
 You can obtain SQL LogScout in two ways:
 
